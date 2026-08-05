@@ -1,0 +1,767 @@
+// Prisma schema — Food ERP
+// ฐานข้อมูลหลัก: PostgreSQL
+// หลักการ: Decimal สำหรับเงิน/ปริมาณ, soft delete, audit fields, stock ผ่าน ledger เท่านั้น
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+enum RoleName {
+  SUPER_ADMIN
+  ADMIN
+  EXECUTIVE
+  PURCHASING
+  WAREHOUSE
+  PRODUCTION
+  SALES
+  VIEWER
+}
+
+enum ItemType {
+  RAW_MATERIAL
+  PACKAGING
+  SEMI_FINISHED
+  FINISHED_GOOD
+  CONSUMABLE
+  WASTE
+}
+
+enum StockMovementType {
+  PURCHASE_RECEIPT
+  PRODUCTION_ISSUE
+  PRODUCTION_RETURN
+  PRODUCTION_OUTPUT
+  SALE
+  SALES_RETURN
+  TRANSFER_OUT
+  TRANSFER_IN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  WASTE
+  EXPIRED
+  STOCK_COUNT
+}
+
+enum ProductionStatus {
+  DRAFT
+  PLANNED
+  APPROVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum DocumentStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+// ============================================================
+// AUTH & AUDIT
+// ============================================================
+model User {
+  id                 String    @id @default(cuid())
+  username           String    @unique
+  email              String    @unique
+  passwordHash       String
+  fullName           String
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(true)
+  lastLoginAt        DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  userRoles     UserRole[]
+  loginLogs     LoginLog[]
+  auditLogs     AuditLog[]
+  refreshTokens RefreshToken[]
+
+  @@index([isActive])
+  @@map("users")
+}
+
+model RefreshToken {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash         String    @unique
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?
+  userAgent         String?
+  ip                String?
+  createdAt         DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        RoleName @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String // CREATE | UPDATE | DELETE | ...
+  entity    String
+  entityId  String?
+  before    Json?
+  after     Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+model LoginLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  username  String
+  success   Boolean
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("login_logs")
+}
+
+// ============================================================
+// MASTER DATA — UNITS
+// ============================================================
+model Unit {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  itemsBase         Item[]             @relation("ItemBaseUnit")
+  itemsPurchase     Item[]             @relation("ItemPurchaseUnit")
+  conversionsFrom   UnitConversion[]   @relation("ConvFrom")
+  conversionsTo     UnitConversion[]   @relation("ConvTo")
+  recipeIngredients RecipeIngredient[]
+
+  @@map("units")
+}
+
+model UnitConversion {
+  id         String   @id @default(cuid())
+  fromUnitId String
+  toUnitId   String
+  factor     Decimal  @db.Decimal(18, 6) // 1 fromUnit = factor toUnit
+  fromUnit   Unit     @relation("ConvFrom", fields: [fromUnitId], references: [id])
+  toUnit     Unit     @relation("ConvTo", fields: [toUnitId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@unique([fromUnitId, toUnitId])
+  @@map("unit_conversions")
+}
+
+// ============================================================
+// MASTER DATA — CATEGORY / ITEM
+// ============================================================
+model Category {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  type      ItemType?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  items Item[]
+
+  @@map("categories")
+}
+
+model Item {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  barcode    String?   @unique
+  name       String
+  type       ItemType
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  baseUnitId           String
+  baseUnit             Unit    @relation("ItemBaseUnit", fields: [baseUnitId], references: [id])
+  purchaseUnitId       String?
+  purchaseUnit         Unit?   @relation("ItemPurchaseUnit", fields: [purchaseUnitId], references: [id])
+  purchaseToBaseFactor Decimal @default(1) @db.Decimal(18, 6)
+
+  avgCost      Decimal @default(0) @db.Decimal(18, 4)
+  lastCost     Decimal @default(0) @db.Decimal(18, 4)
+  reorderPoint Decimal @default(0) @db.Decimal(18, 4)
+  minQty       Decimal @default(0) @db.Decimal(18, 4)
+
+  isLotTracked    Boolean @default(false)
+  isExpiryTracked Boolean @default(false)
+  imageUrl        String?
+
+  isActive    Boolean   @default(true)
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById String?
+  updatedById String?
+  deletedAt   DateTime?
+
+  priceHistory        ItemPriceHistory[]
+  stockBalances       StockBalance[]
+  stockLedgers        StockLedger[]
+  inventoryLots       InventoryLot[]
+  recipeIngredients   RecipeIngredient[]
+  recipes             Recipe[]              @relation("RecipeProduct")
+  productionOrders    ProductionOrder[]
+  productionOutputs   ProductionOutput[]
+  productionMaterials ProductionMaterial[]
+  productionWastes    ProductionWaste[]
+  goodsReceiptItems   GoodsReceiptItem[]
+  transferItems       StockTransferItem[]
+  adjustmentItems     StockAdjustmentItem[]
+  sellingPrices       SellingPrice[]
+
+  @@index([type])
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("items")
+}
+
+model ItemPriceHistory {
+  id          String   @id @default(cuid())
+  itemId      String
+  item        Item     @relation(fields: [itemId], references: [id])
+  price       Decimal  @db.Decimal(18, 4)
+  source      String? // PURCHASE | MANUAL | ...
+  note        String?
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  @@index([itemId, createdAt])
+  @@map("item_price_history")
+}
+
+// ============================================================
+// MASTER DATA — SUPPLIER / WAREHOUSE
+// ============================================================
+model Supplier {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  taxId     String?
+  phone     String?
+  email     String?
+  address   String?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  goodsReceipts GoodsReceipt[]
+
+  @@map("suppliers")
+}
+
+model Warehouse {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  type      ItemType? // เช่น RAW_MATERIAL / FINISHED_GOOD (คลังเฉพาะทาง) — optional
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  locations                    WarehouseLocation[]
+  stockBalances                StockBalance[]
+  stockLedgers                 StockLedger[]
+  inventoryLots                InventoryLot[]
+  goodsReceipts                GoodsReceipt[]
+  productionMaterialWarehouses ProductionOrder[]   @relation("ProdMaterialWH")
+  productionFgWarehouses       ProductionOrder[]   @relation("ProdFGWH")
+  transfersFrom                StockTransfer[]     @relation("TransferFrom")
+  transfersTo                  StockTransfer[]     @relation("TransferTo")
+  adjustments                  StockAdjustment[]
+
+  @@map("warehouses")
+}
+
+model WarehouseLocation {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  code        String
+  zone        String?
+  rack        String?
+  bin         String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  stockBalances StockBalance[]
+  inventoryLots InventoryLot[]
+
+  @@unique([warehouseId, code])
+  @@map("warehouse_locations")
+}
+
+// ============================================================
+// INVENTORY
+// ============================================================
+model InventoryLot {
+  id              String             @id @default(cuid())
+  lotNo           String
+  itemId          String
+  item            Item               @relation(fields: [itemId], references: [id])
+  warehouseId     String
+  warehouse       Warehouse          @relation(fields: [warehouseId], references: [id])
+  locationId      String?
+  location        WarehouseLocation? @relation(fields: [locationId], references: [id])
+  manufactureDate DateTime?
+  expiryDate      DateTime?
+  createdAt       DateTime           @default(now())
+
+  stockBalances StockBalance[]
+
+  @@unique([itemId, warehouseId, lotNo])
+  @@index([expiryDate])
+  @@map("inventory_lots")
+}
+
+model StockBalance {
+  id          String             @id @default(cuid())
+  itemId      String
+  item        Item               @relation(fields: [itemId], references: [id])
+  warehouseId String
+  warehouse   Warehouse          @relation(fields: [warehouseId], references: [id])
+  locationId  String?
+  location    WarehouseLocation? @relation(fields: [locationId], references: [id])
+  lotId       String?
+  lot         InventoryLot?      @relation(fields: [lotId], references: [id])
+
+  onHand   Decimal @default(0) @db.Decimal(18, 4)
+  reserved Decimal @default(0) @db.Decimal(18, 4)
+  // available = onHand - reserved (คำนวณตอนใช้งาน)
+
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+
+  @@unique([itemId, warehouseId, locationId, lotId])
+  @@index([itemId])
+  @@index([warehouseId])
+  @@map("stock_balances")
+}
+
+model StockLedger {
+  id           String            @id @default(cuid())
+  movementType StockMovementType
+  refType      String? // GOODS_RECEIPT | PRODUCTION_ORDER | TRANSFER | ADJUSTMENT ...
+  refId        String?
+  refNo        String?
+
+  itemId      String
+  item        Item      @relation(fields: [itemId], references: [id])
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  locationId  String?
+  lotId       String?
+
+  qtyIn        Decimal @default(0) @db.Decimal(18, 4)
+  qtyOut       Decimal @default(0) @db.Decimal(18, 4)
+  balanceAfter Decimal @db.Decimal(18, 4)
+  unitCost     Decimal @default(0) @db.Decimal(18, 4)
+  totalValue   Decimal @default(0) @db.Decimal(18, 4)
+
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([itemId, warehouseId, createdAt])
+  @@index([movementType])
+  @@index([refType, refId])
+  @@map("stock_ledgers")
+}
+
+// ============================================================
+// RECIPE / BOM
+// ============================================================
+model Recipe {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  name        String
+  productId   String
+  product     Item      @relation("RecipeProduct", fields: [productId], references: [id])
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById String?
+  updatedById String?
+  deletedAt   DateTime?
+
+  versions         RecipeVersion[]
+  productionOrders ProductionOrder[]
+
+  @@index([productId])
+  @@map("recipes")
+}
+
+model RecipeVersion {
+  id        String  @id @default(cuid())
+  recipeId  String
+  recipe    Recipe  @relation(fields: [recipeId], references: [id])
+  versionNo Int
+  isActive  Boolean @default(true)
+
+  standardYieldQty Decimal @default(0) @db.Decimal(18, 4) // ผลผลิตมาตรฐาน
+  yieldPercent     Decimal @default(100) @db.Decimal(9, 4)
+  standardWaste    Decimal @default(0) @db.Decimal(18, 4)
+
+  laborCost    Decimal @default(0) @db.Decimal(18, 4)
+  electricCost Decimal @default(0) @db.Decimal(18, 4)
+  waterCost    Decimal @default(0) @db.Decimal(18, 4)
+  gasCost      Decimal @default(0) @db.Decimal(18, 4)
+  overheadCost Decimal @default(0) @db.Decimal(18, 4)
+  otherCost    Decimal @default(0) @db.Decimal(18, 4)
+
+  note        String?
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  ingredients      RecipeIngredient[]
+  costs            RecipeCost[]
+  productionOrders ProductionOrder[]
+
+  @@unique([recipeId, versionNo])
+  @@map("recipe_versions")
+}
+
+model RecipeIngredient {
+  id              String        @id @default(cuid())
+  recipeVersionId String
+  recipeVersion   RecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
+  itemId          String
+  item            Item          @relation(fields: [itemId], references: [id])
+  quantity        Decimal       @db.Decimal(18, 4)
+  unitId          String?
+  unit            Unit?         @relation(fields: [unitId], references: [id])
+  wastePercent    Decimal       @default(0) @db.Decimal(9, 4)
+  note            String?
+
+  @@index([recipeVersionId])
+  @@map("recipe_ingredients")
+}
+
+model RecipeCost {
+  id              String        @id @default(cuid())
+  recipeVersionId String
+  recipeVersion   RecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
+
+  materialCost  Decimal  @default(0) @db.Decimal(18, 4)
+  packagingCost Decimal  @default(0) @db.Decimal(18, 4)
+  laborCost     Decimal  @default(0) @db.Decimal(18, 4)
+  utilityCost   Decimal  @default(0) @db.Decimal(18, 4)
+  overheadCost  Decimal  @default(0) @db.Decimal(18, 4)
+  wasteCost     Decimal  @default(0) @db.Decimal(18, 4)
+  totalCost     Decimal  @default(0) @db.Decimal(18, 4)
+  unitCost      Decimal  @default(0) @db.Decimal(18, 4)
+  costType      String   @default("STANDARD") // STANDARD | ESTIMATED | ACTUAL
+  calculatedAt  DateTime @default(now())
+
+  @@index([recipeVersionId])
+  @@map("recipe_costs")
+}
+
+model SellingPrice {
+  id            String   @id @default(cuid())
+  itemId        String
+  item          Item     @relation(fields: [itemId], references: [id])
+  priceType     String // RETAIL | WHOLESALE | AGENT | SPECIAL
+  price         Decimal  @db.Decimal(18, 4)
+  markupPercent Decimal? @db.Decimal(9, 4)
+  marginPercent Decimal? @db.Decimal(9, 4)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdById   String?
+
+  @@unique([itemId, priceType])
+  @@map("selling_prices")
+}
+
+// ============================================================
+// PRODUCTION
+// ============================================================
+model ProductionOrder {
+  id              String         @id @default(cuid())
+  orderNo         String         @unique
+  productId       String
+  product         Item           @relation(fields: [productId], references: [id])
+  recipeId        String?
+  recipe          Recipe?        @relation(fields: [recipeId], references: [id])
+  recipeVersionId String?
+  recipeVersion   RecipeVersion? @relation(fields: [recipeVersionId], references: [id])
+
+  status      ProductionStatus @default(DRAFT)
+  plannedQty  Decimal          @default(0) @db.Decimal(18, 4)
+  producedQty Decimal          @default(0) @db.Decimal(18, 4)
+
+  materialWarehouseId String?
+  materialWarehouse   Warehouse? @relation("ProdMaterialWH", fields: [materialWarehouseId], references: [id])
+  fgWarehouseId       String?
+  fgWarehouse         Warehouse? @relation("ProdFGWH", fields: [fgWarehouseId], references: [id])
+
+  productionDate DateTime?
+  lotNo          String?
+  expiryDate     DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+
+  actualCost Decimal @default(0) @db.Decimal(18, 4)
+
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  updatedById String?
+
+  materials ProductionMaterial[]
+  outputs   ProductionOutput[]
+  wastes    ProductionWaste[]
+
+  @@index([status])
+  @@index([productId])
+  @@map("production_orders")
+}
+
+model ProductionMaterial {
+  id                String          @id @default(cuid())
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  itemId            String
+  item              Item            @relation(fields: [itemId], references: [id])
+  plannedQty        Decimal         @default(0) @db.Decimal(18, 4)
+  actualQty         Decimal         @default(0) @db.Decimal(18, 4)
+  unitCost          Decimal         @default(0) @db.Decimal(18, 4)
+  totalCost         Decimal         @default(0) @db.Decimal(18, 4)
+
+  @@index([productionOrderId])
+  @@map("production_materials")
+}
+
+model ProductionOutput {
+  id                String          @id @default(cuid())
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  itemId            String
+  item              Item            @relation(fields: [itemId], references: [id])
+  quantity          Decimal         @db.Decimal(18, 4)
+  lotNo             String?
+  expiryDate        DateTime?
+  unitCost          Decimal         @default(0) @db.Decimal(18, 4)
+  createdAt         DateTime        @default(now())
+
+  @@index([productionOrderId])
+  @@map("production_outputs")
+}
+
+model ProductionWaste {
+  id                String          @id @default(cuid())
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  itemId            String?
+  item              Item?           @relation(fields: [itemId], references: [id])
+  quantity          Decimal         @db.Decimal(18, 4)
+  reason            String?
+  createdAt         DateTime        @default(now())
+
+  @@index([productionOrderId])
+  @@map("production_wastes")
+}
+
+// ============================================================
+// GOODS RECEIPT
+// ============================================================
+model GoodsReceipt {
+  id          String         @id @default(cuid())
+  receiptNo   String         @unique
+  supplierId  String?
+  supplier    Supplier?      @relation(fields: [supplierId], references: [id])
+  warehouseId String
+  warehouse   Warehouse      @relation(fields: [warehouseId], references: [id])
+  status      DocumentStatus @default(DRAFT)
+  receiptDate DateTime       @default(now())
+  note        String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  items GoodsReceiptItem[]
+
+  @@index([status])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id              String       @id @default(cuid())
+  goodsReceiptId  String
+  goodsReceipt    GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  itemId          String
+  item            Item         @relation(fields: [itemId], references: [id])
+  lotNo           String?
+  manufactureDate DateTime?
+  expiryDate      DateTime?
+  quantity        Decimal      @db.Decimal(18, 4)
+  unitPrice       Decimal      @db.Decimal(18, 4)
+  discount        Decimal      @default(0) @db.Decimal(18, 4)
+  taxAmount       Decimal      @default(0) @db.Decimal(18, 4)
+  extraCost       Decimal      @default(0) @db.Decimal(18, 4)
+  totalCost       Decimal      @default(0) @db.Decimal(18, 4)
+
+  @@index([goodsReceiptId])
+  @@map("goods_receipt_items")
+}
+
+// ============================================================
+// TRANSFER / ADJUSTMENT
+// ============================================================
+model StockTransfer {
+  id              String         @id @default(cuid())
+  transferNo      String         @unique
+  fromWarehouseId String
+  fromWarehouse   Warehouse      @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouseId   String
+  toWarehouse     Warehouse      @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  status          DocumentStatus @default(DRAFT)
+  transferDate    DateTime       @default(now())
+  note            String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  createdById     String?
+
+  items StockTransferItem[]
+
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id              String        @id @default(cuid())
+  stockTransferId String
+  stockTransfer   StockTransfer @relation(fields: [stockTransferId], references: [id], onDelete: Cascade)
+  itemId          String
+  item            Item          @relation(fields: [itemId], references: [id])
+  lotNo           String?
+  quantity        Decimal       @db.Decimal(18, 4)
+
+  @@index([stockTransferId])
+  @@map("stock_transfer_items")
+}
+
+model StockAdjustment {
+  id             String         @id @default(cuid())
+  adjustmentNo   String         @unique
+  warehouseId    String
+  warehouse      Warehouse      @relation(fields: [warehouseId], references: [id])
+  status         DocumentStatus @default(DRAFT)
+  reason         String?
+  adjustmentDate DateTime       @default(now())
+  note           String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  createdById    String?
+
+  items StockAdjustmentItem[]
+
+  @@map("stock_adjustments")
+}
+
+model StockAdjustmentItem {
+  id                String          @id @default(cuid())
+  stockAdjustmentId String
+  stockAdjustment   StockAdjustment @relation(fields: [stockAdjustmentId], references: [id], onDelete: Cascade)
+  itemId            String
+  item              Item            @relation(fields: [itemId], references: [id])
+  lotNo             String?
+  systemQty         Decimal         @default(0) @db.Decimal(18, 4)
+  countedQty        Decimal         @default(0) @db.Decimal(18, 4)
+  diffQty           Decimal         @default(0) @db.Decimal(18, 4)
+
+  @@index([stockAdjustmentId])
+  @@map("stock_adjustment_items")
+}
+
+// ============================================================
+// SYSTEM
+// ============================================================
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  @@map("system_settings")
+}

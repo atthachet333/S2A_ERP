@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment (never commit real secrets)
+.env
+.env.*
+!.env.example
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# Prisma
+backend/prisma/*.db
+backend/prisma/migrations/dev.db*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing / coverage
+coverage/
+.vitest/
+.vite/
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Docker volumes (local)
+postgres-data/
+
+# Misc
+*.pem
+.cache/
+temp/
+npm-cache/
+*.dump

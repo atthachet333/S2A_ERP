@@ -1,0 +1,1 @@
+export default function NotFoundPage() { return <div className="status-page"><img src="/s2a-logo.png" alt="S2A ERP" /><p className="eyebrow">404</p><h1>ไม่พบหน้าที่ต้องการ</h1><p>ลิงก์นี้อาจถูกย้ายหรือไม่มีอยู่ในระบบ</p><a href="/dashboard">กลับไปแดชบอร์ด</a></div>; }

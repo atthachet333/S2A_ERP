@@ -1,0 +1,32 @@
+{
+  "name": "food-erp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ระบบ ERP สำหรับธุรกิจผลิตอาหารสำเร็จรูป (Food Manufacturing ERP)",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n BACKEND,FRONTEND -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "npm --workspace backend run dev",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "build": "npm --workspace backend run build && npm --workspace frontend run build",
+    "build:backend": "npm --workspace backend run build",
+    "build:frontend": "npm --workspace frontend run build",
+    "typecheck": "npm --workspace backend run typecheck && npm --workspace frontend run typecheck",
+    "test": "npm --workspace backend run test && npm --workspace frontend run test",
+    "lint": "npm --workspace backend run lint && npm --workspace frontend run lint",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "npm --workspace backend run prisma:migrate",
+    "db:seed": "npm --workspace backend run prisma:seed",
+    "db:generate": "npm --workspace backend run prisma:generate"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

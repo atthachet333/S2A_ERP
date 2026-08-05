@@ -1,0 +1,2 @@
+import { useAuth } from '@/auth/AuthContext';
+export default function ProfilePage() { const { user } = useAuth(); return <><div className="page-heading"><p className="eyebrow">ACCOUNT</p><h1>โปรไฟล์ของฉัน</h1></div><section className="content-card profile-card"><img src="/s2a-logo.png" alt="S2A ERP" /><dl><div><dt>ชื่อ</dt><dd>{user?.fullName}</dd></div><div><dt>ชื่อผู้ใช้</dt><dd>{user?.username}</dd></div><div><dt>อีเมล</dt><dd>{user?.email}</dd></div><div><dt>บทบาท</dt><dd>{user?.roles.join(', ')}</dd></div></dl></section></>; }
