@@ -1,5 +1,17 @@
 # SECURITY — S2A ERP
 
+## npm audit — สถานะช่องโหว่ (ตรวจ 2026-08-06)
+
+`npm audit` พบ **9 ช่องโหว่** (critical 3, high 1, moderate 5) ทั้งหมดอยู่ใน dependency ทางอ้อม และการแก้ทุกตัวต้อง **major upgrade (breaking)** — จึง **ไม่ใช้ `npm audit fix --force`**
+
+| Package | Severity | มาจาก | Fix ที่ต้องใช้ | การตัดสินใจ |
+|---------|----------|-------|----------------|-------------|
+| `react-router` / `react-router-dom` | moderate | frontend routing | major → v7 | เลื่อน — ปักที่ 6.30.4 (patch ล่าสุด v6) อยู่แล้ว; การแก้ advisory จริงต้อง v7 (breaking) |
+| `fast-jwt` (ผ่าน `@fastify/jwt`) | critical ×3 | backend auth | `@fastify/jwt@10` (breaking) | เลื่อน — เสี่ยงกระทบ auth flow ที่ใช้งานได้; วางแผนอัปเกรดพร้อมทดสอบ integration เต็ม |
+| `vitest`/`vite`/`vite-node`/`esbuild`/`@vitest/mocker` | moderate+high | dev tooling เท่านั้น | `vitest@4` / `vite@6+` (breaking) | เลื่อน — เป็น devDependency ไม่ขึ้น production bundle |
+
+**แผนแก้ (รอบถัดไป)**: อัปเกรด `@fastify/jwt@10` + `vitest@4` + `react-router@7` แยกเป็นงานเฉพาะ พร้อมรัน typecheck/lint/test/build และ auth integration tests ให้ผ่านก่อน merge
+
 ## Implemented controls
 
 - bcryptjs hash (cost 12 สำหรับบัญชี seed ใหม่และการเปลี่ยนรหัสผ่าน)

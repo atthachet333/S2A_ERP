@@ -1,6 +1,10 @@
 # S2A ERP — ระบบ ERP สำหรับธุรกิจผลิตอาหารสำเร็จรูป
 
-> สถานะ 2026-08-05: ใช้ PostgreSQL Native ที่ `localhost:5432`, frontend port 1414 และ backend port 1415 โดยไม่ใช้ Docker
+> สถานะ 2026-08-06: UI/UX redesign เป็น enterprise shell (Sidebar 14 เมนู + Header + Dashboard 6 ส่วน) บน PostgreSQL Native `localhost:5432`, frontend port 1414 และ backend port 1415 โดยไม่ใช้ Docker
+>
+> **UI Shell**: layout ใหม่แยก `AppLayout`/`Sidebar`/`Header`, design token กลาง, placeholder สำหรับโมดูลที่ยังไม่พัฒนา, System Status จาก Health API จริง — ดู [`docs/UI_UX_GUIDELINES.md`](./docs/UI_UX_GUIDELINES.md)
+>
+> **API read-only ใหม่**: `GET /api/dashboard/summary` (นับข้อมูลจริง), `GET /api/activity` (audit+login log, SUPER_ADMIN, pagination)
 
 ระบบบริหารต้นทุนการผลิตและคลังสินค้า แยก React/Vite frontend และ Fastify/Prisma backend พร้อม first-login password flow, JWT access token, rotating refresh token และ RBAC
 

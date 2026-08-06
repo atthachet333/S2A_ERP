@@ -43,3 +43,19 @@
 ## ADR-009: Soft Delete
 - **ตัดสินใจ**: ข้อมูลที่มี transaction ใช้ `isActive`/`deletedAt` แทนการลบจริง
 - **ผล**: รักษาความสมบูรณ์ของประวัติ
+
+## ADR-010: Placeholder-driven navigation สำหรับโมดูลที่ยังไม่พัฒนา
+- **บริบท**: Sidebar ต้องแสดงครบ 14 เมนูตาม spec แต่หลายโมดูลยังไม่มี backend
+- **ตัดสินใจ**: ใช้ single source `components/layout/nav-config.ts` (เมนู + metadata + สถานะการพัฒนา) และ `ModulePlaceholder` component เดียว render ทุกเมนูที่ยังไม่พร้อม โดยแสดงสถานะ "กำลังพัฒนา/วางแผนไว้" อย่างชัดเจน ห้ามใส่ตัวเลขธุรกิจปลอม
+- **ผล**: เพิ่มเมนู/โมดูลใหม่ได้จากไฟล์เดียว, ผู้ใช้ไม่สับสนว่าอะไรใช้ได้จริง, ไม่มี broken link
+
+## ADR-011: Design tokens เป็น CSS variables (ไม่เพิ่ม dependency)
+- **บริบท**: ต้องการธีมสม่ำเสมอ (ขาว/น้ำเงิน/กรม/ทอง) โดยไม่พึ่ง component library ใหม่
+- **ตัดสินใจ**: นิยาม token (สี/surface/สถานะ/radius/shadow/layout) เป็น CSS variables ใน `index.css` และเขียน component class เอง ต่อยอดจากแนวเดิม (hand-written CSS) แทนการติดตั้ง UI kit
+- **ผล**: ไม่เพิ่ม bundle/deps, ปรับธีมจุดเดียว, ไม่ hardcode สีซ้ำ; แลกกับการดูแล CSS เอง
+
+## ADR-012: เลื่อนการย้ายไป Prisma config file (Technical Debt)
+- **บริบท**: Prisma 6 เตือนว่า `package.json#prisma` (`seed`) จะ deprecated ใน Prisma 7 ให้ย้ายไป `prisma.config.ts`
+- **ตัดสินใจ**: ยังไม่ย้ายในรอบ UI/UX นี้ และ **ไม่อัปเกรด Prisma 7 ทันที** เพื่อลดความเสี่ยงต่อ auth/migration ที่ใช้งานได้แล้ว
+- **แผนแก้**: เมื่อขึ้น Prisma 7 ให้ย้าย config การ seed ไป `backend/prisma.config.ts` (`export default { schema, migrations, seed }`), ลบคีย์ `prisma` ออกจาก `package.json`, แล้วทดสอบ `prisma:generate` + `prisma:seed` + integration tests ให้ผ่านก่อน
+- **ผล**: ระบบปัจจุบันเสถียร; บันทึกเป็นหนี้ทางเทคนิคใน PROGRESS/SECURITY

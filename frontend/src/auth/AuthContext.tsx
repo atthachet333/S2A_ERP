@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiClient, sessionStore } from '@/lib/api-client';
 
-export interface AuthUser { id: string; username: string; email: string; fullName: string; mustChangePassword: boolean; roles: string[]; permissions: string[] }
+export interface AuthUser { id: string; username: string; email: string; fullName: string; mustChangePassword: boolean; roles: string[]; permissions: string[]; lastLoginAt: string | null; createdAt: string; updatedAt: string }
 interface LoginResult { accessToken: string; refreshToken: string; user: AuthUser }
 interface AuthContextValue { user: AuthUser | null; loading: boolean; login: (username: string, password: string) => Promise<AuthUser>; logout: () => Promise<void>; changePassword: (currentPassword: string, newPassword: string) => Promise<void> }
 const AuthContext = createContext<AuthContextValue | null>(null);

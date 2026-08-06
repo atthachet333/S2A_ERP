@@ -25,6 +25,9 @@ export function toAuthUser(user: UserWithAccess): AuthUser {
     mustChangePassword: user.mustChangePassword,
     roles: user.userRoles.map(({ role }) => role.name),
     permissions: [...new Set(user.userRoles.flatMap(({ role }) => role.rolePermissions.map(({ permission }) => permission.code)))],
+    lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
   };
 }
 

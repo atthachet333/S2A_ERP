@@ -1,5 +1,27 @@
 # CHANGELOG — S2A ERP
 
+## [0.3.0] — 2026-08-06
+
+### Added — UI/UX Redesign (Enterprise ERP shell)
+
+- Design token system กลางใน `index.css` (แบรนด์ ขาว/น้ำเงิน/กรม/ทอง, พื้นหลังเทาอมฟ้า + grid/radial glow, การ์ด radius 14–18px shadow เบา)
+- Layout ใหม่: `AppLayout` + `Sidebar` + `Header` แยก component, content container `max-width` 1560px, responsive desktop/tablet/mobile (drawer)
+- Sidebar: เมนู 14 รายการจัด 4 หมวด, Lucide icons, active state + แถบทอง, ย่อ/ขยาย (จำค่าใน localStorage), tooltip เมื่อย่อ, brand โลโก้จริง, ส่วนล่างแสดง user/role/logout, กรองตาม permission เดิม
+- Header: ปุ่มย่อ/ขยาย + เปิด drawer, page title + breadcrumb, global search placeholder, System Status (จาก Health API จริง), วันที่, ปุ่มแจ้งเตือน, user dropdown (โปรไฟล์/เปลี่ยนรหัสผ่าน/ออกจากระบบ)
+- Dashboard 6 ส่วน: Welcome + Quick Actions, System Overview (ข้อมูลจริง), ERP Module Status (สถานะการพัฒนา), Quick Navigation (bento), Recent Activity (audit จริง), Setup Progress (นับจาก DB จริง)
+- Profile ใหม่ 2 คอลัมน์: บัตรประจำตัว + ข้อมูลบัญชี/สิทธิ์/ความปลอดภัย + วันที่สร้าง/แก้ไข/เข้าสู่ระบบล่าสุด
+- Users ใหม่: toolbar (ค้นหา/กรอง role/กรอง status/นับ/รีเฟรช/เพิ่ม), ตาราง avatar+badge, skeleton/empty/error state, pagination ฝั่ง client, confirmation dialog + toast ภาษาไทย
+- `ModulePlaceholder` component กลางสำหรับเมนูที่ยังไม่พัฒนา (11 หน้า) + หน้า `Activity` จริง
+- Reusable UI: `Badge`, `Avatar`, `Skeleton`, `EmptyState`, `SystemStatus`, `Toast`, `ConfirmDialog`
+- Backend read-only APIs: `GET /api/dashboard/summary` (นับข้อมูลจริง), `GET /api/activity` (audit+login log, SUPER_ADMIN, pagination)
+- `toAuthUser` และ `/api/users` เพิ่มฟิลด์ `lastLoginAt`, `createdAt`, `updatedAt` (additive)
+- Frontend tests เพิ่ม 33 รายการ (Sidebar/Header/Dashboard/Placeholder/Profile/Users/states)
+
+### Security
+
+- รัน `npm audit fix` (ไม่ force) — lockfile ปัก `react-router-dom` ที่ 6.30.4 (patch ล่าสุด v6) อยู่แล้ว ไม่มีการเปลี่ยน dependency
+- ช่องโหว่ที่เหลือทั้งหมดต้อง major upgrade (breaking) → บันทึกใน `docs/SECURITY.md`, ไม่ใช้ `npm audit fix --force`
+
 ## [0.2.0] — 2026-08-05
 
 ### Added

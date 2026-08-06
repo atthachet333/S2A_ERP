@@ -1,5 +1,20 @@
 # PROGRESS — S2A ERP
 
+## UI/UX Redesign — Enterprise Shell — 2026-08-06
+
+- ออกแบบ Layout ใหม่ (Sidebar + Header + Content) แยกเป็น component พร้อม design token กลาง
+- Sidebar 14 เมนู/4 หมวด, ย่อ-ขยาย + tooltip, active state ทอง, กรองตาม permission เดิม
+- Header: collapse toggle, breadcrumb, System Status จาก Health API จริง, user dropdown
+- Dashboard 6 ส่วน (Welcome, System Overview, Module Status, Quick Nav, Recent Activity, Setup Progress) ใช้ข้อมูลจริงจาก DB/health; placeholder ระบุชัดว่าเป็นสถานะการพัฒนา
+- Profile 2 คอลัมน์, Users toolbar+table+states+pagination, ModulePlaceholder กลาง 11 หน้า, Activity page จริง
+- Backend: เพิ่ม `GET /api/dashboard/summary`, `GET /api/activity` (read-only, permission เดิม), เพิ่มฟิลด์ user (lastLoginAt/createdAt/updatedAt)
+- Quality (เครื่องนี้): typecheck ✅ (BE+FE), lint ✅ (BE+FE), build ✅ (BE+FE), frontend tests ✅ **35 ผ่าน** (เดิม 2 + ใหม่ 33)
+- Backend integration tests (auth/dashboard/activity) ⛔ รันไม่ได้บนเครื่องนี้ — ไม่มี PostgreSQL และห้ามใช้ Docker; health tests ✅ 3 ผ่าน (ออกแบบให้ db=down ได้)
+- npm audit: 9 ช่องโหว่ที่เหลือทั้งหมดต้อง major upgrade (เสี่ยง breaking) → บันทึกใน SECURITY.md, ไม่ force
+- Prisma 7 warning (config ใน package.json) → เลื่อนย้ายไป `prisma.config.ts` (ADR-012)
+
+> หมายเหตุ workspace: repo อยู่จริงที่ `C:\Users\User\S2A_ERP` บนเครื่องพัฒนานี้ (ไม่ใช่ `D:\`) และยังไม่มี PostgreSQL รันอยู่ → health/db ตอบ `down` และหน้า UI แสดงสถานะตามจริง
+
 ## Authentication & Native Database — 2026-08-05
 
 - ย้าย workspace ถาวรไป `D:\S2A_ERP`; TEMP, TMP และ npm cache อยู่บน D

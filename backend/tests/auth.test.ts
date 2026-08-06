@@ -59,6 +59,24 @@ describe.sequential('authentication integration', () => {
     const dashboard = await app.inject({ method: 'GET', url: '/api/auth/dashboard', headers: { authorization: `Bearer ${accessToken}` } }); expect(dashboard.statusCode).toBe(200);
     const users = await app.inject({ method: 'GET', url: '/api/users', headers: { authorization: `Bearer ${accessToken}` } }); expect(users.statusCode).toBe(200); expect(users.json().data.some((user: { username: string }) => user.username === 'pueng')).toBe(true);
   });
+  it('returns real dashboard summary counts for an authenticated user', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/dashboard/summary', headers: { authorization: `Bearer ${accessToken}` } });
+    expect(response.statusCode).toBe(200); const data = response.json().data;
+    for (const key of ['users', 'activeUsers', 'units', 'warehouses', 'items', 'recipes']) expect(typeof data[key]).toBe('number');
+    expect(data.users).toBeGreaterThanOrEqual(2);
+  });
+  it('returns paginated recent activity for SUPER_ADMIN', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/activity?page=1&pageSize=5', headers: { authorization: `Bearer ${accessToken}` } });
+    expect(response.statusCode).toBe(200); const data = response.json().data;
+    expect(Array.isArray(data.items)).toBe(true); expect(data.items.length).toBeLessThanOrEqual(5);
+    expect(data).toMatchObject({ page: 1, pageSize: 5 }); expect(typeof data.total).toBe('number');
+    // ล็อกอินสำเร็จของ win ต้องปรากฏในประวัติจริง
+    expect(data.items.some((entry: { action: string }) => entry.action === 'LOGIN_SUCCESS')).toBe(true);
+  });
+  it('rejects activity and dashboard summary without authentication', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/activity' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/api/dashboard/summary' })).statusCode).toBe(401);
+  });
   it('rotates refresh tokens once and rejects reuse', async () => {
     const rotated = await app.inject({ method: 'POST', url: '/api/auth/refresh', payload: { refreshToken } }); expect(rotated.statusCode).toBe(200); const next = rotated.json().data; expect(next.refreshToken).not.toBe(refreshToken);
     const reused = await app.inject({ method: 'POST', url: '/api/auth/refresh', payload: { refreshToken } }); expect(reused.statusCode).toBe(401); refreshToken = next.refreshToken; accessToken = next.accessToken;
@@ -67,6 +85,7 @@ describe.sequential('authentication integration', () => {
     const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'pueng', password: '1234' } }); const data = login.json().data;
     expect(data.user.roles).toEqual(['ADMIN']); expect(data.user.permissions).not.toContain('USER_MANAGE');
     const users = await app.inject({ method: 'GET', url: '/api/users', headers: { authorization: `Bearer ${data.accessToken}` } }); expect(users.statusCode).toBe(403);
+    const activity = await app.inject({ method: 'GET', url: '/api/activity', headers: { authorization: `Bearer ${data.accessToken}` } }); expect(activity.statusCode).toBe(403);
   });
   it('logs out, revokes refresh and protects routes', async () => {
     const logout = await app.inject({ method: 'POST', url: '/api/auth/logout', payload: { refreshToken } }); expect(logout.statusCode).toBe(200);

@@ -8,6 +8,8 @@ import errorHandler from './plugins/error-handler.js';
 import healthRoutes from './modules/health/health.route.js';
 import authRoutes from './modules/auth/auth.route.js';
 import userRoutes from './modules/users/user.route.js';
+import dashboardRoutes from './modules/dashboard/dashboard.route.js';
+import activityRoutes from './modules/activity/activity.route.js';
 
 /**
  * สร้าง Fastify instance พร้อม plugin และ route ทั้งหมด
@@ -46,6 +48,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(healthRoutes);
       await api.register(authRoutes, { prefix: '/auth' });
       await api.register(userRoutes, { prefix: '/users' });
+      await api.register(dashboardRoutes, { prefix: '/dashboard' });
+      await api.register(activityRoutes, { prefix: '/activity' });
     },
     { prefix: '/api' },
   );

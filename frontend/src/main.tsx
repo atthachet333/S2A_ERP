@@ -5,13 +5,16 @@ import { BrowserRouter } from 'react-router-dom';
 import { queryClient } from '@/lib/query';
 import App from './App';
 import { AuthProvider } from '@/auth/AuthContext';
+import { ToastProvider } from '@/components/ui/Toast';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthProvider><App /></AuthProvider>
+        <AuthProvider>
+          <ToastProvider><App /></ToastProvider>
+        </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>,

@@ -6,6 +6,9 @@ export interface AuthUser {
   mustChangePassword: boolean;
   roles: string[];
   permissions: string[];
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 declare module '@fastify/jwt' {
