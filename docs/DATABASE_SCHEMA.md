@@ -6,6 +6,8 @@
 - Migration: `20260805151518_init`
 - `RefreshToken` เก็บ token hash, expiry, revocation, replacement chain, IP และ user agent
 - `LoginLog` และ `AuditLog` ห้ามเก็บ password หรือ token
+- **Access**: PostgreSQL รับเฉพาะ `localhost:5432`; runtime ใช้บัญชีสิทธิ์จำกัด `s2a_app` (DML เท่านั้น), migration ใช้ owner ผ่าน `DIRECT_URL` — ดู `docs/DEPLOYMENT.md` และ `docs/SECURITY.md`
+- `schema.prisma` datasource: `url = env("DATABASE_URL")` (runtime), `directUrl = env("DIRECT_URL")` (migration)
 
 ฐานข้อมูล: **PostgreSQL 16** ผ่าน **Prisma ORM**
 ไฟล์จริง: [`backend/prisma/schema.prisma`](../backend/prisma/schema.prisma)

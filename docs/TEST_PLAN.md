@@ -50,6 +50,18 @@ Backend (Vitest + PostgreSQL จริง) — เพิ่มใน auth integr
 - Permission denied: `/api/activity` และ `/api/dashboard/summary` → 401 เมื่อไม่ login; pueng (ADMIN) → 403
 > ต้องรันบนเครื่องที่มี PostgreSQL (`food_erp_test`). บนเครื่องที่ไม่มี DB จะรันได้เฉพาะ health tests (ออกแบบให้ db=down ได้)
 
+### Database Access Hardening (รอบ 2026-08-06)
+ตรวจแล้วบนเครื่องนี้:
+- `prisma validate` ผ่านหลังเพิ่ม `directUrl`; typecheck/lint (BE+FE) ✅; frontend tests ✅ 35; build ✅
+- Security audit `git grep`: ไม่มี secret จริงใน tracked files; `backend/.env` ถูก gitignore
+- Frontend `dist/`: **ไม่มี** `postgresql://`, `:5432`, `DATABASE_URL`, `DIRECT_URL`, `s2a_app` (มีเพียง label "PostgreSQL" และ field "password")
+
+ต้องตรวจบนเครื่อง Server จริง (มี PostgreSQL) — ยังทำไม่ได้บนเครื่องนี้:
+- Runtime `s2a_app` เชื่อม + Login/Refresh/Change Password/Audit/User Management ทำงานได้โดยไม่ใช้ `postgres`
+- Health `db=up`; integration test ใช้ `food_erp_test`
+- `s2a_app` ทำ CREATE DATABASE/ROLE, DROP DATABASE, ALTER SYSTEM ไม่ได้ (permission denied)
+- `Get-NetTCPConnection -LocalPort 5432` รับเฉพาะ `127.0.0.1`/`::1`; LAN IP ต่อไม่ได้
+
 ## เกณฑ์
 - ทุก PR: typecheck + lint + test + build ต้องผ่าน
 - เป้าหมาย coverage โมดูลการเงิน/สต๊อก > 80% (Phase 8)

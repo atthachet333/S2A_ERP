@@ -7,8 +7,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Runtime ใช้ url (บัญชีสิทธิ์จำกัด s2a_app) — ต่อผ่าน localhost เท่านั้น
+  url       = env("DATABASE_URL")
+  // Migration/introspection ใช้ directUrl (บัญชี owner/postgres) เฉพาะตอนรัน migrate
+  directUrl = env("DIRECT_URL")
 }
 
 // ============================================================

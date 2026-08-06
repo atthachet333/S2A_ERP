@@ -54,6 +54,16 @@
 - **ตัดสินใจ**: นิยาม token (สี/surface/สถานะ/radius/shadow/layout) เป็น CSS variables ใน `index.css` และเขียน component class เอง ต่อยอดจากแนวเดิม (hand-written CSS) แทนการติดตั้ง UI kit
 - **ผล**: ไม่เพิ่ม bundle/deps, ปรับธีมจุดเดียว, ไม่ hardcode สีซ้ำ; แลกกับการดูแล CSS เอง
 
+## ADR-013: PostgreSQL localhost-only + แยกบัญชี runtime/migration
+- **บริบท**: ต้องกันเครื่องพนักงาน/เครื่องอื่นต่อ PostgreSQL 5432 โดยตรง และไม่ให้ backend ใช้บัญชี `postgres` เป็น runtime
+- **ตัดสินใจ**:
+  - `listen_addresses = 'localhost'` + `pg_hba.conf` อนุญาตเฉพาะ `127.0.0.1/32` และ `::1/128` (scram-sha-256); ปิด firewall rule ของ 5432 ที่เปิด LAN
+  - Runtime ใช้บัญชีสิทธิ์จำกัด `s2a_app` (DML เท่านั้น) ผ่าน `DATABASE_URL`
+  - Migration/admin ใช้ owner/`postgres` ผ่าน `DIRECT_URL` (schema.prisma `directUrl`) — ไม่โหลดเข้าสู่ runtime
+  - Backend เป็นชั้นเดียวที่แตะ DB; ห้าม tunnel/expose 5432; DBeaver ใช้บน Server/RDP เท่านั้น
+- **ผล**: ลด attack surface ของฐานข้อมูลอย่างมาก, จำกัดความเสียหายถ้า runtime credential รั่ว; แลกกับการต้องดูแล 3 connection string แยกบทบาท
+- **หมายเหตุ**: `env.ts` ทำให้ `TEST_DATABASE_URL`/`DIRECT_URL` เป็น optional เพื่อไม่ให้ runtime boot พังหากไม่ได้ตั้ง; runbook + SQL template อยู่ใน DEPLOYMENT.md / `backend/scripts/create-s2a-app-role.sql`
+
 ## ADR-012: เลื่อนการย้ายไป Prisma config file (Technical Debt)
 - **บริบท**: Prisma 6 เตือนว่า `package.json#prisma` (`seed`) จะ deprecated ใน Prisma 7 ให้ย้ายไป `prisma.config.ts`
 - **ตัดสินใจ**: ยังไม่ย้ายในรอบ UI/UX นี้ และ **ไม่อัปเกรด Prisma 7 ทันที** เพื่อลดความเสี่ยงต่อ auth/migration ที่ใช้งานได้แล้ว

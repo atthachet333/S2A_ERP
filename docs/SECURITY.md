@@ -1,5 +1,19 @@
 # SECURITY — S2A ERP
 
+## Database access hardening (localhost-only) — 2026-08-06
+
+- **PostgreSQL รับเฉพาะ localhost** (`listen_addresses = 'localhost'`, port 5432) — เครื่องพนักงาน/เครื่องอื่น **ห้ามต่อ 5432 โดยตรง**
+- `pg_hba.conf` อนุญาตเฉพาะ loopback `127.0.0.1/32` และ `::1/128` ด้วย `scram-sha-256` — ลบกฎ LAN (`192.168.x.x`) และ `0.0.0.0/0` ทั้งหมด, ห้าม `trust`
+- **Backend เป็นชั้นเดียวที่เข้าถึง DB**; ผู้ใช้เข้าถึงผ่านเว็บ (1414) → API (1415) เท่านั้น; Browser ไม่ต่อ DB โดยตรง
+- **Runtime user = `s2a_app`** (LOGIN, NOSUPERUSER/NOCREATEDB/NOCREATEROLE/NOINHERIT, สิทธิ์ SELECT/INSERT/UPDATE/DELETE เท่านั้น) ผ่าน `DATABASE_URL`
+- **`postgres`/owner ใช้เฉพาะ migration/admin** ผ่าน `DIRECT_URL` (ไม่โหลดเข้าสู่ runtime logic)
+- Windows Firewall: ปิด rule ที่เปิด TCP 5432 ให้ LAN (ไม่ปิด firewall ทั้งระบบ, ไม่เปิด port ใหม่)
+- **ห้าม tunnel/port-forward/public IP ไป 5432**; Cloudflare Tunnel/Reverse proxy ให้ชี้ frontend เท่านั้น
+- DBeaver ใช้เฉพาะบน Server/RDP; ห้ามเก็บบัญชี postgres บนเครื่องพนักงาน; ลบ profile ที่ชี้ `192.168.x.x:5432`
+- ขั้นตอนปฏิบัติ (conf/pg_hba/firewall/restart/verify/rollback/rotate) + SQL สร้าง role อยู่ใน `docs/DEPLOYMENT.md` และ `backend/scripts/create-s2a-app-role.sql`
+
+> **ไม่มี secret จริงถูก commit**: ตรวจ (`git grep`) แล้วพบเฉพาะค่า placeholder ใน `.env.example`, ค่า default ใน source (`JWT_SECRET` fallback) และรหัส seed dev (`win`/`pueng` ที่บังคับเปลี่ยนครั้งแรก) — `backend/.env` ถูก gitignore. Frontend bundle ไม่มี DB URL/credential
+
 ## npm audit — สถานะช่องโหว่ (ตรวจ 2026-08-06)
 
 `npm audit` พบ **9 ช่องโหว่** (critical 3, high 1, moderate 5) ทั้งหมดอยู่ใน dependency ทางอ้อม และการแก้ทุกตัวต้อง **major upgrade (breaking)** — จึง **ไม่ใช้ `npm audit fix --force`**

@@ -1,5 +1,17 @@
 # PROGRESS — S2A ERP
 
+## Database Access Hardening — 2026-08-06
+
+- **Repo-side (ทำ + ตรวจแล้วบนเครื่องนี้)**:
+  - `schema.prisma` เพิ่ม `directUrl = env("DIRECT_URL")` (runtime=url/s2a_app, migration=directUrl/owner) — `prisma validate` ✅
+  - `env.ts` เพิ่ม validation `TEST_DATABASE_URL`, `DIRECT_URL` (optional, ไม่บังคับ runtime)
+  - `.env.example` เปลี่ยนเป็นรูปแบบ s2a_app + DIRECT_URL + TEST_DATABASE_URL (placeholder เท่านั้น)
+  - เพิ่ม `backend/scripts/create-s2a-app-role.sql` (template สิทธิ์จำกัด, ไม่มีรหัสจริง)
+  - Security audit (`git grep`): ไม่มี secret จริงถูก commit; frontend bundle ไม่มี DB URL/credential (ตรวจ dist แล้ว)
+  - typecheck ✅ / lint ✅ (BE+FE), frontend tests ✅ 35, build ✅
+- **Server-side (⛔ ยังไม่ได้ทำบนเครื่องนี้ — ไม่มี PostgreSQL/ไม่มี D:\ และห้าม Docker)**: การแก้ `postgresql.conf`/`pg_hba.conf`, ปิด firewall 5432, restart service, สร้าง role `s2a_app`, และ health `db=up` **ต้องรันบนเครื่อง Server จริง** ตาม runbook ใน `docs/DEPLOYMENT.md`
+- สถาปัตยกรรมเป้าหมาย: Browser → FE 1414 → API 1415 → PostgreSQL 127.0.0.1:5432 (backend ชั้นเดียวที่แตะ DB), ไม่เปิด 5432 ให้ LAN/Internet (ADR-013)
+
 ## UI/UX Redesign — Enterprise Shell — 2026-08-06
 
 - ออกแบบ Layout ใหม่ (Sidebar + Header + Content) แยกเป็น component พร้อม design token กลาง

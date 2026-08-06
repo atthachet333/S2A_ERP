@@ -14,8 +14,8 @@ Frontend เก็บ access/refresh token ใน local storage เพื่อ 
 └────────────────────┘        JSON (standard envelope) └─────────┬──────────┘
                                                                   │ Prisma
                                                         ┌─────────▼──────────┐
-                                                        │   PostgreSQL 16    │
-                                                        │  (Docker, 5432)    │
+                                                        │   PostgreSQL 18    │
+                                                        │ (Native 127.0.0.1) │
                                                         └────────────────────┘
 
 (อ่านอย่างเดียว, ปิดโดยค่าเริ่มต้น)  Google Sheets ──► Backend read-only service
@@ -56,5 +56,11 @@ routes (Fastify)  →  schema (Zod validation)  →  service (business logic)
 | Realtime | Polling ก่อน แล้วต่อยอดเป็น SSE/WebSocket |
 
 ## 6. Environments
-- Local dev: Vite dev server + Fastify + Postgres (Docker)
+- Local dev: Vite dev server + Fastify + Postgres (Native, localhost เท่านั้น — ไม่ใช้ Docker)
 - Prod: ดู `DEPLOYMENT.md`
+
+## 7. Database access boundary (2026-08-06)
+- PostgreSQL รับเฉพาะ `127.0.0.1:5432` (`listen_addresses='localhost'`) — เครื่องอื่นห้ามต่อ DB ตรง
+- Backend เป็น **ชั้นเดียว** ที่เข้าถึง DB; ผู้ใช้เข้าผ่าน Frontend (1414) → API (1415)
+- Runtime ใช้บัญชีสิทธิ์จำกัด **`s2a_app`** (`DATABASE_URL`); migration ใช้ owner ผ่าน **`DIRECT_URL`** (`schema.prisma` → `directUrl`)
+- ห้ามใส่ `DATABASE_URL`/`DIRECT_URL` ใน frontend หรือ client bundle

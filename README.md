@@ -5,6 +5,8 @@
 > **UI Shell**: layout ใหม่แยก `AppLayout`/`Sidebar`/`Header`, design token กลาง, placeholder สำหรับโมดูลที่ยังไม่พัฒนา, System Status จาก Health API จริง — ดู [`docs/UI_UX_GUIDELINES.md`](./docs/UI_UX_GUIDELINES.md)
 >
 > **API read-only ใหม่**: `GET /api/dashboard/summary` (นับข้อมูลจริง), `GET /api/activity` (audit+login log, SUPER_ADMIN, pagination)
+>
+> **Security (DB access)**: PostgreSQL รับเฉพาะ `localhost:5432`; runtime ใช้บัญชีสิทธิ์จำกัด `s2a_app`, migration ใช้ owner ผ่าน `DIRECT_URL`; ผู้ใช้เข้าถึงผ่านเว็บ (1414) → API (1415) เท่านั้น — ห้ามต่อ 5432 ตรง/ห้าม tunnel ไป 5432 (ดู [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md), [`docs/SECURITY.md`](./docs/SECURITY.md))
 
 ระบบบริหารต้นทุนการผลิตและคลังสินค้า แยก React/Vite frontend และ Fastify/Prisma backend พร้อม first-login password flow, JWT access token, rotating refresh token และ RBAC
 
@@ -36,7 +38,7 @@ Flow หลักของธุรกิจ:
 |------|-----------|
 | Frontend | React, Vite, TypeScript, Tailwind CSS, shadcn/ui, React Router, TanStack Query, TanStack Table, React Hook Form, Zod, Recharts, Lucide |
 | Backend | Node.js, TypeScript, Fastify, Prisma ORM, PostgreSQL, Zod, JWT, bcrypt, Pino, Vitest |
-| Database | PostgreSQL 16 (รันผ่าน Docker Compose) |
+| Database | PostgreSQL 18 (Native, `localhost:5432` เท่านั้น — ไม่ใช้ Docker) |
 | อื่น ๆ | Google Sheets (อ้างอิงอ่านอย่างเดียว, ปิดโดยค่าเริ่มต้น) |
 
 ## 3. โครงสร้างโฟลเดอร์ (Folder Structure)
@@ -54,7 +56,7 @@ S2A_ERP/
 
 ## 4. วิธีติดตั้ง (Installation)
 
-ต้องมี: **Node.js >= 20**, **Docker Desktop**, **npm >= 10**
+ต้องมี: **Node.js >= 20**, **PostgreSQL 18 (Native, localhost)**, **npm >= 10** — ไม่ใช้ Docker
 
 ```bash
 # ที่ root ของโปรเจกต์
@@ -82,16 +84,16 @@ cp frontend/.env.example frontend/.env
 ## 6. สร้างฐานข้อมูล (Database)
 
 ```bash
-# 1) เปิด PostgreSQL ผ่าน Docker
-npm run db:up
+# ต้องมี PostgreSQL 18 Native รันอยู่ที่ localhost:5432 (ไม่ใช้ Docker)
+# และสร้างบัญชี runtime s2a_app ก่อน — ดู docs/DEPLOYMENT.md (Runbook B)
 
-# 2) สร้าง Prisma Client
+# 1) สร้าง Prisma Client
 npm run db:generate
 
-# 3) รัน migration
-npm run db:migrate
+# 2) รัน migration (ใช้ DIRECT_URL = owner/postgres)
+npm --workspace backend run prisma:deploy
 
-# 4) ใส่ข้อมูลตัวอย่าง (seed)
+# 3) ใส่ข้อมูลตัวอย่าง (seed)
 npm run db:seed
 ```
 

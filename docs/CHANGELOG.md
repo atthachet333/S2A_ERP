@@ -1,5 +1,19 @@
 # CHANGELOG — S2A ERP
 
+## [0.3.1] — 2026-08-06
+
+### Security
+
+- แยกบทบาทการเข้าถึง DB: `schema.prisma` เพิ่ม `directUrl` (runtime=`DATABASE_URL`/s2a_app, migration=`DIRECT_URL`/owner)
+- `env.ts` validate `TEST_DATABASE_URL`/`DIRECT_URL` (optional, ไม่โหลด DIRECT_URL เข้า runtime logic)
+- `.env.example` → รูปแบบ s2a_app + DIRECT_URL + TEST_DATABASE_URL (placeholder), เพิ่ม `backend/scripts/create-s2a-app-role.sql`
+- เอกสาร hardening ครบ (localhost-only, pg_hba, firewall, s2a_app, rotate, DBeaver, no-tunnel-to-5432) + runbook ใน DEPLOYMENT.md, ADR-013
+- ยืนยัน: ไม่มี secret จริงถูก commit, frontend bundle ไม่มี DB URL/credential
+
+### Notes
+
+- การ hardening ระดับ PostgreSQL server (conf/pg_hba/firewall/role/restart/db=up) ต้องรันบนเครื่อง Server จริง (runbook ให้ไว้แล้ว) — รันบนเครื่องพัฒนานี้ไม่ได้เพราะไม่มี PostgreSQL และห้าม Docker
+
 ## [0.3.0] — 2026-08-06
 
 ### Added — UI/UX Redesign (Enterprise ERP shell)
