@@ -12,10 +12,12 @@ describe('Sidebar', () => {
   it('แสดงโลโก้จริงและชื่อระบบ', () => {
     store.user = makeUser();
     renderWithProviders(<Sidebar collapsed={false} onNavigate={() => {}} onLogout={() => {}} />);
-    const logo = screen.getByAltText('โลโก้ S2A ERP') as HTMLImageElement;
+    const logo = screen.getByAltText('โลโก้ S2 Accounting Consultant') as HTMLImageElement;
     expect(logo).toBeInTheDocument();
     expect(logo.getAttribute('src')).toContain('s2a-logo.png');
-    expect(screen.getByText('S2A ERP')).toBeInTheDocument();
+    expect(screen.getByText(/S2 ACCOUNTING/)).toBeInTheDocument();
+    expect(screen.getByText(/CONSULTANT/)).toBeInTheDocument();
+    expect(screen.getByText('PRODUCTION & INVENTORY')).toBeInTheDocument();
   });
 
   it('SUPER_ADMIN เห็นเมนูผู้ใช้งานและตั้งค่าระบบ', () => {
@@ -31,7 +33,8 @@ describe('Sidebar', () => {
     renderWithProviders(<Sidebar collapsed={false} onNavigate={() => {}} onLogout={() => {}} />);
     expect(screen.queryByText('ผู้ใช้งาน')).not.toBeInTheDocument();
     expect(screen.queryByText('ประวัติการใช้งาน')).not.toBeInTheDocument();
-    expect(screen.getByText('วัตถุดิบและสินค้า')).toBeInTheDocument();
+    expect(screen.getByText('วัตถุดิบ')).toBeInTheDocument();
+    expect(screen.getByText('บรรจุภัณฑ์')).toBeInTheDocument();
   });
 
   it('มีปุ่มออกจากระบบและเรียก callback เมื่อคลิก', () => {

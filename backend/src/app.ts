@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
+import multipart from '@fastify/multipart';
 import { env } from './config/env.js';
 import requestContext from './plugins/request-context.js';
 import errorHandler from './plugins/error-handler.js';
@@ -10,6 +11,13 @@ import authRoutes from './modules/auth/auth.route.js';
 import userRoutes from './modules/users/user.route.js';
 import dashboardRoutes from './modules/dashboard/dashboard.route.js';
 import activityRoutes from './modules/activity/activity.route.js';
+import unitRoutes from './modules/catalog/unit.route.js';
+import categoryRoutes from './modules/catalog/category.route.js';
+import itemRoutes from './modules/catalog/item.route.js';
+import menuRoutes from './modules/catalog/menu.route.js';
+import recipeRoutes from './modules/recipes/recipe.route.js';
+import costingRoutes from './modules/costing/costing.route.js';
+import uploadRoutes from './modules/uploads/upload.route.js';
 
 /**
  * สร้าง Fastify instance พร้อม plugin และ route ทั้งหมด
@@ -42,6 +50,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     sign: { expiresIn: env.JWT_EXPIRES_IN },
   });
 
+  // อัปโหลดรูป (จำกัดขนาด/จำนวนไฟล์) — ตรวจ magic bytes ในเลเยอร์ route อีกชั้น
+  await app.register(multipart, { limits: { fileSize: env.UPLOAD_MAX_BYTES, files: 1, fields: 10 } });
+
   // Routes (ทั้งหมดอยู่ใต้ /api)
   await app.register(
     async (api) => {
@@ -50,6 +61,13 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(userRoutes, { prefix: '/users' });
       await api.register(dashboardRoutes, { prefix: '/dashboard' });
       await api.register(activityRoutes, { prefix: '/activity' });
+      await api.register(unitRoutes, { prefix: '/units' });
+      await api.register(categoryRoutes, { prefix: '/categories' });
+      await api.register(itemRoutes, { prefix: '/items' });
+      await api.register(menuRoutes, { prefix: '/menus' });
+      await api.register(recipeRoutes, { prefix: '/recipes' });
+      await api.register(costingRoutes, { prefix: '/costing' });
+      await api.register(uploadRoutes, { prefix: '/uploads' });
     },
     { prefix: '/api' },
   );

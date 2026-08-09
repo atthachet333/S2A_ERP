@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { Eye, EyeOff, LockKeyhole, UserRound } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
+import LoginExperience from '@/components/auth/LoginExperience';
 
-export default function LoginPage() {
+export default function LoginPage() { return <LoginExperience />; }
+export function LegacyLoginPage() {
   const { user, login } = useAuth(); const navigate = useNavigate();
   const [username, setUsername] = useState(() => localStorage.getItem('s2a_remembered_username') ?? ''); const [password, setPassword] = useState(''); const [remember, setRemember] = useState(Boolean(localStorage.getItem('s2a_remembered_username'))); const [show, setShow] = useState(false); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   if (user) return <Navigate to={user.mustChangePassword ? '/change-password' : '/dashboard'} replace />;

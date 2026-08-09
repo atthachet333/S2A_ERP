@@ -49,6 +49,13 @@ export default async function authRoutes(app: FastifyInstance) {
     if (!user || !(await verifyPassword(body.currentPassword, user.passwordHash))) return reply.status(400).send(fail('INVALID_CURRENT_PASSWORD', 'รหัสผ่านปัจจุบันไม่ถูกต้อง'));
     if (await verifyPassword(body.newPassword, user.passwordHash)) return reply.status(400).send(fail('PASSWORD_REUSED', 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม'));
     await updatePassword(user.id, body.newPassword, req.ip);
-    return ok(null, 'เปลี่ยนรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบอีกครั้ง');
+    const updated = await findUserById(user.id);
+    if (!updated) return reply.status(401).send(fail('UNAUTHORIZED', 'ไม่พบบัญชีผู้ใช้'));
+    const safeUser = toAuthUser(updated);
+    return ok({
+      accessToken: signAccessToken(app, safeUser),
+      refreshToken: await createRefreshToken(user.id, req.ip, req.headers['user-agent']),
+      user: safeUser,
+    }, 'เปลี่ยนรหัสผ่านสำเร็จ');
   });
 }

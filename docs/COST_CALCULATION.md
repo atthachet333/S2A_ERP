@@ -1,5 +1,8 @@
 # COST CALCULATION — S2A ERP
 
+## Preview and persistence
+เมื่อเลือกหน่วยซื้อ `quantityBase = quantity × purchaseToBaseFactor`; line cost คือ `quantityBase × lastCost × (1 + wastePercent/100)` Frontend preview ทันที แต่ backend โหลดราคาล่าสุดและ recompute ก่อน persist
+
 > เงินและปริมาณใช้ **Decimal** เสมอ — ห้ามใช้ Float
 
 ## 1. Moving Average Cost (ต้นทุนเฉลี่ยเคลื่อนที่)

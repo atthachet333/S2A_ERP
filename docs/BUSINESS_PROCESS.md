@@ -1,5 +1,8 @@
 # BUSINESS PROCESS — S2A ERP
 
+## Costing workflow
+ราคาซื้อวัตถุดิบ → เมนู → Recipe V1 → วัตถุดิบ/ค่าใช้จ่าย → backend cost → version ใหม่เมื่อสูตรเปลี่ยน → pricing simulation → SellingPrice
+
 กระบวนการทางธุรกิจหลักและสถานะเอกสารในแต่ละขั้นตอน
 
 ## 1. Master Data

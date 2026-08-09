@@ -1,5 +1,8 @@
 # PROGRESS — S2A ERP
 
+## Food Costing workflow
+เชื่อม Menu form/detail, Recipe Builder/new version, Costing Workspace, pricing persistence และ dashboard KPI แล้ว ต้องผ่าน final gate และ user journey จริงก่อนประกาศ production complete
+
 ## ERP Module Scaffolds — 2026-08-09
 
 - ต่อยอดจาก Enterprise shell เดิม (origin/main): เพิ่ม `ModuleScaffold` + `module-structure.ts` แสดงโครงหน้าจอละเอียดของแต่ละโมดูล (สรุป/ตัวกรอง/คอลัมน์/empty state) โดยใช้ดีไซน์ระบบเดียวกัน

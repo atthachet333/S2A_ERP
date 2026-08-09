@@ -1,5 +1,8 @@
 # API SPEC — S2A ERP
 
+## Food Costing API
+`/api/menus` รองรับ list/create/detail/update; `/api/recipes` รองรับ list/create/detail/new version; `/api/costing/calculate` คำนวณซ้ำฝั่ง server และ `/api/costing/price` upsert ราคาตาม item และ priceType
+
 ## Authentication endpoints (implemented)
 
 - `POST /api/auth/login`

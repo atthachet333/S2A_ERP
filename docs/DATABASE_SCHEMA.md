@@ -1,5 +1,8 @@
 # DATABASE SCHEMA — S2A ERP
 
+## Food Costing persistence
+Menu reuse `Item(FINISHED_GOOD)`; สูตรใช้ `Recipe`, `RecipeVersion`, `RecipeIngredient`, `RecipeCost`; ราคาขายใช้ `SellingPrice`; conversion เฉพาะวัตถุดิบใช้ `Item.purchaseToBaseFactor` โดยไม่มี model ซ้ำ
+
 ## Native PostgreSQL status
 
 - Database: `food_erp`; integration test database: `food_erp_test`

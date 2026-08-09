@@ -1,7 +1,8 @@
 import {
   LayoutDashboard, Boxes, UtensilsCrossed, Calculator, CircleDollarSign,
   Truck, Factory, Warehouse, ArrowLeftRight, ClipboardCheck,
-  BarChart3, UsersRound, History, Settings, type LucideIcon,
+  BarChart3, UsersRound, History, Settings, Sprout, Package,
+  Database, ChartColumnBig, type LucideIcon,
 } from 'lucide-react';
 
 export type ModuleStatus = 'ready' | 'in-progress' | 'planned';
@@ -32,26 +33,39 @@ export interface ModuleMeta {
 
 /** สถานะการพัฒนาระบบ (ไม่ใช่ข้อมูลธุรกิจจริง) */
 export const MODULES: Record<string, ModuleMeta> = {
-  '/dashboard': { label: 'ภาพรวม', description: 'ภาพรวมระบบและทางลัดการทำงาน', icon: LayoutDashboard, status: 'ready', group: 'ภาพรวม' },
+  '/dashboard': { label: 'ภาพรวม', description: 'ภาพรวมต้นทุน เมนู และ KPI ของร้าน', icon: LayoutDashboard, status: 'ready', group: 'ภาพรวม' },
+  '/ingredients': {
+    label: 'วัตถุดิบ', description: 'ทะเบียนวัตถุดิบ ราคาซื้อ หน่วย และต้นทุนต่อหน่วยฐาน',
+    icon: Sprout, status: 'ready', group: 'จัดการเมนูและต้นทุน',
+  },
+  '/packaging': {
+    label: 'บรรจุภัณฑ์', description: 'กล่อง ถุง ช้อนส้อม ฝา และวัสดุสิ้นเปลืองที่ใช้ใส่อาหาร',
+    icon: Package, status: 'ready', group: 'จัดการเมนูและต้นทุน',
+  },
+  '/catalog': {
+    label: 'คลังข้อมูล', description: 'ค้นดูรายชื่อวัตถุดิบและเมนูที่ขายในที่เดียว',
+    icon: Database, status: 'ready', group: 'ข้อมูลและยอดขาย',
+  },
+  '/sales': {
+    label: 'สรุปการขาย', description: 'เมนูขายดี เมนูขายไม่ดี รายได้และกำไรต่อเมนู',
+    icon: ChartColumnBig, status: 'ready', group: 'ข้อมูลและยอดขาย',
+  },
   '/items': {
     label: 'วัตถุดิบและสินค้า', description: 'ทะเบียนวัตถุดิบ บรรจุภัณฑ์ และสินค้าสำเร็จรูป พร้อมหน่วยนับและหมวดหมู่',
     icon: Boxes, status: 'in-progress', group: 'การจัดการสินค้า',
     plannedFeatures: ['ทะเบียนวัตถุดิบและสินค้าพร้อมรหัส SKU', 'กำหนดหน่วยนับหลักและหน่วยซื้อ', 'จัดหมวดหมู่และสถานะการใช้งาน', 'ประวัติการเปลี่ยนแปลงราคาต่อรายการ'],
   },
   '/recipes': {
-    label: 'สูตรและเมนู', description: 'จัดการสูตรการผลิต ส่วนผสม และเวอร์ชันของแต่ละเมนู',
-    icon: UtensilsCrossed, status: 'planned', group: 'การจัดการสินค้า',
-    plannedFeatures: ['สร้างสูตรพร้อมส่วนผสมและปริมาณ', 'เก็บหลายเวอร์ชันของสูตร', 'คำนวณ yield และของเสีย', 'ผูกสูตรกับสินค้าสำเร็จรูป'],
+    label: 'สูตรเมนูอาหาร', description: 'สร้างสูตรเมนูจากวัตถุดิบและบรรจุภัณฑ์ พร้อมต้นทุนต่อจาน',
+    icon: UtensilsCrossed, status: 'ready', group: 'จัดการเมนูและต้นทุน',
   },
   '/costing': {
-    label: 'คำนวณต้นทุน', description: 'คำนวณต้นทุนต่อหน่วยจากสูตรและราคาวัตถุดิบล่าสุด',
-    icon: Calculator, status: 'planned', group: 'การจัดการสินค้า',
-    plannedFeatures: ['คำนวณต้นทุนจากสูตรอัตโนมัติ', 'รวมต้นทุนวัตถุดิบ แรงงาน และโสหุ้ย', 'เปรียบเทียบต้นทุนแต่ละเวอร์ชัน', 'บันทึกประวัติต้นทุนตามช่วงเวลา'],
+    label: 'คำนวณต้นทุน', description: 'คำนวณต้นทุนต่อเมนูจากสูตรและราคาวัตถุดิบล่าสุด',
+    icon: Calculator, status: 'ready', group: 'จัดการเมนูและต้นทุน',
   },
   '/pricing': {
-    label: 'ราคาขายและกำไร', description: 'ตั้งราคาขายและวิเคราะห์กำไรต่อหน่วยจากต้นทุนจริง',
-    icon: CircleDollarSign, status: 'planned', group: 'การจัดการสินค้า',
-    plannedFeatures: ['ตั้งราคาขายต่อสินค้า', 'คำนวณอัตรากำไรอัตโนมัติ', 'จำลองราคาตามเป้ากำไร', 'ประวัติการปรับราคาขาย'],
+    label: 'ราคาขายและกำไร', description: 'ตั้งราคาขายและวิเคราะห์กำไรต่อเมนูจากต้นทุนจริง',
+    icon: CircleDollarSign, status: 'ready', group: 'จัดการเมนูและต้นทุน',
   },
   '/receiving': {
     label: 'รับสินค้าเข้าคลัง', description: 'บันทึกการรับวัตถุดิบและสินค้าเข้าคลังพร้อมล็อตและวันหมดอายุ',
@@ -92,31 +106,32 @@ export const MODULES: Record<string, ModuleMeta> = {
   },
 };
 
+/**
+ * Information Architecture (PART C) — โฟกัสแกนหลัก: food costing + menu + pricing + sales
+ * โซน "คลังและการผลิต" แบบโรงงานถูกถอดออกจาก main nav แล้ว (โค้ด/route เดิมยังคงอยู่เพื่อ backward-compat)
+ */
 export const NAV_GROUPS: NavGroup[] = [
   { label: 'ภาพรวม', items: [{ path: '/dashboard', label: 'ภาพรวม', icon: LayoutDashboard }] },
   {
-    label: 'การจัดการสินค้า',
+    label: 'จัดการเมนูและต้นทุน',
     items: [
-      { path: '/items', label: 'วัตถุดิบและสินค้า', icon: Boxes },
-      { path: '/recipes', label: 'สูตรและเมนู', icon: UtensilsCrossed },
+      { path: '/ingredients', label: 'วัตถุดิบ', icon: Sprout },
+      { path: '/packaging', label: 'บรรจุภัณฑ์', icon: Package },
+      { path: '/recipes', label: 'สูตรเมนูอาหาร', icon: UtensilsCrossed },
       { path: '/costing', label: 'คำนวณต้นทุน', icon: Calculator },
       { path: '/pricing', label: 'ราคาขายและกำไร', icon: CircleDollarSign },
     ],
   },
   {
-    label: 'คลังและการผลิต',
+    label: 'ข้อมูลและยอดขาย',
     items: [
-      { path: '/receiving', label: 'รับสินค้าเข้าคลัง', icon: Truck },
-      { path: '/production', label: 'การผลิต', icon: Factory },
-      { path: '/inventory', label: 'คลังสินค้า', icon: Warehouse },
-      { path: '/transfers', label: 'โอนคลัง', icon: ArrowLeftRight },
-      { path: '/stock-count', label: 'ตรวจนับและปรับสต๊อก', icon: ClipboardCheck },
+      { path: '/catalog', label: 'คลังข้อมูล', icon: Database },
+      { path: '/sales', label: 'สรุปการขาย / KPI เมนู', icon: ChartColumnBig },
     ],
   },
   {
-    label: 'ระบบและรายงาน',
+    label: 'ระบบ',
     items: [
-      { path: '/reports', label: 'รายงาน', icon: BarChart3 },
       { path: '/users', label: 'ผู้ใช้งาน', icon: UsersRound, requiredRole: 'SUPER_ADMIN' },
       { path: '/activity', label: 'ประวัติการใช้งาน', icon: History, requiredRole: 'SUPER_ADMIN' },
       { path: '/settings', label: 'ตั้งค่าระบบ', icon: Settings, requiredRole: 'SUPER_ADMIN' },

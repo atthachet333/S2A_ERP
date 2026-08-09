@@ -1,5 +1,8 @@
 # S2A ERP — ระบบ ERP สำหรับธุรกิจผลิตอาหารสำเร็จรูป
 
+## Food Costing Core
+รองรับวัตถุดิบและราคาซื้อ เมนูพร้อมรูป สูตรแบบ versioned ต้นทุนที่ backend คำนวณซ้ำ การจำลอง markup/margin และ SellingPrice ผ่าน `/items`, `/menus`, `/recipes`, `/costing` โดยใช้ PostgreSQL จริง
+
 > สถานะ 2026-08-06: UI/UX redesign เป็น enterprise shell (Sidebar 14 เมนู + Header + Dashboard 6 ส่วน) บน PostgreSQL Native `localhost:5432`, frontend port 1414 และ backend port 1415 โดยไม่ใช้ Docker
 >
 > **UI Shell**: layout ใหม่แยก `AppLayout`/`Sidebar`/`Header`, design token กลาง, placeholder สำหรับโมดูลที่ยังไม่พัฒนา, System Status จาก Health API จริง — ดู [`docs/UI_UX_GUIDELINES.md`](./docs/UI_UX_GUIDELINES.md)

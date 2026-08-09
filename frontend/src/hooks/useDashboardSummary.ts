@@ -8,6 +8,10 @@ export interface DashboardSummary {
   warehouses: number;
   items: number;
   recipes: number;
+  rawMaterials: number;
+  menus: number;
+  activeRecipes: number;
+  itemsWithoutPrice: number;
 }
 
 /** ตัวเลขสรุปจากฐานข้อมูลจริง (System Overview + Setup Progress) */

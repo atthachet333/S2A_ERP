@@ -21,11 +21,13 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(() => window.scrollY > 20 || document.documentElement.scrollTop > 20);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const moduleMeta = MODULES[pathname];
   const fallback = PAGE_TITLES[pathname];
-  const title = moduleMeta?.label ?? fallback?.title ?? 'S2A ERP';
+  const title = moduleMeta?.label ?? fallback?.title ?? 'S2 Accounting Consultant';
+  const PageIcon = moduleMeta?.icon;
   const group = moduleMeta?.group ?? fallback?.group ?? 'ภาพรวม';
 
   useEffect(() => {
@@ -37,11 +39,19 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
 
+  useEffect(() => {
+    const updateScrolled = () => setScrolled(window.scrollY > 20 || document.documentElement.scrollTop > 20);
+    updateScrolled();
+    window.addEventListener('scroll', updateScrolled, { passive: true });
+    return () => window.removeEventListener('scroll', updateScrolled);
+  }, []);
+
   return (
-    <header className="app-header">
+    <header className={`app-header${scrolled ? ' app-header--scrolled' : ''}`}>
       <div className="header-left">
         <button className="icon-btn only-desktop" onClick={onToggleSidebar} aria-label="ย่อ/ขยายเมนู"><PanelLeft /></button>
         <button className="icon-btn only-mobile" onClick={onOpenDrawer} aria-label="เปิดเมนู"><Menu /></button>
+        {PageIcon && <span className="header-page-icon"><PageIcon aria-hidden /></span>}
         <div className="header-title">
           <h1>{title}</h1>
           <nav className="breadcrumb" aria-label="เส้นทาง">

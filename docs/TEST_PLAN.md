@@ -1,5 +1,8 @@
 # TEST PLAN — S2A ERP
 
+## Food Costing regression
+ครอบคลุม backend catalog/costing และ frontend live preview: item-specific conversion, packaging separation, utility และ effective yield โดยไม่ skip tests เดิม
+
 ## Authentication regression suite
 
 ใช้ PostgreSQL จริงทดสอบ invalid login, first login redirect contract, dashboard blocking, change password, refresh rotation/reuse, session restore, logout, RBAC, audit/login log, empty body และ malformed JSON จากนั้นคืน development seed ทุกครั้ง

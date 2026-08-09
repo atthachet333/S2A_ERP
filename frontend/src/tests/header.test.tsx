@@ -37,4 +37,14 @@ describe('Header', () => {
     expect(screen.getByRole('menuitem', { name: /ออกจากระบบ/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /เปลี่ยนรหัสผ่าน/ })).toBeInTheDocument();
   });
+
+  it('เพิ่ม scrolled state เมื่อ window เลื่อนเกิน threshold', () => {
+    store.user = makeUser(); store.health = { data: undefined, isLoading: true, isError: false };
+    Object.defineProperty(window, 'scrollY', { value: 24, writable: true, configurable: true });
+    const { container } = renderWithProviders(<Header onToggleSidebar={noop} onOpenDrawer={noop} onLogout={noop} />);
+    fireEvent.scroll(window);
+    expect(container.querySelector('.app-header')).toHaveClass('app-header--scrolled');
+    window.scrollY = 0; fireEvent.scroll(window);
+    expect(container.querySelector('.app-header')).not.toHaveClass('app-header--scrolled');
+  });
 });

@@ -19,6 +19,9 @@ const envSchema = z.object({
   REFRESH_TOKEN_DAYS: z.coerce.number().int().positive().default(7),
   FRONTEND_URL: z.string().url().default('http://localhost:1414'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  // โฟลเดอร์เก็บไฟล์อัปโหลด (ไม่ commit เข้า git) — ค่าเริ่มต้นอยู่นอก src
+  UPLOAD_DIR: z.string().default('./data/uploads'),
+  UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
 
   // Google Sheets (read-only, ปิดโดยค่าเริ่มต้น)
   GOOGLE_SHEETS_READ_ENABLED: z

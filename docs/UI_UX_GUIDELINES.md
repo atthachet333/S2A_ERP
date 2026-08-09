@@ -1,5 +1,8 @@
 # UI/UX GUIDELINES — S2A ERP
 
+## Food Costing screens
+Menu มี list/form/detail; Recipe Builder ใช้สามคอลัมน์พร้อม sticky summary บน desktop; Costing Workspace เริ่มด้วย empty state และแสดงเฉพาะข้อมูลสูตรจริง
+
 ## S2A visual identity
 
 ใช้โลโก้จริง `/s2a-logo.png` โดย `object-fit: contain`, ฟอนต์ IBM Plex Sans Thai, สีขาว/น้ำเงิน/กรมและทองเป็น accent รองรับ desktop/mobile พร้อม show-hide password, remember username และ sidebar ตาม role

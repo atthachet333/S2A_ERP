@@ -5,44 +5,42 @@ import { makeUser, renderWithProviders } from './test-utils';
 
 const store = vi.hoisted(() => ({
   user: null as AuthUser | null,
-  health: {} as Record<string, unknown>,
   summary: {} as Record<string, unknown>,
   activity: {} as Record<string, unknown>,
 }));
 vi.mock('@/auth/AuthContext', () => ({ useAuth: () => ({ user: store.user }) }));
-vi.mock('@/hooks/useHealth', () => ({ useHealth: () => store.health }));
 vi.mock('@/hooks/useDashboardSummary', () => ({ useDashboardSummary: () => store.summary }));
 vi.mock('@/hooks/useActivity', () => ({ useActivity: () => store.activity }));
+vi.mock('@/lib/catalog', () => ({ catalogApi: { items: vi.fn(() => Promise.resolve({ items: [], total: 0 })), menus: vi.fn(() => Promise.resolve([])) } }));
 
 import DashboardPage from '@/pages/DashboardPage';
 
 describe('DashboardPage', () => {
   beforeEach(() => {
-    store.health = { data: { status: 'ok', db: 'up', version: '0.1.0' }, isLoading: false, isError: false };
-    store.summary = { data: { users: 2, activeUsers: 2, units: 0, warehouses: 0, items: 0, recipes: 0 }, isLoading: false };
+    store.summary = { data: { users: 2, activeUsers: 2, units: 3, warehouses: 0, items: 5, recipes: 1, rawMaterials: 4, menus: 2, activeRecipes: 1, itemsWithoutPrice: 0 }, isLoading: false };
     store.activity = { data: { items: [], page: 1, pageSize: 6, total: 0, totalPages: 0 }, isLoading: false, isError: false };
   });
 
-  it('แสดงชื่อผู้ใช้และทางลัดการทำงาน', () => {
+  it('แสดงชื่อผู้ใช้และทางลัดการทำงานของระบบคิดต้นทุน', () => {
     store.user = makeUser({ fullName: 'วิน ผู้ดูแล' });
     renderWithProviders(<DashboardPage />);
     expect(screen.getByRole('heading', { name: 'วิน ผู้ดูแล' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'เพิ่มวัตถุดิบ' })).toHaveAttribute('href', '/items');
-    expect(screen.getByRole('link', { name: 'สร้างใบผลิต' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'เพิ่มวัตถุดิบ' })).toHaveAttribute('href', '/ingredients/new');
+    expect(screen.getByRole('link', { name: 'เพิ่มบรรจุภัณฑ์' })).toHaveAttribute('href', '/packaging/new');
+    expect(screen.getByRole('link', { name: 'ตั้งราคาขาย' })).toHaveAttribute('href', '/pricing');
   });
 
-  it('Quick Navigation เปิด route ที่ถูกต้อง', () => {
+  it('ทางลัดเปิด route ของโมดูลหลักได้ถูกต้อง', () => {
     store.user = makeUser();
     renderWithProviders(<DashboardPage />);
-    const link = screen.getByRole('link', { name: /วัตถุดิบและสินค้า/ });
-    expect(link).toHaveAttribute('href', '/items');
+    expect(screen.getByRole('link', { name: /สูตรเมนูอาหาร/ })).toHaveAttribute('href', '/recipes');
+    expect(screen.getByRole('link', { name: /สรุปการขาย/ })).toHaveAttribute('href', '/sales');
   });
 
   it('แสดงความคืบหน้าการตั้งค่าจากข้อมูลจริง', () => {
     store.user = makeUser();
     renderWithProviders(<DashboardPage />);
-    // ฐานข้อมูล up + มีผู้ใช้ => อย่างน้อย 2/6
-    expect(screen.getByText('เชื่อมต่อฐานข้อมูล')).toBeInTheDocument();
+    expect(screen.getByText('เพิ่มวัตถุดิบ', { selector: '.si-main strong' })).toBeInTheDocument();
     expect(screen.getByText('สร้างสูตรแรก')).toBeInTheDocument();
   });
 

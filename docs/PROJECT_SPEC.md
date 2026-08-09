@@ -1,5 +1,8 @@
 # PROJECT SPEC — S2A ERP
 
+## Food Costing Core
+ขอบเขตที่ implement: Item/price history, Menu, Recipe/RecipeVersion, item-specific purchase-to-base conversion, RecipeCost และ SellingPrice ระดับ RETAIL/WHOLESALE/AGENT/SPECIAL
+
 ## 1. วัตถุประสงค์
 ระบบ ERP สำหรับธุรกิจผลิตอาหารสำเร็จรูป เพื่อลดเวลาการกรอกข้อมูลและรวมทุกกระบวนการไว้ในเว็บเดียว
 

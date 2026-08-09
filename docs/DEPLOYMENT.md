@@ -1,5 +1,8 @@
 # DEPLOYMENT — S2A ERP
 
+## Food Costing runtime
+ใช้ PostgreSQL native บน localhost; `DATABASE_URL` สำหรับ runtime และ `DIRECT_URL` สำหรับ migration เท่านั้น ห้ามส่งค่าเหล่านี้เข้า frontend bundleหรือ commit `.env`
+
 ## PostgreSQL Native (required, localhost-only)
 
 ใช้ service `postgresql-x64-18` ที่ `localhost:5432` และฐานข้อมูล `food_erp` / `food_erp_test`

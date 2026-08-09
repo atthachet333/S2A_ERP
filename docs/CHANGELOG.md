@@ -1,5 +1,10 @@
 # CHANGELOG — S2A ERP
 
+## Food Costing workflows
+- เชื่อม Menu และ Recipe real routes
+- เพิ่ม live preview ที่ใช้ item-specific conversion
+- เพิ่ม pricing/SellingPrice และ dashboard KPI จากฐานข้อมูลจริง
+
 ## [0.3.2] — 2026-08-09
 
 ### Added — ERP Module Scaffolds (bridge to real screens)
@@ -84,3 +89,10 @@
 
 #### Notes
 - Google Sheets ปิดโดยค่าเริ่มต้น (`GOOGLE_SHEETS_READ_ENABLED=false`), read-only เท่านั้น
+# Food Costing UX completion
+
+- แยกวัตถุดิบ บรรจุภัณฑ์ และสินค้าสำเร็จรูปใน Item UI
+- ปรับ Item Form เป็น sectioned form พร้อม sticky preview/actions และ stock tracking
+- แยก Recipe Builder เป็น ingredient/packaging workspace พร้อม live cost contribution
+- ยืนยัน packaging conversion, recipe cost, cost/unit และ pricing ด้วย integration tests
+- แทน metric ก่อน login ที่ไม่มีบริบทด้วย feature cards

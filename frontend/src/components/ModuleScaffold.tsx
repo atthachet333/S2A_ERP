@@ -10,9 +10,21 @@ function DetailScaffold({ path }: { path: string }) {
   const meta = MODULES[path];
   const structure = MODULE_STRUCTURE[path];
   const Icon: LucideIcon = meta.icon;
+  const emptyCopy: Record<string, { title: string; description: string }> = {
+    '/pricing': { title: 'ยังไม่มีราคาขายที่ต้องจัดการ', description: 'เริ่มจากสร้างเมนูและคำนวณต้นทุน แล้วกำหนดราคาขายที่เหมาะสม' },
+    '/receiving': { title: 'ยังไม่มีรายการรับสินค้า', description: 'เริ่มจากรับวัตถุดิบเข้าคลังเพื่อบันทึกล็อต ราคา และวันหมดอายุ' },
+    '/production': { title: 'ยังไม่มีใบสั่งผลิต', description: 'สร้างใบสั่งผลิตจากสูตรที่พร้อมใช้งานเพื่อติดตามผลผลิตและ Yield' },
+    '/inventory': { title: 'ยังไม่มีข้อมูลคงคลัง', description: 'ยอดคงเหลือจะแสดงเมื่อมีการรับสินค้าและเคลื่อนไหวสต็อก' },
+    '/transfers': { title: 'ยังไม่มีรายการโอนคลัง', description: 'สร้างรายการโอนเพื่อย้ายสินค้าอย่างตรวจสอบได้ระหว่างคลัง' },
+    '/stock-count': { title: 'ยังไม่มีรอบตรวจนับ', description: 'เริ่มรอบตรวจนับเพื่อเปรียบเทียบยอดจริงกับยอดในระบบ' },
+    '/reports': { title: 'เลือกมุมมองรายงาน', description: 'รายงานต้นทุน สต็อก การผลิต ของเสีย และกำไรจะแสดงจากข้อมูลจริง' },
+  };
+  const empty = emptyCopy[path] ?? { title: `ยังไม่มีข้อมูล${meta.label}`, description: 'เริ่มต้นสร้างรายการแรกเพื่อใช้งานโมดูลนี้' };
+  const layout = path === '/reports' ? 'report-layout' : ['/receiving','/production','/transfers','/stock-count'].includes(path) ? 'transaction-layout' : path === '/pricing' ? 'workspace-layout' : 'master-layout';
+  const showRoadmap = import.meta.env.VITE_SHOW_ROADMAP === 'true';
 
   return (
-    <div className="content-scaffold">
+    <div className={`content-scaffold ${layout}`}>
       <div className="page-title-block">
         <p className="eyebrow">{meta.group}</p>
         <h1>{meta.label}</h1>
@@ -65,8 +77,8 @@ function DetailScaffold({ path }: { path: string }) {
                 <td colSpan={structure.columns.length} style={{ padding: 0 }}>
                   <EmptyState
                     icon={Icon}
-                    title={`ยังไม่มีข้อมูล${meta.label}`}
-                    description="โครงหน้าจอพร้อมเชื่อมต่อ API — เมื่อ Backend ของโมดูลนี้พร้อม ระบบจะแสดงข้อมูลจริงที่นี่โดยอัตโนมัติ"
+                    title={empty.title}
+                    description={empty.description}
                   />
                 </td>
               </tr>
@@ -75,7 +87,7 @@ function DetailScaffold({ path }: { path: string }) {
         </div>
       </section>
 
-      {meta.plannedFeatures && meta.plannedFeatures.length > 0 && (
+      {showRoadmap && meta.plannedFeatures && meta.plannedFeatures.length > 0 && (
         <div className="section">
           <div className="section-head">
             <div>

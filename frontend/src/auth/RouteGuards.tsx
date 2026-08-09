@@ -15,3 +15,15 @@ export function PasswordRoute() {
   if (!user.mustChangePassword) return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }
+
+/**
+ * RootRedirect — ปลายทางของ "/" ตัดสินใจตามสถานะ session (PART 1)
+ * ไม่มี session → /login · session + ต้องเปลี่ยนรหัส → /change-password · อื่นๆ → /dashboard
+ */
+export function RootRedirect() {
+  const { user, loading } = useAuth();
+  if (loading) return <Loading />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.mustChangePassword) return <Navigate to="/change-password" replace />;
+  return <Navigate to="/dashboard" replace />;
+}

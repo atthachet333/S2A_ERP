@@ -16,7 +16,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user, loading,
     login: async (username, password) => { const result = await apiClient.post<LoginResult>('/auth/login', { username, password }, { token: null }); sessionStore.save(result.accessToken, result.refreshToken); setUser(result.user); return result.user; },
     logout: async () => { const refreshToken = sessionStore.refreshToken(); try { await apiClient.post('/auth/logout', refreshToken ? { refreshToken } : undefined, { token: null }); } finally { sessionStore.clear(); setUser(null); } },
-    changePassword: async (currentPassword, newPassword) => { await apiClient.post('/auth/change-password', { currentPassword, newPassword }); sessionStore.clear(); setUser(null); },
+    changePassword: async (currentPassword, newPassword) => {
+      const result = await apiClient.post<LoginResult>('/auth/change-password', { currentPassword, newPassword });
+      sessionStore.save(result.accessToken, result.refreshToken);
+      setUser(result.user);
+    },
   }), [user, loading]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

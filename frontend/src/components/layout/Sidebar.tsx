@@ -16,10 +16,10 @@ export default function Sidebar({ collapsed, onNavigate, onLogout }: {
   return (
     <aside className="app-sidebar" aria-label="เมนูหลัก">
       <div className="sidebar-brand">
-        <img src="/s2a-logo.png" alt="โลโก้ S2A ERP" />
+        <span className="sidebar-logo"><img src="/s2a-logo.png" alt="โลโก้ S2 Accounting Consultant" /></span>
         <div className="brand-text">
-          <strong>S2A ERP</strong>
-          <span>Production &amp; Inventory</span>
+          <strong>S2 ACCOUNTING<br />CONSULTANT</strong>
+          <span>PRODUCTION &amp; INVENTORY</span>
         </div>
         <button className="sidebar-close" onClick={onNavigate} aria-label="ปิดเมนู"><X /></button>
       </div>
@@ -39,7 +39,7 @@ export default function Sidebar({ collapsed, onNavigate, onLogout }: {
                   data-tooltip={label}
                   onClick={onNavigate}
                 >
-                  <Icon aria-hidden />
+                  <span className="nav-icon"><Icon aria-hidden /></span>
                   <span className="nav-label">{label}</span>
                 </NavLink>
               ))}

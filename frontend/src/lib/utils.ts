@@ -39,6 +39,24 @@ export function formatThaiDateTime(value?: string | Date | null): string {
   return new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d);
 }
 
+/** จำนวนเงินแบบไทย เช่น "฿1,250.00" (คืน "—" เมื่อไม่มีค่า) */
+export function formatMoney(value?: number | null, digits = 2): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—';
+  return `฿${value.toLocaleString('th-TH', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+}
+
+/** ตัวเลขทั่วไป (คืน "—" เมื่อไม่มีค่า) */
+export function formatNumber(value?: number | null, digits = 0): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—';
+  return value.toLocaleString('th-TH', { minimumFractionDigits: digits, maximumFractionDigits: Math.max(digits, 4) });
+}
+
+/** เปอร์เซ็นต์ เช่น "35.0%" */
+export function formatPercent(value?: number | null, digits = 1): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—';
+  return `${value.toLocaleString('th-TH', { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`;
+}
+
 /** เวลาแบบสัมพัทธ์ เช่น "3 นาทีที่แล้ว" */
 export function timeAgo(value?: string | Date | null): string {
   if (!value) return '—';

@@ -1,5 +1,8 @@
 # DECISIONS (ADR) — S2A ERP
 
+## Food Costing ownership
+Menu reuse Item(FINISHED_GOOD), สูตรที่บันทึกแล้วสร้าง RecipeVersion ใหม่แทนแก้ย้อนหลัง และ backend เป็น source of truth ไม่มีการเพิ่ม serving/effective-date fields เพราะ schema ปัจจุบันไม่รองรับ
+
 ## ADR-008: PostgreSQL Native และ session token rotation
 
 ใช้ PostgreSQL 18 Native ที่ port 5432 โดยไม่ใช้ Docker เก็บ refresh token เฉพาะ SHA-256 hash ในฐานข้อมูล หมุน token ทุกครั้งที่ refresh และ revoke เมื่อเปลี่ยนรหัสผ่านหรือ logout
