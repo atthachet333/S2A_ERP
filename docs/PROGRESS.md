@@ -1,5 +1,12 @@
 # PROGRESS — S2A ERP
 
+## ERP Module Scaffolds — 2026-08-09
+
+- ต่อยอดจาก Enterprise shell เดิม (origin/main): เพิ่ม `ModuleScaffold` + `module-structure.ts` แสดงโครงหน้าจอละเอียดของแต่ละโมดูล (สรุป/ตัวกรอง/คอลัมน์/empty state) โดยใช้ดีไซน์ระบบเดียวกัน
+- โมดูลที่ได้โครงหน้าจอ: items, recipes, costing, pricing, receiving, production, inventory, transfers, stock-count, reports (settings คง placeholder เดิม)
+- ไม่มีข้อมูลปลอม · ไม่แตะ Auth/DB/Security/Backend · typecheck ✅ / lint ✅ / build ✅ / frontend tests ✅ 38
+- แนวทาง: Additive/Restore/Expand บนฐาน origin/main (ไม่ reset repo, ไม่ force push)
+
 ## Database Access Hardening — 2026-08-06
 
 - **Repo-side (ทำ + ตรวจแล้วบนเครื่องนี้)**:

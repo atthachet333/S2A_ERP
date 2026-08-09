@@ -7,7 +7,7 @@ import DashboardPage from '@/pages/DashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
 import UsersPage, { UnauthorizedPage } from '@/pages/UsersPage';
 import ActivityPage from '@/pages/ActivityPage';
-import ModulePlaceholder from '@/components/ModulePlaceholder';
+import ModuleScaffold from '@/components/ModuleScaffold';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 /** เมนูที่ยังไม่มีระบบจริง — เปิด Placeholder page ที่ออกแบบไว้ */
@@ -32,7 +32,7 @@ export default function App() {
           <Route path="/users" element={<UsersPage />} />
           <Route path="/activity" element={<ActivityPage />} />
           {PLACEHOLDER_PATHS.map((path) => (
-            <Route key={path} path={path} element={<ModulePlaceholder />} />
+            <Route key={path} path={path} element={<ModuleScaffold />} />
           ))}
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
         </Route>

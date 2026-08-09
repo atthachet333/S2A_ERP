@@ -1,5 +1,19 @@
 # CHANGELOG — S2A ERP
 
+## [0.3.2] — 2026-08-09
+
+### Added — ERP Module Scaffolds (bridge to real screens)
+
+- เพิ่ม `components/ModuleScaffold.tsx` + `components/layout/module-structure.ts`: หน้าโมดูลแบบ **โครงหน้าจอละเอียด** (การ์ดสรุป · ตัวกรอง · คอลัมน์ตาราง · ปุ่มการทำงาน · empty state) ใช้ดีไซน์ระบบเดิม (Enterprise shell) ต่อยอดจาก `ModulePlaceholder`
+- ครอบคลุมโมดูล: วัตถุดิบและสินค้า, สูตรและเมนู, คำนวณต้นทุน, ราคาขายและกำไร, รับสินค้าเข้าคลัง, การผลิต, คลังสินค้า, โอนคลัง, ตรวจนับและปรับสต๊อก, รายงาน
+- `App.tsx` เปลี่ยน route โมดูลจาก `ModulePlaceholder` → `ModuleScaffold` (path ที่ไม่มีโครงสร้าง เช่น `/settings` fallback กลับหน้า placeholder เดิม)
+- Tests: เพิ่ม `module-scaffold.test.tsx` (3) — รวม frontend tests เป็น 38 ผ่าน
+
+### Notes
+
+- ยังไม่มีข้อมูลปลอม — ทุกค่าเป็น `—`/`0`/empty state จนกว่า Backend ของแต่ละโมดูลพร้อม
+- ไม่แตะ Authentication / Token flow / DB / Security / Backend logic เดิม · ไม่มี force push
+
 ## [0.3.1] — 2026-08-06
 
 ### Security
