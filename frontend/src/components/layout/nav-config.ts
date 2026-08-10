@@ -13,6 +13,7 @@ export interface NavItem {
   icon: LucideIcon;
   /** ถ้ากำหนด ต้องมี role นี้จึงจะเห็นเมนู (ตาม permission เดิม) */
   requiredRole?: string;
+  requiredPermission?: string;
 }
 
 export interface NavGroup {
@@ -111,7 +112,7 @@ export const MODULES: Record<string, ModuleMeta> = {
  * โซน "คลังและการผลิต" แบบโรงงานถูกถอดออกจาก main nav แล้ว (โค้ด/route เดิมยังคงอยู่เพื่อ backward-compat)
  */
 export const NAV_GROUPS: NavGroup[] = [
-  { label: 'ภาพรวม', items: [{ path: '/dashboard', label: 'ภาพรวม', icon: LayoutDashboard }] },
+  { label: 'ภาพรวม', items: [{ path: '/dashboard', label: 'ภาพรวม', icon: LayoutDashboard, requiredPermission: 'DASHBOARD_VIEW' }] },
   {
     label: 'จัดการเมนูและต้นทุน',
     items: [
@@ -127,6 +128,15 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: '/catalog', label: 'คลังข้อมูล', icon: Database },
       { path: '/sales', label: 'สรุปการขาย / KPI เมนู', icon: ChartColumnBig },
+    ],
+  },
+  {
+    label: 'ออเดอร์และปฏิบัติการ',
+    items: [
+      { path: '/orders', label: 'ออเดอร์', icon: ClipboardCheck, requiredPermission: 'ORDER_VIEW' },
+      { path: '/customers', label: 'ลูกค้า', icon: UsersRound, requiredPermission: 'CUSTOMER_VIEW' },
+      { path: '/receiving', label: 'รับของเข้า', icon: Truck, requiredPermission: 'RECEIVING_VIEW' },
+      { path: '/stock-issues', label: 'เบิกให้ครัวกลาง', icon: Boxes, requiredPermission: 'STOCK_ISSUE_VIEW' },
     ],
   },
   {

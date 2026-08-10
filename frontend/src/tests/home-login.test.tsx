@@ -1,10 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from './test-utils';
 
-vi.mock('@/auth/AuthContext', () => ({
-  useAuth: () => ({ user: null, login: vi.fn() }),
-}));
+const loginMock = vi.hoisted(() => vi.fn());
+vi.mock('@/auth/AuthContext', () => ({ useAuth: () => ({ user: null, login: loginMock }) }));
 
 import HomePage from '@/pages/HomePage';
 import LoginExperience from '@/components/auth/LoginExperience';
@@ -36,6 +35,18 @@ describe('Login', () => {
   it('แสดงฟอร์มเข้าสู่ระบบพร้อม subtitle ที่กระชับ', () => {
     renderWithProviders(<LoginExperience />, { route: '/login' });
     expect(screen.getByRole('heading', { name: 'เข้าสู่ระบบ' })).toBeInTheDocument();
-    expect(screen.getByText(/จัดการต้นทุน สูตรอาหาร วัตถุดิบ และราคาขาย/)).toBeInTheDocument();
+    expect(screen.getByText('เข้าสู่พื้นที่ทำงานของคุณ')).toBeInTheDocument();
+  });
+  it('มีลิงก์ลืมรหัสผ่าน', () => {
+    renderWithProviders(<LoginExperience />, { route: '/login' });
+    expect(screen.getByRole('link', { name: 'ลืมรหัสผ่าน?' })).toHaveAttribute('href', '/forgot-password');
+  });
+  it('แสดงสถานะกำลังเข้าสู่ระบบระหว่างรอ Auth', async () => {
+    loginMock.mockReturnValue(new Promise(() => undefined));
+    renderWithProviders(<LoginExperience />, { route: '/login' });
+    fireEvent.change(screen.getByPlaceholderText('กรอกชื่อผู้ใช้'), { target: { value: 'win' } });
+    fireEvent.change(screen.getByPlaceholderText('กรอกรหัสผ่าน'), { target: { value: 'password' } });
+    fireEvent.click(screen.getByRole('button', { name: /เข้าสู่ระบบ/ }));
+    expect(await screen.findByRole('button', { name: /กำลังเข้าสู่ระบบ/ })).toBeDisabled();
   });
 });

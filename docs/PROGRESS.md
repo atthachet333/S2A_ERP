@@ -1,5 +1,9 @@
 # PROGRESS — S2A ERP
 
+## Multi-company checkpoint — 2026-08-10
+
+Implemented the additive company/membership foundation, company-scoped functional RBAC, company selector, role landing pages, permission navigation, customers, orders, recipe demand warnings, delivered-order KPI, transactional receiving, idempotent stock issue, audit, and web notifications. LINE/email adapters degrade safely without credentials. Dedicated binary PDF rendering and complete receiving/issue frontend forms remain unfinished.
+
 ## Food Costing workflow
 เชื่อม Menu form/detail, Recipe Builder/new version, Costing Workspace, pricing persistence และ dashboard KPI แล้ว ต้องผ่าน final gate และ user journey จริงก่อนประกาศ production complete
 

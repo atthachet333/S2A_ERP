@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma.js';
 import { fail } from './response.js';
-import { requirePasswordChanged } from '../modules/auth/auth.guard.js';
+import { requireCompany } from '../modules/auth/auth.guard.js';
 
 /**
  * ตัวช่วย HTTP กลางสำหรับโมดูล catalog/recipe/costing
@@ -15,7 +15,7 @@ import { requirePasswordChanged } from '../modules/auth/auth.guard.js';
 /** preHandler: ต้อง login + เปลี่ยนรหัสแล้ว + มี role อย่างน้อยหนึ่งใน list (หรือเป็น SUPER_ADMIN) */
 export function requireRoles(...roles: string[]) {
   return async function (req: FastifyRequest, reply: FastifyReply) {
-    await requirePasswordChanged(req, reply);
+    await requireCompany(req, reply);
     if (reply.sent) return;
     const userRoles = req.user.roles ?? [];
     if (userRoles.includes('SUPER_ADMIN')) return;
@@ -39,6 +39,7 @@ export async function writeAudit(
     await prisma.auditLog.create({
       data: {
         userId: req.user?.sub,
+        companyId: req.user?.companyId,
         action: data.action,
         entity: data.entity,
         entityId: data.entityId,

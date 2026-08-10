@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Prisma, ItemType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
-import { requirePasswordChanged } from '../auth/auth.guard.js';
+import { requireCompany } from '../auth/auth.guard.js';
 import { requireRoles, writeAudit, num } from '../../lib/http.js';
 import { computeRecipeCost, analyzePrice, priceFromMarkup, priceFromMargin, type CostIngredientInput } from '../../lib/costing.js';
 
@@ -38,7 +38,7 @@ const savePriceSchema = z.object({
 
 export default async function costingRoutes(app: FastifyInstance) {
   /** คำนวณต้นทุน + จำลองราคาขาย (backend เป็น source of truth) */
-  app.post('/calculate', { preHandler: requirePasswordChanged }, async (req, reply) => {
+  app.post('/calculate', { preHandler: requireCompany }, async (req, reply) => {
     const body = calcSchema.parse(req.body ?? {});
 
     let ingredients: CostIngredientInput[] = [];
@@ -48,7 +48,7 @@ export default async function costingRoutes(app: FastifyInstance) {
 
     if (body.recipeVersionId) {
       const version = await prisma.recipeVersion.findUnique({
-        where: { id: body.recipeVersionId },
+        where: { id: body.recipeVersionId, recipe: { companyId: req.user.companyId! } },
         include: { ingredients: { include: { item: { select: { type: true, lastCost: true } } } } },
       });
       if (!version) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบสูตรเวอร์ชันนี้'));
@@ -62,7 +62,7 @@ export default async function costingRoutes(app: FastifyInstance) {
       yieldPercent = num(version.yieldPercent);
       expenses = { laborCost: num(version.laborCost), electricCost: num(version.electricCost), waterCost: num(version.waterCost), gasCost: num(version.gasCost), overheadCost: num(version.overheadCost), otherCost: num(version.otherCost) };
     } else if (body.ingredients && body.ingredients.length > 0) {
-      const items = await prisma.item.findMany({ where: { id: { in: [...new Set(body.ingredients.map((i) => i.itemId))] } }, select: { id: true, type: true, lastCost: true } });
+      const items = await prisma.item.findMany({ where: { id: { in: [...new Set(body.ingredients.map((i) => i.itemId))] }, companyId: req.user.companyId! }, select: { id: true, type: true, lastCost: true } });
       const map = new Map(items.map((i) => [i.id, i]));
       ingredients = body.ingredients.map((ing) => {
         const item = map.get(ing.itemId);
@@ -91,12 +91,12 @@ export default async function costingRoutes(app: FastifyInstance) {
   /** บันทึกราคาขายของเมนู (SellingPrice) */
   app.post('/price', { preHandler: MANAGE }, async (req, reply) => {
     const body = savePriceSchema.parse(req.body);
-    const item = await prisma.item.findFirst({ where: { id: body.itemId, deletedAt: null } });
+    const item = await prisma.item.findFirst({ where: { id: body.itemId, deletedAt: null, companyId: req.user.companyId! } });
     if (!item) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบเมนู/สินค้า'));
     const saved = await prisma.sellingPrice.upsert({
       where: { itemId_priceType: { itemId: body.itemId, priceType: body.priceType } },
       update: { price: new Prisma.Decimal(body.price), markupPercent: body.markupPercent !== undefined ? new Prisma.Decimal(body.markupPercent) : null, marginPercent: body.marginPercent !== undefined ? new Prisma.Decimal(body.marginPercent) : null, isActive: true },
-      create: { itemId: body.itemId, priceType: body.priceType, price: new Prisma.Decimal(body.price), markupPercent: body.markupPercent !== undefined ? new Prisma.Decimal(body.markupPercent) : null, marginPercent: body.marginPercent !== undefined ? new Prisma.Decimal(body.marginPercent) : null, createdById: req.user.sub },
+      create: { companyId: req.user.companyId!, itemId: body.itemId, priceType: body.priceType, price: new Prisma.Decimal(body.price), markupPercent: body.markupPercent !== undefined ? new Prisma.Decimal(body.markupPercent) : null, marginPercent: body.marginPercent !== undefined ? new Prisma.Decimal(body.marginPercent) : null, createdById: req.user.sub },
     });
     await writeAudit(req, { action: 'SET_PRICE', entity: 'SellingPrice', entityId: saved.id, after: { itemId: body.itemId, priceType: body.priceType, price: body.price } });
     return ok({ id: saved.id, price: num(saved.price) }, 'บันทึกราคาขายสำเร็จ');

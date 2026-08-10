@@ -15,7 +15,7 @@ export default function EmptyState({ icon: Icon = Inbox, title, description, act
       <span className="icon-chip slate"><Icon aria-hidden /></span>
       <h3>{title}</h3>
       {description && <p>{description}</p>}
-      {action}
+      {action ?? (variant === 'error' ? <button type="button" className="btn" onClick={() => window.location.reload()}>ลองอีกครั้ง</button> : null)}
     </div>
   );
 }

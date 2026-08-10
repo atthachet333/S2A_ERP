@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Prisma, ItemType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
-import { requirePasswordChanged } from '../auth/auth.guard.js';
+import { requireCompany } from '../auth/auth.guard.js';
 import { requireRoles, writeAudit, num } from '../../lib/http.js';
 
 const MANAGE = requireRoles('ADMIN', 'PRODUCTION', 'SALES');
@@ -30,9 +30,9 @@ const updateSchema = z.object({
 });
 
 export default async function menuRoutes(app: FastifyInstance) {
-  app.get('/', { preHandler: requirePasswordChanged }, async () => {
+  app.get('/', { preHandler: requireCompany }, async (req) => {
     const menus = await prisma.item.findMany({
-      where: { deletedAt: null, type: ItemType.FINISHED_GOOD },
+      where: { deletedAt: null, type: ItemType.FINISHED_GOOD, companyId: req.user.companyId! },
       orderBy: { updatedAt: 'desc' },
       include: {
         category: { select: { id: true, name: true } },
@@ -57,10 +57,10 @@ export default async function menuRoutes(app: FastifyInstance) {
     }));
   });
 
-  app.get('/:id', { preHandler: requirePasswordChanged }, async (req, reply) => {
+  app.get('/:id', { preHandler: requireCompany }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const m = await prisma.item.findFirst({
-      where: { id, deletedAt: null, type: ItemType.FINISHED_GOOD },
+      where: { id, deletedAt: null, type: ItemType.FINISHED_GOOD, companyId: req.user.companyId! },
       include: {
         category: { select: { id: true, name: true } }, baseUnit: { select: { id: true, code: true, name: true } },
         recipes: { where: { deletedAt: null }, include: { versions: { where: { isActive: true }, take: 1, include: { costs: { orderBy: { calculatedAt: 'desc' }, take: 1 } } } } },
@@ -88,6 +88,7 @@ export default async function menuRoutes(app: FastifyInstance) {
     if (await prisma.item.findUnique({ where: { code } })) return reply.status(409).send(fail('CONFLICT', `มีรหัส ${code} อยู่แล้ว`));
     const menu = await prisma.item.create({
       data: {
+        companyId: req.user.companyId!,
         code, name: body.name, type: ItemType.FINISHED_GOOD, categoryId: body.categoryId ?? null,
         baseUnitId: body.sellingUnitId, imageUrl: body.imageUrl ?? null, isLotTracked: true, isExpiryTracked: true,
         createdById: req.user.sub, updatedById: req.user.sub,

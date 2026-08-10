@@ -19,6 +19,11 @@ datasource db {
 // ============================================================
 enum RoleName {
   SUPER_ADMIN
+  MANAGER
+  OPERATIONS
+  ORDER_COORDINATOR
+  CHEF
+  COSTING_STAFF
   ADMIN
   EXECUTIVE
   PURCHASING
@@ -68,6 +73,30 @@ enum DocumentStatus {
   CANCELLED
 }
 
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  SENT_TO_PREP
+  PICKING
+  ISSUED
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum StockIssueStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+enum NotificationSeverity {
+  INFO
+  ACTION_REQUIRED
+  WARNING
+  CRITICAL
+}
+
 // ============================================================
 // AUTH & AUDIT
 // ============================================================
@@ -85,10 +114,16 @@ model User {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  userRoles     UserRole[]
-  loginLogs     LoginLog[]
-  auditLogs     AuditLog[]
-  refreshTokens RefreshToken[]
+  userRoles               UserRole[]
+  loginLogs               LoginLog[]
+  auditLogs               AuditLog[]
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  companyMemberships      CompanyMembership[]
+  salesOrders             SalesOrder[]             @relation("SalesOrderCreator")
+  stockIssues             StockIssue[]             @relation("StockIssueCreator")
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
 
   @@index([isActive])
   @@map("users")
@@ -111,6 +146,20 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
 model Role {
   id          String   @id @default(cuid())
   name        RoleName @unique
@@ -118,10 +167,59 @@ model Role {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  userRoles       UserRole[]
-  rolePermissions RolePermission[]
+  userRoles          UserRole[]
+  rolePermissions    RolePermission[]
+  companyMemberships CompanyMembership[]
 
   @@map("roles")
+}
+
+model Company {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  nameTh         String
+  nameEn         String?
+  logoUrl        String?
+  taxId          String?
+  address        String?
+  phone          String?
+  email          String?
+  website        String?
+  authorizedName String?
+  documentFooter String?
+  signatureUrl   String?
+  stampUrl       String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  memberships             CompanyMembership[]
+  customers               Customer[]
+  salesOrders             SalesOrder[]
+  stockIssues             StockIssue[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+
+  @@index([isActive])
+  @@map("companies")
+}
+
+model CompanyMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  roleId    String
+  isActive  Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, companyId])
+  @@index([companyId, isActive])
+  @@map("company_memberships")
 }
 
 model Permission {
@@ -166,6 +264,7 @@ model AuditLog {
   after     Json?
   ip        String?
   createdAt DateTime @default(now())
+  companyId String?
 
   @@index([entity, entityId])
   @@index([userId])
@@ -226,6 +325,7 @@ model UnitConversion {
 // ============================================================
 model Category {
   id        String    @id @default(cuid())
+  companyId String
   code      String    @unique
   name      String
   type      ItemType?
@@ -241,6 +341,7 @@ model Category {
 
 model Item {
   id         String    @id @default(cuid())
+  companyId  String
   code       String    @unique
   barcode    String?   @unique
   name       String
@@ -294,6 +395,7 @@ model Item {
 
 model ItemPriceHistory {
   id          String   @id @default(cuid())
+  companyId   String
   itemId      String
   item        Item     @relation(fields: [itemId], references: [id])
   price       Decimal  @db.Decimal(18, 4)
@@ -311,6 +413,7 @@ model ItemPriceHistory {
 // ============================================================
 model Supplier {
   id        String    @id @default(cuid())
+  companyId String
   code      String    @unique
   name      String
   taxId     String?
@@ -329,6 +432,7 @@ model Supplier {
 
 model Warehouse {
   id        String    @id @default(cuid())
+  companyId String
   code      String    @unique
   name      String
   type      ItemType? // เช่น RAW_MATERIAL / FINISHED_GOOD (คลังเฉพาะทาง) — optional
@@ -452,6 +556,7 @@ model StockLedger {
 // ============================================================
 model Recipe {
   id          String    @id @default(cuid())
+  companyId   String
   code        String    @unique
   name        String
   productId   String
@@ -539,6 +644,7 @@ model RecipeCost {
 
 model SellingPrice {
   id            String   @id @default(cuid())
+  companyId     String
   itemId        String
   item          Item     @relation(fields: [itemId], references: [id])
   priceType     String // RETAIL | WHOLESALE | AGENT | SPECIAL
@@ -559,6 +665,7 @@ model SellingPrice {
 // ============================================================
 model ProductionOrder {
   id              String         @id @default(cuid())
+  companyId       String
   orderNo         String         @unique
   productId       String
   product         Item           @relation(fields: [productId], references: [id])
@@ -649,6 +756,7 @@ model ProductionWaste {
 // ============================================================
 model GoodsReceipt {
   id          String         @id @default(cuid())
+  companyId   String
   receiptNo   String         @unique
   supplierId  String?
   supplier    Supplier?      @relation(fields: [supplierId], references: [id])
@@ -693,6 +801,7 @@ model GoodsReceiptItem {
 // ============================================================
 model StockTransfer {
   id              String         @id @default(cuid())
+  companyId       String
   transferNo      String         @unique
   fromWarehouseId String
   fromWarehouse   Warehouse      @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
@@ -725,6 +834,7 @@ model StockTransferItem {
 
 model StockAdjustment {
   id             String         @id @default(cuid())
+  companyId      String
   adjustmentNo   String         @unique
   warehouseId    String
   warehouse      Warehouse      @relation(fields: [warehouseId], references: [id])
@@ -767,4 +877,158 @@ model SystemSetting {
   updatedById String?
 
   @@map("system_settings")
+}
+
+model Customer {
+  id           String       @id @default(cuid())
+  companyId    String
+  company      Company      @relation(fields: [companyId], references: [id])
+  code         String
+  name         String
+  customerType String?
+  contactName  String?
+  phone        String?
+  email        String?
+  address      String?
+  taxId        String?
+  note         String?
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  orders       SalesOrder[]
+
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+  @@map("customers")
+}
+
+model SalesOrder {
+  id                 String           @id @default(cuid())
+  companyId          String
+  company            Company          @relation(fields: [companyId], references: [id])
+  orderNo            String
+  customerId         String
+  customer           Customer         @relation(fields: [customerId], references: [id])
+  contactName        String?
+  phone              String?
+  email              String?
+  deliveryAddress    String?
+  deliveryDate       DateTime
+  deliveryTime       String?
+  status             SalesOrderStatus @default(DRAFT)
+  subtotal           Decimal          @default(0) @db.Decimal(18, 4)
+  discount           Decimal          @default(0) @db.Decimal(18, 4)
+  tax                Decimal          @default(0) @db.Decimal(18, 4)
+  totalAmount        Decimal          @default(0) @db.Decimal(18, 4)
+  note               String?
+  createdByUserId    String
+  createdBy          User             @relation("SalesOrderCreator", fields: [createdByUserId], references: [id])
+  sentToOperationsAt DateTime?
+  confirmedAt        DateTime?
+  issuedAt           DateTime?
+  readyAt            DateTime?
+  deliveredAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+  idempotencyKey     String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  items              SalesOrderItem[]
+  stockIssues        StockIssue[]
+
+  @@unique([companyId, orderNo])
+  @@unique([companyId, idempotencyKey])
+  @@index([companyId, status, deliveryDate])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id               String     @id @default(cuid())
+  orderId          String
+  order            SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuId           String
+  menuNameSnapshot String
+  quantity         Decimal    @db.Decimal(18, 4)
+  unit             String
+  unitPrice        Decimal    @db.Decimal(18, 4)
+  lineTotal        Decimal    @db.Decimal(18, 4)
+  note             String?
+
+  @@index([orderId])
+  @@map("sales_order_items")
+}
+
+model StockIssue {
+  id              String           @id @default(cuid())
+  companyId       String
+  company         Company          @relation(fields: [companyId], references: [id])
+  issueNo         String
+  orderId         String?
+  order           SalesOrder?      @relation(fields: [orderId], references: [id])
+  warehouseId     String
+  issueDate       DateTime         @default(now())
+  destination     String           @default("CENTRAL_KITCHEN")
+  status          StockIssueStatus @default(DRAFT)
+  note            String?
+  createdByUserId String
+  createdBy       User             @relation("StockIssueCreator", fields: [createdByUserId], references: [id])
+  issuedAt        DateTime?
+  idempotencyKey  String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  items           StockIssueItem[]
+
+  @@unique([companyId, issueNo])
+  @@unique([companyId, idempotencyKey])
+  @@index([companyId, status])
+  @@map("stock_issues")
+}
+
+model StockIssueItem {
+  id           String     @id @default(cuid())
+  stockIssueId String
+  stockIssue   StockIssue @relation(fields: [stockIssueId], references: [id], onDelete: Cascade)
+  itemId       String
+  requiredQty  Decimal    @default(0) @db.Decimal(18, 4)
+  issuedQty    Decimal    @db.Decimal(18, 4)
+  unit         String
+  baseQty      Decimal    @db.Decimal(18, 4)
+  note         String?
+
+  @@index([stockIssueId])
+  @@map("stock_issue_items")
+}
+
+model Notification {
+  id         String               @id @default(cuid())
+  companyId  String
+  company    Company              @relation(fields: [companyId], references: [id])
+  userId     String
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  severity   NotificationSeverity @default(INFO)
+  title      String
+  message    String
+  entityType String?
+  entityId   String?
+  actionUrl  String?
+  readAt     DateTime?
+  createdAt  DateTime             @default(now())
+
+  @@index([companyId, userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   String
+  eventType String
+  enabled   Boolean @default(true)
+
+  @@unique([companyId, userId, channel, eventType])
+  @@map("notification_preferences")
 }

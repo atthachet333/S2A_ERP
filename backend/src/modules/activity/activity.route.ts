@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok, paginate } from '../../lib/response.js';
-import { requirePasswordChanged } from '../auth/auth.guard.js';
+import { requireCompany } from '../auth/auth.guard.js';
 
 /**
  * GET /api/activity — ประวัติการใช้งานจริง (audit log + login log) แบบ read-only
@@ -26,7 +26,7 @@ type ActivityEntry = {
 };
 
 export default async function activityRoutes(app: FastifyInstance) {
-  app.get('/', { preHandler: requirePasswordChanged }, async (req, reply) => {
+  app.get('/', { preHandler: requireCompany }, async (req, reply) => {
     if (!req.user.roles.includes('SUPER_ADMIN')) {
       return reply.status(403).send(fail('FORBIDDEN', 'คุณไม่มีสิทธิ์ดูประวัติการใช้งาน'));
     }
@@ -35,11 +35,12 @@ export default async function activityRoutes(app: FastifyInstance) {
 
     const [audits, logins] = await Promise.all([
       prisma.auditLog.findMany({
+        where: { companyId: req.user.companyId! },
         orderBy: { createdAt: 'desc' },
         take: window,
         include: { user: { select: { username: true, fullName: true } } },
       }),
-      prisma.loginLog.findMany({ orderBy: { createdAt: 'desc' }, take: window }),
+      prisma.loginLog.findMany({ where: { user: { companyMemberships: { some: { companyId: req.user.companyId! } } } }, orderBy: { createdAt: 'desc' }, take: window }),
     ]);
 
     const merged: ActivityEntry[] = [

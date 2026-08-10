@@ -12,7 +12,15 @@ export function PasswordRoute() {
   const { user, loading } = useAuth();
   if (loading) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
-  if (!user.mustChangePassword) return <Navigate to="/dashboard" replace />;
+  if (!user.mustChangePassword) return <Navigate to={user.activeCompany ? user.defaultLandingPage : '/select-company'} replace />;
+  return <Outlet />;
+}
+
+export function CompanyRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <Loading />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.activeCompany) return <Navigate to="/select-company" replace />;
   return <Outlet />;
 }
 
@@ -25,5 +33,5 @@ export function RootRedirect() {
   if (loading) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.mustChangePassword) return <Navigate to="/change-password" replace />;
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to={user.activeCompany ? user.defaultLandingPage : '/select-company'} replace />;
 }

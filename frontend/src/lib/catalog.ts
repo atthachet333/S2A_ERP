@@ -88,7 +88,7 @@ export const catalogApi = {
 
   recipes: () => apiClient.get<RecipeRow[]>('/recipes'),
   recipe: (id: string) => apiClient.get<RecipeDetail>(`/recipes/${id}`),
-  createRecipe: (body: unknown) => apiClient.post<{ id: string; code: string; versionNo: number; cost: CostBreakdown }>('/recipes', body),
+  createRecipe: (body: unknown) => apiClient.post<{ id: string; code: string; versionNo: number; cost: CostBreakdown; menuCreated?: boolean }>('/recipes', body),
   addRecipeVersion: (id: string, body: unknown) => apiClient.post<{ versionId: string; versionNo: number; cost: CostBreakdown }>(`/recipes/${id}/versions`, body),
 
   calculate: (body: unknown) => apiClient.post<{ breakdown: CostBreakdown; pricing: PricingResult | null }>('/costing/calculate', body),

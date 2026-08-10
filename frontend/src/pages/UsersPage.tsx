@@ -1,171 +1,31 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, RefreshCw, Search, UserPlus, Users as UsersIcon } from 'lucide-react';
+import { AlertTriangle, Check, Copy, KeyRound, RefreshCw, Search, ShieldCheck, UserPlus, Users as UsersIcon, X } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import { apiClient } from '@/lib/api-client';
 import Avatar from '@/components/ui/Avatar';
 import Badge, { type BadgeVariant } from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { formatThaiDate, formatThaiDateTime } from '@/lib/utils';
 
-interface UserRow {
-  id: string; username: string; fullName: string; email: string;
-  isActive: boolean; mustChangePassword: boolean; roles: string[];
-  lastLoginAt: string | null; createdAt: string;
-}
+interface UserRow { id:string;username:string;fullName:string;email:string;isActive:boolean;mustChangePassword:boolean;roles:string[];company:{id:string;nameTh:string};lastLoginAt:string|null;createdAt:string }
+interface Role { id:string;name:string;description?:string }
+interface Credential { username:string;temporaryPassword:string }
+const PAGE_SIZE=8;const ROLE_BADGE:Record<string,BadgeVariant>={SUPER_ADMIN:'gold',MANAGER:'info',OPERATIONS:'success'};
 
-const PAGE_SIZE = 8;
-const ROLE_BADGE: Record<string, BadgeVariant> = { SUPER_ADMIN: 'gold', ADMIN: 'info' };
+function CredentialDialog({value,onClose}:{value:Credential;onClose:()=>void}){const [copied,setCopied]=useState(false);const copy=async()=>{await navigator.clipboard.writeText(value.temporaryPassword);setCopied(true);};return <div className="admin-modal-backdrop" role="presentation"><section className="credential-dialog" role="dialog" aria-modal="true" aria-labelledby="credential-title"><span className="credential-icon"><ShieldCheck/></span><h2 id="credential-title">สร้างข้อมูลเข้าสู่ระบบสำเร็จ</h2><p>รหัสผ่านนี้จะแสดงเพียงครั้งเดียว กรุณาส่งให้ผู้ใช้อย่างปลอดภัย</p><dl><div><dt>Username</dt><dd>{value.username}</dd></div><div><dt>รหัสผ่านชั่วคราว</dt><dd><code>{value.temporaryPassword}</code><button onClick={()=>void copy()}>{copied?<Check/>:<Copy/>}{copied?'คัดลอกแล้ว':'คัดลอก'}</button></dd></div></dl><div className="credential-warning"><AlertTriangle/>ผู้ใช้จะต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งแรก</div><button className="btn primary" onClick={onClose}>ฉันบันทึกรหัสผ่านแล้ว</button></section></div>}
 
-export default function UsersPage() {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const isAdmin = Boolean(user?.roles.includes('SUPER_ADMIN'));
+export default function UsersPage(){const {user}=useAuth();const {toast}=useToast();const canManage=Boolean(user?.roles.includes('SUPER_ADMIN')||user?.permissions.includes('USER_MANAGE'));const query=useQuery({queryKey:['users'],queryFn:()=>apiClient.get<UserRow[]>('/users'),enabled:canManage});const roleQuery=useQuery({queryKey:['user-roles'],queryFn:()=>apiClient.get<Role[]>('/users/roles'),enabled:canManage});const [search,setSearch]=useState('');const [roleFilter,setRoleFilter]=useState('');const [statusFilter,setStatusFilter]=useState('');const [page,setPage]=useState(1);const [addOpen,setAddOpen]=useState(false);const [detail,setDetail]=useState<UserRow>();const [credential,setCredential]=useState<Credential>();const [busy,setBusy]=useState(false);const [error,setError]=useState('');
+ const rows=useMemo(()=>query.data??[],[query.data]);const filtered=useMemo(()=>rows.filter((r)=>{const q=search.toLowerCase();return(!q||`${r.fullName} ${r.username} ${r.email}`.toLowerCase().includes(q))&&(!roleFilter||r.roles.includes(roleFilter))&&(!statusFilter||(statusFilter==='active')===r.isActive)}),[rows,search,roleFilter,statusFilter]);const pages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));const safePage=Math.min(page,pages);const pageRows=filtered.slice((safePage-1)*PAGE_SIZE,safePage*PAGE_SIZE);
+ if(!canManage)return <UnauthorizedPage/>;
+ const create=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();setBusy(true);setError('');const d=new FormData(e.currentTarget);try{const result=await apiClient.post<Credential>('/users',{fullName:d.get('fullName'),username:d.get('username'),email:d.get('email'),role:d.get('role'),isActive:true,temporaryPassword:d.get('temporaryPassword')||undefined});setAddOpen(false);setCredential(result);await query.refetch();toast({title:'สร้างบัญชีสำเร็จ',description:`บัญชี “${result.username}” พร้อมเข้าสู่ระบบด้วยรหัสผ่านชั่วคราว`,variant:'success'});}catch(reason){setError(reason instanceof Error?reason.message:'ไม่สามารถสร้างบัญชีได้');}finally{setBusy(false);}};
+ const resetPassword=async(row:UserRow)=>{if(!window.confirm(`รีเซ็ตรหัสผ่านของ “${row.fullName}”?`))return;setBusy(true);try{const result=await apiClient.post<Credential>(`/users/${row.id}/reset-password`);setCredential(result);await query.refetch();toast({title:'รีเซ็ตรหัสผ่านแล้ว',description:'เซสชันเดิมถูกยกเลิกและผู้ใช้ต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบ',variant:'warning'});}catch(reason){toast({title:'รีเซ็ตรหัสผ่านไม่สำเร็จ',description:reason instanceof Error?reason.message:'กรุณาลองอีกครั้ง',variant:'error'});}finally{setBusy(false);}};
+ const toggle=async(row:UserRow)=>{if(row.isActive&&!window.confirm(`ปิดการใช้งานบัญชี “${row.fullName}”?`))return;try{await apiClient.patch(`/users/${row.id}`,{isActive:!row.isActive});setDetail(undefined);await query.refetch();toast({title:row.isActive?'ปิดบัญชีแล้ว':'เปิดบัญชีแล้ว',description:row.isActive?'เซสชันที่ใช้งานอยู่ถูกยกเลิกเรียบร้อย':'บัญชีพร้อมกลับมาใช้งาน',variant:'success'});}catch(reason){toast({title:'ปรับสถานะไม่สำเร็จ',description:reason instanceof Error?reason.message:'กรุณาลองอีกครั้ง',variant:'error'});}};
+ return <section className="users-admin-page"><header><div><span>ACCOUNT ADMINISTRATION</span><h1>ผู้ใช้งาน</h1><p>สร้างบัญชี กำหนดบทบาท และจัดการสิทธิ์เข้าถึงบริษัทอย่างปลอดภัย</p></div><button className="btn primary" onClick={()=>setAddOpen(true)}><UserPlus/>เพิ่มผู้ใช้งาน</button></header><div className="user-admin-kpis"><article><UsersIcon/><span>ทั้งหมด</span><strong>{rows.length}</strong></article><article><Check/><span>ใช้งาน</span><strong>{rows.filter(r=>r.isActive).length}</strong></article><article><KeyRound/><span>รอเปลี่ยนรหัส</span><strong>{rows.filter(r=>r.mustChangePassword).length}</strong></article><article><ShieldCheck/><span>บทบาท</span><strong>{new Set(rows.flatMap(r=>r.roles)).size}</strong></article></div><div className="toolbar"><div className="search-box"><Search/><input value={search} onChange={(e)=>{setSearch(e.target.value);setPage(1)}} placeholder="ค้นหาชื่อ Username หรือ Email"/></div><select value={roleFilter} onChange={(e)=>setRoleFilter(e.target.value)}><option value="">ทุกบทบาท</option>{roleQuery.data?.map(r=><option key={r.id} value={r.name}>{r.name}</option>)}</select><select value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value)}><option value="">ทุกสถานะ</option><option value="active">ใช้งาน</option><option value="inactive">ปิดใช้งาน</option></select><span className="count-pill">{filtered.length} รายการ</span><div className="spacer"/><button className="btn" onClick={()=>void query.refetch()}><RefreshCw className={query.isFetching?'spin':''}/>รีเฟรช</button></div>{error&&<div className="auth-alert">{error}</div>}<section className="card"><div className="table-wrap"><table className="data-table"><thead><tr><th>ชื่อ</th><th>Username / บริษัท</th><th>Role</th><th>สถานะ</th><th>รหัสผ่าน</th><th>เข้าใช้ล่าสุด</th><th>จัดการ</th></tr></thead>{query.isLoading?<SkeletonRows rows={6} cols={7}/>:<tbody>{pageRows.map(row=><tr key={row.id}><td><div className="cell-user"><Avatar name={row.fullName} size="sm"/><div className="cu-text"><strong>{row.fullName}</strong><span>{row.email.endsWith('@account.s2a.local')?'—':row.email}</span></div></div></td><td><strong>@{row.username}</strong><small className="table-sub">{row.company.nameTh}</small></td><td>{row.roles.map(r=><Badge key={r} variant={ROLE_BADGE[r]??'muted'}>{r}</Badge>)}</td><td>{row.isActive?<Badge variant="success" dot>ใช้งาน</Badge>:<Badge variant="muted" dot>ปิดใช้งาน</Badge>}</td><td>{row.mustChangePassword?<Badge variant="warning">รอเปลี่ยนรหัส</Badge>:<Badge variant="success">ตั้งค่าแล้ว</Badge>}</td><td>{row.lastLoginAt?formatThaiDateTime(row.lastLoginAt):'—'}</td><td><button className="table-action" onClick={()=>setDetail(row)}>จัดการ</button></td></tr>)}</tbody>}</table></div>{query.isError&&<EmptyState variant="error" icon={AlertTriangle} title="โหลดข้อมูลไม่สำเร็จ" description={query.error instanceof Error?query.error.message:'กรุณาลองอีกครั้ง'}/>} {!query.isLoading&&!query.isError&&!filtered.length&&<EmptyState icon={UsersIcon} title="ไม่พบผู้ใช้งาน" description="ปรับคำค้นหาหรือตัวกรอง แล้วลองอีกครั้ง"/>}<div className="pagination"><span>หน้า {safePage} จาก {pages}</span><div><button className="pg-btn" disabled={safePage===1} onClick={()=>setPage(safePage-1)}>ก่อนหน้า</button><button className="pg-btn" disabled={safePage===pages} onClick={()=>setPage(safePage+1)}>ถัดไป</button></div></div></section>
+ {addOpen&&<div className="admin-modal-backdrop"><form className="user-form-dialog" onSubmit={(e)=>void create(e)}><header><div><small>NEW ACCOUNT</small><h2>เพิ่มผู้ใช้งาน</h2></div><button type="button" onClick={()=>setAddOpen(false)}><X/></button></header><label>ชื่อแสดงผล *<input name="fullName" required/></label><label>Username *<input name="username" pattern="[a-zA-Z0-9._-]+" minLength={3} required/><small>ตัวอักษรอังกฤษ ตัวเลข จุด ขีดกลาง หรือขีดล่าง</small></label><label>Email (ไม่บังคับ)<input name="email" type="email"/></label><label>บทบาท *<select name="role" required><option value="">เลือกบทบาท</option>{roleQuery.data?.map(r=><option key={r.id} value={r.name}>{r.name}</option>)}</select></label><label>รหัสผ่านชั่วคราว<input name="temporaryPassword" type="password" minLength={10} placeholder="เว้นว่างเพื่อให้ระบบสร้างอัตโนมัติ"/></label><div className="dialog-actions"><button type="button" className="btn" onClick={()=>setAddOpen(false)}>ยกเลิก</button><button className="btn primary" disabled={busy}>{busy?'กำลังสร้าง…':'สร้างบัญชี'}</button></div></form></div>}
+ {detail&&<><button className="admin-drawer-scrim" onClick={()=>setDetail(undefined)}/><aside className="user-detail-drawer"><header><Avatar name={detail.fullName}/><div><small>ACCOUNT DETAIL</small><h2>{detail.fullName}</h2><p>@{detail.username}</p></div><button onClick={()=>setDetail(undefined)}><X/></button></header><dl><div><dt>บริษัท</dt><dd>{detail.company.nameTh}</dd></div><div><dt>บทบาท</dt><dd>{detail.roles.join(', ')}</dd></div><div><dt>Email</dt><dd>{detail.email.endsWith('@account.s2a.local')?'ไม่ได้ระบุ':detail.email}</dd></div><div><dt>สถานะ</dt><dd>{detail.isActive?'ใช้งาน':'ปิดใช้งาน'}</dd></div><div><dt>รหัสผ่าน</dt><dd>{detail.mustChangePassword?'รอเปลี่ยนรหัส':'ตั้งค่าแล้ว'}</dd></div><div><dt>เข้าสู่ระบบล่าสุด</dt><dd>{detail.lastLoginAt?formatThaiDateTime(detail.lastLoginAt):'—'}</dd></div><div><dt>สร้างเมื่อ</dt><dd>{formatThaiDate(detail.createdAt)}</dd></div></dl><footer><button disabled={busy} onClick={()=>void resetPassword(detail)}><KeyRound/>รีเซ็ตรหัสผ่าน</button><button className={detail.isActive?'danger':''} onClick={()=>void toggle(detail)}>{detail.isActive?'ปิดการใช้งาน':'เปิดการใช้งาน'}</button><Link to="/activity">ดู Audit</Link></footer></aside></>}{credential&&<CredentialDialog value={credential} onClose={()=>setCredential(undefined)}/>}</section>}
 
-  const query = useQuery({
-    queryKey: ['users'],
-    queryFn: () => apiClient.get<UserRow[]>('/users'),
-    enabled: isAdmin,
-  });
-
-  const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const [addOpen, setAddOpen] = useState(false);
-
-  const rows = useMemo(() => query.data ?? [], [query.data]);
-  const roleOptions = useMemo(() => [...new Set(rows.flatMap((r) => r.roles))].sort(), [rows]);
-
-  const filtered = useMemo(() => rows.filter((r) => {
-    const q = search.trim().toLowerCase();
-    const matchQ = !q || r.fullName.toLowerCase().includes(q) || r.username.toLowerCase().includes(q) || r.email.toLowerCase().includes(q);
-    const matchRole = !roleFilter || r.roles.includes(roleFilter);
-    const matchStatus = !statusFilter || (statusFilter === 'active' ? r.isActive : !r.isActive);
-    return matchQ && matchRole && matchStatus;
-  }), [rows, search, roleFilter, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-
-  const resetPage = () => setPage(1);
-
-  if (!isAdmin) return <UnauthorizedPage />;
-
-  return (
-    <>
-      <div className="page-title-block">
-        <p className="eyebrow">ADMINISTRATION</p>
-        <h1>ผู้ใช้งาน</h1>
-        <p>จัดการบัญชีและตรวจสอบบทบาทในระบบ</p>
-      </div>
-
-      <div className="toolbar" style={{ marginTop: 18 }}>
-        <div className="search-box">
-          <Search aria-hidden />
-          <input placeholder="ค้นหาชื่อ, ชื่อผู้ใช้ หรืออีเมล" value={search} onChange={(e) => { setSearch(e.target.value); resetPage(); }} aria-label="ค้นหาผู้ใช้งาน" />
-        </div>
-        <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); resetPage(); }} aria-label="กรองตามบทบาท">
-          <option value="">ทุกบทบาท</option>
-          {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); resetPage(); }} aria-label="กรองตามสถานะ">
-          <option value="">ทุกสถานะ</option>
-          <option value="active">ใช้งาน</option>
-          <option value="inactive">ปิดใช้งาน</option>
-        </select>
-        <span className="count-pill">{filtered.length} รายการ</span>
-        <div className="spacer" />
-        <button className="btn" onClick={() => { void query.refetch(); toast('รีเฟรชข้อมูลแล้ว'); }} disabled={query.isFetching}>
-          <RefreshCw aria-hidden className={query.isFetching ? 'spin' : ''} />รีเฟรช
-        </button>
-        <button className="btn primary" onClick={() => setAddOpen(true)}><UserPlus aria-hidden />เพิ่มผู้ใช้งาน</button>
-      </div>
-
-      <section className="card">
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ผู้ใช้งาน</th><th>ชื่อผู้ใช้</th><th>บทบาท</th><th>สถานะ</th>
-                <th>เข้าสู่ระบบล่าสุด</th><th>วันที่สร้าง</th><th>รหัสผ่าน</th>
-              </tr>
-            </thead>
-            {query.isLoading ? (
-              <SkeletonRows rows={6} cols={7} />
-            ) : (
-              <tbody>
-                {pageRows.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <div className="cell-user">
-                        <Avatar name={row.fullName} size="sm" />
-                        <div className="cu-text"><strong>{row.fullName}</strong><span>{row.email}</span></div>
-                      </div>
-                    </td>
-                    <td>@{row.username}</td>
-                    <td>{row.roles.map((r) => <Badge key={r} variant={ROLE_BADGE[r] ?? 'muted'}>{r}</Badge>)}</td>
-                    <td>{row.isActive ? <Badge variant="success" dot>ใช้งาน</Badge> : <Badge variant="muted" dot>ปิดใช้งาน</Badge>}</td>
-                    <td>{row.lastLoginAt ? formatThaiDateTime(row.lastLoginAt) : '—'}</td>
-                    <td>{formatThaiDate(row.createdAt)}</td>
-                    <td>{row.mustChangePassword ? <Badge variant="warning">รอเปลี่ยน</Badge> : <Badge variant="muted">ตั้งค่าแล้ว</Badge>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            )}
-          </table>
-        </div>
-
-        {query.isError && !query.isLoading && (
-          <EmptyState variant="error" icon={AlertTriangle} title="โหลดข้อมูลไม่สำเร็จ"
-            description={query.error instanceof Error ? query.error.message : 'ไม่สามารถดึงรายชื่อผู้ใช้งานได้'}
-            action={<button className="btn" onClick={() => void query.refetch()}><RefreshCw aria-hidden />ลองอีกครั้ง</button>} />
-        )}
-        {!query.isLoading && !query.isError && filtered.length === 0 && (
-          <EmptyState icon={UsersIcon} title="ไม่พบผู้ใช้งาน" description="ลองปรับคำค้นหาหรือตัวกรอง" />
-        )}
-
-        {!query.isLoading && !query.isError && filtered.length > 0 && (
-          <div className="pagination">
-            <span className="pg-info">หน้า {safePage} จาก {totalPages}</span>
-            <div className="pg-controls">
-              <button className="pg-btn" onClick={() => setPage(safePage - 1)} disabled={safePage <= 1}>ก่อนหน้า</button>
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <button key={i} className={`pg-btn${safePage === i + 1 ? ' active' : ''}`} onClick={() => setPage(i + 1)}>{i + 1}</button>
-              ))}
-              <button className="pg-btn" onClick={() => setPage(safePage + 1)} disabled={safePage >= totalPages}>ถัดไป</button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <ConfirmDialog
-        open={addOpen}
-        title="เพิ่มผู้ใช้งาน"
-        description="ฟีเจอร์การเพิ่มผู้ใช้งานผ่านหน้าจอกำลังอยู่ระหว่างการพัฒนา และจะเปิดใช้งานในเฟสถัดไป ขณะนี้สามารถเพิ่มผู้ใช้ผ่านกระบวนการ seed ของระบบ"
-        confirmLabel="รับทราบ"
-        onConfirm={() => toast('บันทึกไว้แล้ว ฟีเจอร์นี้จะเปิดใช้งานเร็ว ๆ นี้')}
-        onClose={() => setAddOpen(false)}
-      />
-    </>
-  );
-}
-
-export function UnauthorizedPage() {
-  return (
-    <div className="placeholder-page">
-      <div className="card placeholder-hero">
-        <span className="icon-chip amber"><AlertTriangle aria-hidden /></span>
-        <Badge variant="danger" dot>ไม่มีสิทธิ์เข้าถึง</Badge>
-        <h1>ไม่มีสิทธิ์เข้าถึง</h1>
-        <p>บัญชีของคุณไม่มีสิทธิ์ใช้งานส่วนนี้ กรุณาติดต่อผู้ดูแลระบบ</p>
-      </div>
-      <div className="placeholder-actions"><Link to="/dashboard" className="btn primary">กลับสู่ภาพรวม</Link></div>
-    </div>
-  );
-}
+export function UnauthorizedPage(){return <div className="placeholder-page"><div className="card placeholder-hero"><span className="icon-chip amber"><AlertTriangle/></span><Badge variant="danger" dot>ไม่มีสิทธิ์เข้าถึง</Badge><h1>ไม่มีสิทธิ์เข้าถึง</h1><p>บัญชีของคุณไม่มีสิทธิ์ใช้งานส่วนนี้ กรุณาติดต่อผู้ดูแลระบบ</p></div><div className="placeholder-actions"><Link to="/dashboard" className="btn primary">กลับสู่ภาพรวม</Link></div></div>}

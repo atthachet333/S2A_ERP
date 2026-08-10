@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiClient, sessionStore } from '@/lib/api-client';
 
-export interface AuthUser { id: string; username: string; email: string; fullName: string; mustChangePassword: boolean; roles: string[]; permissions: string[]; lastLoginAt: string | null; createdAt: string; updatedAt: string }
+export interface AuthCompany { id: string; code: string; nameTh: string; nameEn: string | null; logoUrl: string | null; role: string; isDefault: boolean }
+export interface AuthUser { id: string; username: string; email: string; fullName: string; mustChangePassword: boolean; roles: string[]; permissions: string[]; companies: AuthCompany[]; activeCompany: AuthCompany | null; defaultLandingPage: string; lastLoginAt: string | null; createdAt: string; updatedAt: string }
 interface LoginResult { accessToken: string; refreshToken: string; user: AuthUser }
-interface AuthContextValue { user: AuthUser | null; loading: boolean; login: (username: string, password: string) => Promise<AuthUser>; logout: () => Promise<void>; changePassword: (currentPassword: string, newPassword: string) => Promise<void> }
+interface AuthContextValue { user: AuthUser | null; loading: boolean; login: (username: string, password: string) => Promise<AuthUser>; logout: () => Promise<void>; changePassword: (currentPassword: string, newPassword: string) => Promise<void>; selectCompany: (companyId: string) => Promise<AuthUser> }
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -20,6 +21,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await apiClient.post<LoginResult>('/auth/change-password', { currentPassword, newPassword });
       sessionStore.save(result.accessToken, result.refreshToken);
       setUser(result.user);
+    },
+    selectCompany: async (companyId) => {
+      const result = await apiClient.post<{ accessToken: string; user: AuthUser }>('/auth/select-company', { companyId });
+      sessionStore.saveCompany(result.accessToken, companyId);
+      setUser(result.user);
+      return result.user;
     },
   }), [user, loading]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

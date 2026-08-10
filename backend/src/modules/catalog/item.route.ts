@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ItemType, Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok, paginate } from '../../lib/response.js';
-import { requirePasswordChanged } from '../auth/auth.guard.js';
+import { requireCompany } from '../auth/auth.guard.js';
 import { requireRoles, writeAudit, num } from '../../lib/http.js';
 
 const MANAGE = requireRoles('ADMIN', 'PURCHASING', 'PRODUCTION');
@@ -91,20 +91,20 @@ function baseUnitCost(purchasePrice: number, purchaseQuantity: number, purchaseT
 
 export default async function itemRoutes(app: FastifyInstance) {
   // สรุปตัวเลขหัวหน้า (summary cards)
-  app.get('/summary', { preHandler: requirePasswordChanged }, async () => {
+  app.get('/summary', { preHandler: requireCompany }, async (req) => {
     const [total, active, noPrice, latest] = await Promise.all([
-      prisma.item.count({ where: { deletedAt: null } }),
-      prisma.item.count({ where: { deletedAt: null, isActive: true } }),
-      prisma.item.count({ where: { deletedAt: null, lastCost: 0 } }),
-      prisma.itemPriceHistory.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+      prisma.item.count({ where: { deletedAt: null, companyId: req.user.companyId! } }),
+      prisma.item.count({ where: { deletedAt: null, isActive: true, companyId: req.user.companyId! } }),
+      prisma.item.count({ where: { deletedAt: null, lastCost: 0, companyId: req.user.companyId! } }),
+      prisma.itemPriceHistory.findFirst({ where: { companyId: req.user.companyId! }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
     ]);
     return ok({ total, active, noPrice, latestPriceUpdate: latest?.createdAt.toISOString() ?? null });
   });
 
   // รายการวัตถุดิบ (filter + pagination)
-  app.get('/', { preHandler: requirePasswordChanged }, async (req) => {
+  app.get('/', { preHandler: requireCompany }, async (req) => {
     const q = listQuery.parse(req.query ?? {});
-    const where: Prisma.ItemWhereInput = { deletedAt: null };
+    const where: Prisma.ItemWhereInput = { deletedAt: null, companyId: req.user.companyId! };
     if (q.search) where.OR = [
       { code: { contains: q.search, mode: 'insensitive' } },
       { name: { contains: q.search, mode: 'insensitive' } },
@@ -125,11 +125,11 @@ export default async function itemRoutes(app: FastifyInstance) {
   });
 
   // รายละเอียด + ประวัติราคา
-  app.get('/:id', { preHandler: requirePasswordChanged }, async (req, reply) => {
+  app.get('/:id', { preHandler: requireCompany }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const item = await prisma.item.findFirst({ where: { id, deletedAt: null }, include: itemInclude });
+    const item = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! }, include: itemInclude });
     if (!item) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
-    const history = await prisma.itemPriceHistory.findMany({ where: { itemId: id }, orderBy: { createdAt: 'desc' }, take: 100 });
+    const history = await prisma.itemPriceHistory.findMany({ where: { itemId: id, companyId: req.user.companyId! }, orderBy: { createdAt: 'desc' }, take: 100 });
     const prices = history.map(parsePriceRow);
     const values = prices.map((p) => p.baseUnitCost).filter((v) => v > 0);
     return ok({
@@ -155,6 +155,7 @@ export default async function itemRoutes(app: FastifyInstance) {
     const created = await prisma.$transaction(async (tx) => {
       const item = await tx.item.create({
         data: {
+          companyId: req.user.companyId!,
           code: body.code, name: body.name, type: body.type, barcode: body.barcode ?? null,
           categoryId: body.categoryId ?? null, baseUnitId: body.baseUnitId,
           purchaseUnitId: body.purchaseUnitId ?? null,
@@ -169,6 +170,7 @@ export default async function itemRoutes(app: FastifyInstance) {
       if (body.purchasePrice) {
         await tx.itemPriceHistory.create({
           data: {
+            companyId: req.user.companyId!,
             itemId: item.id, price: new Prisma.Decimal(lastCost), source: 'PURCHASE', createdById: req.user.sub,
             note: JSON.stringify({ purchasePrice: body.purchasePrice, purchaseQuantity: body.purchaseQuantity ?? 1, pricePerPurchaseUnit: body.purchasePrice / (body.purchaseQuantity ?? 1) }),
           },
@@ -183,7 +185,7 @@ export default async function itemRoutes(app: FastifyInstance) {
   app.patch('/:id', { preHandler: MANAGE }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = upsertSchema.partial().parse(req.body);
-    const existing = await prisma.item.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! } });
     if (!existing) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
     if (body.code && body.code !== existing.code) {
       const dup = await prisma.item.findUnique({ where: { code: body.code } });
@@ -212,7 +214,7 @@ export default async function itemRoutes(app: FastifyInstance) {
   // ปิดการใช้งาน (soft) — ไม่ hard delete วัตถุดิบที่อาจถูกใช้ในสูตร
   app.post('/:id/deactivate', { preHandler: MANAGE }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const existing = await prisma.item.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! } });
     if (!existing) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
     const updated = await prisma.item.update({ where: { id }, data: { isActive: false, updatedById: req.user.sub }, include: itemInclude });
     await writeAudit(req, { action: 'DEACTIVATE', entity: 'Item', entityId: id });
@@ -221,7 +223,7 @@ export default async function itemRoutes(app: FastifyInstance) {
 
   app.post('/:id/activate', { preHandler: MANAGE }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const existing = await prisma.item.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! } });
     if (!existing) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
     const updated = await prisma.item.update({ where: { id }, data: { isActive: true, updatedById: req.user.sub }, include: itemInclude });
     await writeAudit(req, { action: 'ACTIVATE', entity: 'Item', entityId: id });
@@ -229,9 +231,9 @@ export default async function itemRoutes(app: FastifyInstance) {
   });
 
   // ประวัติราคา
-  app.get('/:id/prices', { preHandler: requirePasswordChanged }, async (req, reply) => {
+  app.get('/:id/prices', { preHandler: requireCompany }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const item = await prisma.item.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    const item = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! }, select: { id: true } });
     if (!item) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
     const history = await prisma.itemPriceHistory.findMany({ where: { itemId: id }, orderBy: { createdAt: 'desc' }, take: 200 });
     return ok(history.map(parsePriceRow));
@@ -240,13 +242,14 @@ export default async function itemRoutes(app: FastifyInstance) {
   app.post('/:id/prices', { preHandler: MANAGE }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = priceSchema.parse(req.body);
-    const item = await prisma.item.findFirst({ where: { id, deletedAt: null } });
+    const item = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! } });
     if (!item) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
     const cost = baseUnitCost(body.purchasePrice, body.purchaseQuantity, num(item.purchaseToBaseFactor));
 
     await prisma.$transaction([
       prisma.itemPriceHistory.create({
         data: {
+          companyId: req.user.companyId!,
           itemId: id, price: new Prisma.Decimal(cost), source: 'PURCHASE', createdById: req.user.sub,
           createdAt: body.effectiveDate ? new Date(body.effectiveDate) : undefined,
           note: JSON.stringify({

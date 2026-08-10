@@ -17,8 +17,6 @@
     "typecheck": "npm --workspace backend run typecheck && npm --workspace frontend run typecheck",
     "test": "npm --workspace backend run test && npm --workspace frontend run test",
     "lint": "npm --workspace backend run lint && npm --workspace frontend run lint",
-    "db:up": "docker compose up -d",
-    "db:down": "docker compose down",
     "db:migrate": "npm --workspace backend run prisma:migrate",
     "db:seed": "npm --workspace backend run prisma:seed",
     "db:generate": "npm --workspace backend run prisma:generate"

@@ -1,10 +1,11 @@
+import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
-import { ProtectedRoute, PasswordRoute } from '@/auth/RouteGuards';
+import { ProtectedRoute, PasswordRoute, CompanyRoute } from '@/auth/RouteGuards';
 import AppLayout from '@/components/layout/AppLayout';
 import HomePage from '@/pages/HomePage';
-import LoginPage from '@/pages/LoginPage';
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
 import ChangePasswordPage from '@/pages/ChangePasswordPage';
-import DashboardPage from '@/pages/DashboardPage';
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 import ProfilePage from '@/pages/ProfilePage';
 import UsersPage, { UnauthorizedPage } from '@/pages/UsersPage';
 import ActivityPage from '@/pages/ActivityPage';
@@ -15,7 +16,7 @@ import ItemFormPage from '@/pages/catalog/ItemFormPage';
 import CatalogMastersPage from '@/pages/catalog/CatalogMastersPage';
 import FoodCostingPage from '@/pages/catalog/FoodCostingPage';
 import MenuPage from '@/pages/catalog/MenuPage';
-import RecipeBuilderPage from '@/pages/catalog/RecipeBuilderPage';
+const RecipeBuilderPage = lazy(() => import('@/pages/catalog/RecipeBuilderPage'));
 import IngredientsPage from '@/pages/catalog/IngredientsPage';
 import PackagingPage from '@/pages/catalog/PackagingPage';
 import IngredientFormPage from '@/pages/catalog/IngredientFormPage';
@@ -24,22 +25,51 @@ import CatalogWarehousePage from '@/pages/catalog/CatalogWarehousePage';
 import SalesInsightPage from '@/pages/catalog/SalesInsightPage';
 import CostingWorkspacePage from '@/pages/catalog/CostingWorkspacePage';
 import PricingWorkspacePage from '@/pages/catalog/PricingWorkspacePage';
+const SelectCompanyPage = lazy(() => import('@/pages/SelectCompanyPage'));
+const ForgotPasswordPage = lazy(() => import('@/pages/PasswordRecoveryPages').then((module) => ({ default: module.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import('@/pages/PasswordRecoveryPages').then((module) => ({ default: module.ResetPasswordPage })));
+const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
+import RoleDashboardPage from '@/pages/RoleDashboardPage';
+import OrdersPage, { CustomersPage } from '@/pages/OrdersPage';
+import { ReceivingPage, StockIssuePage } from '@/pages/OperationsPages';
+import CompanySettingsPage from '@/pages/CompanySettingsPage';
 
 /** เมนูที่ยังไม่มีระบบจริง — เปิด Placeholder page ที่ออกแบบไว้ */
 const PLACEHOLDER_PATHS = [
-  '/receiving', '/production', '/inventory', '/transfers', '/stock-count',
-  '/reports', '/settings',
+  '/production', '/inventory', '/transfers', '/stock-count',
+  '/reports',
 ];
 
 export default function App() {
   return (
-    <Routes>
+    <Suspense fallback={<div className="route-loading" role="status">กำลังเปิดหน้า…</div>}><Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/register" element={<RegisterPage />} />
       <Route element={<PasswordRoute />}>
         <Route path="/change-password" element={<ChangePasswordPage />} />
       </Route>
       <Route element={<ProtectedRoute />}>
+        <Route path="/select-company" element={<SelectCompanyPage />} />
+        <Route element={<CompanyRoute />}>
         <Route element={<AppLayout />}>
+          <Route path="/admin" element={<RoleDashboardPage />} />
+          <Route path="/management" element={<RoleDashboardPage />} />
+          <Route path="/operations" element={<RoleDashboardPage />} />
+          <Route path="/orders" element={<OrdersPage />} />
+          <Route path="/orders/new" element={<OrdersPage />} />
+          <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/receiving" element={<ReceivingPage />} />
+          <Route path="/receiving/new" element={<ReceivingPage />} />
+          <Route path="/receiving/:id" element={<ReceivingPage />} />
+          <Route path="/stock-issues" element={<StockIssuePage />} />
+          <Route path="/stock-issues/new" element={<StockIssuePage />} />
+          <Route path="/stock-issues/:id" element={<StockIssuePage />} />
+          <Route path="/settings" element={<CompanySettingsPage />} />
+          <Route path="/settings/company" element={<CompanySettingsPage />} />
+          <Route path="/chef" element={<RoleDashboardPage />} />
+          <Route path="/costing-dashboard" element={<RoleDashboardPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/account/change-password" element={<ChangePasswordPage />} />
@@ -77,9 +107,10 @@ export default function App() {
           ))}
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
         </Route>
+        </Route>
       </Route>
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+    </Routes></Suspense>
   );
 }

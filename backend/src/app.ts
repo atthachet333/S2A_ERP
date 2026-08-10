@@ -18,6 +18,8 @@ import menuRoutes from './modules/catalog/menu.route.js';
 import recipeRoutes from './modules/recipes/recipe.route.js';
 import costingRoutes from './modules/costing/costing.route.js';
 import uploadRoutes from './modules/uploads/upload.route.js';
+import businessRoutes from './modules/business/business.route.js';
+import companyRoutes from './modules/companies/company.route.js';
 
 /**
  * สร้าง Fastify instance พร้อม plugin และ route ทั้งหมด
@@ -68,6 +70,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(recipeRoutes, { prefix: '/recipes' });
       await api.register(costingRoutes, { prefix: '/costing' });
       await api.register(uploadRoutes, { prefix: '/uploads' });
+      await api.register(businessRoutes, { prefix: '/business' });
+      await api.register(companyRoutes, { prefix: '/companies' });
     },
     { prefix: '/api' },
   );

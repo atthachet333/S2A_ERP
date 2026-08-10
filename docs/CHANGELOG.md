@@ -1,5 +1,12 @@
 # CHANGELOG — S2A ERP
 
+## 2026-08-10
+
+- Added multi-company membership, company selection, role-aware JWTs, and backend permission enforcement.
+- Added customers, multi-line orders, validated status transitions, demand, real KPI, receiving, stock issue, and notifications.
+- Added safe primary-company backfill migration and optional LINE/email configuration.
+- Removed Docker Compose and Docker database scripts; native PostgreSQL is required.
+
 ## Food Costing workflows
 - เชื่อม Menu และ Recipe real routes
 - เพิ่ม live preview ที่ใช้ item-specific conversion

@@ -4,7 +4,7 @@ import {
   UtensilsCrossed, Package, Plus, Trash2, Calculator, Lock, Save, ImageOff,
   Search, X, AlertTriangle, CheckCircle2, TrendingUp, ReceiptText, Sparkles, Loader2,
 } from 'lucide-react';
-import { catalogApi, type Item, type MenuRow, type RecipeDetail } from '@/lib/catalog';
+import { catalogApi, type Item, type MenuRow, type RecipeDetail, type Unit } from '@/lib/catalog';
 import {
   computeLine, computeSheet, priceFromMargin, priceFromMarkup, analyzePrice, round,
   EMPTY_OPERATING, type SheetLine, type OperatingCost,
@@ -47,9 +47,14 @@ export default function RecipeBuilderPage() {
   const { toast } = useToast();
 
   const [menus, setMenus] = useState<MenuRow[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [detail, setDetail] = useState<RecipeDetail | null>(null);
   const [productId, setProductId] = useState(menuId ?? '');
+  const [menuMode, setMenuMode] = useState<'existing' | 'new'>(menuId ? 'existing' : 'new');
+  const [newMenuName, setNewMenuName] = useState('');
+  const [newMenuCode, setNewMenuCode] = useState('');
+  const [newMenuUnitId, setNewMenuUnitId] = useState('');
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [batchOutput, setBatchOutput] = useState(1);
@@ -69,10 +74,13 @@ export default function RecipeBuilderPage() {
   useEffect(() => {
     void Promise.all([
       catalogApi.menus(),
+      catalogApi.units(),
       catalogApi.items({ pageSize: 200, status: 'active' }),
       id ? catalogApi.recipe(id) : Promise.resolve(null),
-    ]).then(([menuRows, itemRows, recipe]) => {
+    ]).then(([menuRows, unitRows, itemRows, recipe]) => {
       setMenus(menuRows);
+      setUnits(unitRows.filter((unit) => unit.isActive));
+      setNewMenuUnitId((current) => current || unitRows.find((unit) => unit.isActive)?.id || '');
       const usable = itemRows.items.filter((it) => it.type === 'RAW_MATERIAL' || it.type === 'PACKAGING');
       setItems(usable);
       setDetail(recipe);
@@ -128,7 +136,8 @@ export default function RecipeBuilderPage() {
   const save = async (event: FormEvent) => {
     event.preventDefault();
     const saveable = lines.filter((l) => l.itemId);
-    if (!productId) { setError('เลือกเมนูก่อนบันทึกสูตร'); return; }
+    if (!id && menuMode === 'existing' && !productId) { setError('กรุณาเลือกเมนูก่อนบันทึกสูตร'); return; }
+    if (!id && menuMode === 'new' && (!newMenuName.trim() || !newMenuUnitId)) { setError('กรุณาระบุชื่อเมนูและหน่วยขาย'); return; }
     if (saveable.length === 0) { setError('เพิ่มวัตถุดิบหรือบรรจุภัณฑ์อย่างน้อย 1 รายการ'); return; }
     if (id && !reason.trim()) { setError('กรุณาระบุเหตุผลของการสร้างเวอร์ชันใหม่'); return; }
     setBusy(true); setError('');
@@ -158,8 +167,11 @@ export default function RecipeBuilderPage() {
         toast('บันทึกเวอร์ชันสูตรใหม่แล้ว');
         navigate(`/recipes/${id}`);
       } else {
-        const made = await catalogApi.createRecipe({ productId, code: code || undefined, name: name || undefined, version });
-        toast('บันทึกสูตรสำเร็จ');
+        const menuInput = menuMode === 'existing'
+          ? { productId }
+          : { newMenu: { name: newMenuName.trim(), code: newMenuCode.trim() || undefined, sellingUnitId: newMenuUnitId } };
+        const made = await catalogApi.createRecipe({ ...menuInput, code: code || undefined, name: name || undefined, version });
+        toast({ title: 'บันทึกสูตรสำเร็จ', description: made.menuCreated ? 'สร้างเมนูใหม่และเชื่อมสูตรเรียบร้อยแล้ว' : 'เชื่อมสูตรกับเมนูเดิมเรียบร้อยแล้ว', variant: 'success' });
         navigate(`/recipes/${made.id}`);
       }
     } catch (e) {
@@ -182,10 +194,11 @@ export default function RecipeBuilderPage() {
         <div className="cs-topbar-grid">
           <div className="cs-tb-field">
             <label>เมนู</label>
-            <select value={productId} disabled={Boolean(id)} onChange={(e) => setProductId(e.target.value)} required>
-              <option value="">เลือกเมนู…</option>
+            {!id && <div className="recipe-menu-modes"><button type="button" className={menuMode === 'new' ? 'active' : ''} onClick={() => setMenuMode('new')}>พิมพ์เมนูใหม่</button><button type="button" className={menuMode === 'existing' ? 'active' : ''} onClick={() => setMenuMode('existing')}>เลือกเมนูเดิม</button></div>}
+            {(id || menuMode === 'existing') ? <select value={productId} disabled={Boolean(id)} onChange={(e) => setProductId(e.target.value)} required>
+              <option value="">ค้นหา/เลือกเมนู…</option>
               {menus.map((m) => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
-            </select>
+            </select> : <div className="recipe-new-menu"><input value={newMenuName} onChange={(e) => setNewMenuName(e.target.value)} placeholder="ชื่อเมนูใหม่" autoFocus /><input value={newMenuCode} onChange={(e) => setNewMenuCode(e.target.value)} placeholder="รหัส (ไม่บังคับ)" /><select value={newMenuUnitId} onChange={(e) => setNewMenuUnitId(e.target.value)}><option value="">เลือกหน่วยขาย…</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.code} — {unit.name}</option>)}</select></div>}
           </div>
           <div className="cs-tb-field"><label>จำนวนที่ผลิต (Batch)</label><input type="number" min="0" step="any" value={batchOutput} onChange={(e) => setBatchOutput(+e.target.value)} /></div>
           <div className="cs-tb-field"><label>หน่วยขาย</label>

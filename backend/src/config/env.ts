@@ -31,6 +31,15 @@ const envSchema = z.object({
   GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().optional().default(''),
   GOOGLE_PRIVATE_KEY: z.string().optional().default(''),
   GOOGLE_REFERENCE_SHEET_ID: z.string().optional().default(''),
+  LINE_MESSAGING_ENABLED: z.string().default('false').transform((v) => v.toLowerCase() === 'true'),
+  LINE_CHANNEL_ACCESS_TOKEN: z.string().optional().default(''),
+  MAIL_HOST: z.string().optional().default(''),
+  MAIL_PORT: z.coerce.number().int().positive().default(587),
+  MAIL_SECURE: z.string().default('false').transform((v) => v.toLowerCase() === 'true'),
+  MAIL_USER: z.string().optional().default(''),
+  MAIL_APP_PASSWORD: z.string().optional().default(''),
+  MAIL_FROM_NAME: z.string().optional().default('S2 Accounting Consultant'),
+  MAIL_FROM_EMAIL: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);

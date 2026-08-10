@@ -32,6 +32,8 @@ describe.sequential('catalog + recipe + costing integration', () => {
     });
     userId = user.id;
     await prisma.userRole.upsert({ where: { userId_roleId: { userId: user.id, roleId: role.id } }, update: {}, create: { userId: user.id, roleId: role.id } });
+    const company = await prisma.company.findUniqueOrThrow({ where: { code: 'S2A-PRIMARY' } });
+    await prisma.companyMembership.upsert({ where: { userId_companyId: { userId: user.id, companyId: company.id } }, update: { roleId: role.id }, create: { userId: user.id, companyId: company.id, roleId: role.id, isDefault: true } });
 
     const g = await prisma.unit.upsert({ where: { code: `G_${TAG}` }, update: {}, create: { code: `G_${TAG}`, name: 'กรัม(ทดสอบ)' } });
     const box = await prisma.unit.upsert({ where: { code: `BOX_${TAG}` }, update: {}, create: { code: `BOX_${TAG}`, name: 'กล่อง(ทดสอบ)' } });

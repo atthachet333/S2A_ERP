@@ -45,11 +45,14 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
 
 const ACCESS_KEY = 's2a_access_token';
 const REFRESH_KEY = 's2a_refresh_token';
+const COMPANY_KEY = 's2a_company_id';
 export const sessionStore = {
   accessToken: () => localStorage.getItem(ACCESS_KEY),
   refreshToken: () => localStorage.getItem(REFRESH_KEY),
   save: (accessToken: string, refreshToken: string) => { localStorage.setItem(ACCESS_KEY, accessToken); localStorage.setItem(REFRESH_KEY, refreshToken); },
-  clear: () => { localStorage.removeItem(ACCESS_KEY); localStorage.removeItem(REFRESH_KEY); },
+  companyId: () => localStorage.getItem(COMPANY_KEY),
+  saveCompany: (accessToken: string, companyId: string) => { localStorage.setItem(ACCESS_KEY, accessToken); localStorage.setItem(COMPANY_KEY, companyId); },
+  clear: () => { localStorage.removeItem(ACCESS_KEY); localStorage.removeItem(REFRESH_KEY); localStorage.removeItem(COMPANY_KEY); },
 };
 
 async function request<T>(path: string, options: RequestOptions = {}, retried = false): Promise<T> {
@@ -79,7 +82,7 @@ async function request<T>(path: string, options: RequestOptions = {}, retried = 
     const mayRefresh = res.status === 401 && !retried && Boolean(refreshToken) && path !== '/auth/refresh' && path !== '/auth/login';
     if (mayRefresh) {
       try {
-        const refreshed = await request<{ accessToken: string; refreshToken: string }>('/auth/refresh', { method: 'POST', body: { refreshToken }, token: null }, true);
+        const refreshed = await request<{ accessToken: string; refreshToken: string }>('/auth/refresh', { method: 'POST', body: { refreshToken, companyId: sessionStore.companyId() ?? undefined }, token: null }, true);
         sessionStore.save(refreshed.accessToken, refreshed.refreshToken);
         return request<T>(path, options, true);
       } catch {
@@ -107,4 +110,9 @@ export const apiClient = {
     request<T>(path, { ...options, method: 'PATCH', body }),
   delete: <T>(path: string, options?: RequestOptions) =>
     request<T>(path, { ...options, method: 'DELETE' }),
+  blob: async (path: string) => {
+    const res = await fetch(`${BASE_URL}${path}`, { headers: sessionStore.accessToken() ? { Authorization: `Bearer ${sessionStore.accessToken()}` } : {} });
+    if (!res.ok) throw new ApiClientError('DOWNLOAD_FAILED', 'ไม่สามารถสร้างเอกสารได้', res.status);
+    return res.blob();
+  },
 };

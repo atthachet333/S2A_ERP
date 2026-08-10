@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ItemType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
-import { requirePasswordChanged } from '../auth/auth.guard.js';
+import { requireCompany } from '../auth/auth.guard.js';
 import { requireRoles, writeAudit } from '../../lib/http.js';
 
 const MANAGE = requireRoles('ADMIN', 'PURCHASING', 'PRODUCTION');
@@ -17,9 +17,9 @@ const updateSchema = createSchema.partial().extend({ isActive: z.boolean().optio
 
 /** หมวดหมู่วัตถุดิบ/สินค้า */
 export default async function categoryRoutes(app: FastifyInstance) {
-  app.get('/', { preHandler: requirePasswordChanged }, async () => {
+  app.get('/', { preHandler: requireCompany }, async (req) => {
     const categories = await prisma.category.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, companyId: req.user.companyId! },
       orderBy: { name: 'asc' },
       select: { id: true, code: true, name: true, type: true, isActive: true, _count: { select: { items: true } } },
     });
@@ -30,7 +30,7 @@ export default async function categoryRoutes(app: FastifyInstance) {
     const body = createSchema.parse(req.body);
     const existing = await prisma.category.findUnique({ where: { code: body.code } });
     if (existing) return reply.status(409).send(fail('CONFLICT', `มีหมวดหมู่รหัส ${body.code} อยู่แล้ว`));
-    const category = await prisma.category.create({ data: { code: body.code, name: body.name, type: body.type } });
+    const category = await prisma.category.create({ data: { companyId: req.user.companyId!, code: body.code, name: body.name, type: body.type } });
     await writeAudit(req, { action: 'CREATE', entity: 'Category', entityId: category.id, after: category });
     return reply.status(201).send(ok(category, 'เพิ่มหมวดหมู่สำเร็จ'));
   });

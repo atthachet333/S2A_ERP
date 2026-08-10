@@ -3,11 +3,11 @@ import { z } from 'zod';
 import { Prisma, ItemType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
-import { requirePasswordChanged } from '../auth/auth.guard.js';
+import { requireCompany } from '../auth/auth.guard.js';
 import { requireRoles, writeAudit, num } from '../../lib/http.js';
 import { computeRecipeCost, type CostIngredientInput } from '../../lib/costing.js';
 
-const MANAGE = requireRoles('ADMIN', 'PRODUCTION');
+const MANAGE = requireRoles('ADMIN', 'PRODUCTION', 'CHEF', 'COSTING_STAFF');
 
 const ingredientSchema = z.object({
   itemId: z.string().min(1),
@@ -32,11 +32,18 @@ const versionSchema = z.object({
 });
 
 const createRecipeSchema = z.object({
-  productId: z.string().min(1, 'ต้องเลือกเมนู'),
+  productId: z.string().min(1).optional(),
+  newMenu: z.object({
+    name: z.string().trim().min(1).max(120),
+    code: z.string().trim().max(40).optional(),
+    sellingUnitId: z.string().min(1),
+  }).optional(),
   code: z.string().trim().max(40).optional(),
   name: z.string().trim().min(1).max(120).optional(),
   description: z.string().max(500).optional().nullable(),
   version: versionSchema,
+}).refine((body) => Boolean(body.productId) !== Boolean(body.newMenu), {
+  message: 'เลือกเมนูเดิมหรือสร้างเมนูใหม่อย่างใดอย่างหนึ่ง',
 });
 
 const newVersionSchema = versionSchema.extend({ reason: z.string().max(300).optional() });
@@ -44,9 +51,9 @@ const newVersionSchema = versionSchema.extend({ reason: z.string().max(300).opti
 type VersionInput = z.infer<typeof versionSchema>;
 
 /** โหลด item (type + ต้นทุนต่อหน่วยฐาน) เพื่อคำนวณต้นทุนจากราคาปัจจุบัน */
-async function buildCostInputs(version: VersionInput) {
+async function buildCostInputs(version: VersionInput, companyId: string) {
   const itemIds = [...new Set(version.ingredients.map((i) => i.itemId))];
-  const items = await prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, type: true, lastCost: true } });
+  const items = await prisma.item.findMany({ where: { id: { in: itemIds }, companyId }, select: { id: true, type: true, lastCost: true } });
   const map = new Map(items.map((i) => [i.id, i]));
   const costIngredients: CostIngredientInput[] = version.ingredients.map((ing) => {
     const item = map.get(ing.itemId);
@@ -75,8 +82,8 @@ function costBreakdownFrom(version: VersionInput, costIngredients: CostIngredien
 }
 
 /** สร้าง RecipeVersion + ingredients + RecipeCost ภายใน transaction */
-async function persistVersion(tx: Prisma.TransactionClient, recipeId: string, versionNo: number, v: VersionInput, userId: string) {
-  const { costIngredients } = await buildCostInputsTx(tx, v);
+async function persistVersion(tx: Prisma.TransactionClient, recipeId: string, versionNo: number, v: VersionInput, userId: string, companyId: string) {
+  const { costIngredients } = await buildCostInputsTx(tx, v, companyId);
   const breakdown = costBreakdownFrom(v, costIngredients);
   await tx.recipeVersion.updateMany({ where: { recipeId, isActive: true }, data: { isActive: false } });
   const created = await tx.recipeVersion.create({
@@ -108,9 +115,9 @@ async function persistVersion(tx: Prisma.TransactionClient, recipeId: string, ve
   return { created, breakdown };
 }
 
-async function buildCostInputsTx(tx: Prisma.TransactionClient, version: VersionInput) {
+async function buildCostInputsTx(tx: Prisma.TransactionClient, version: VersionInput, companyId: string) {
   const itemIds = [...new Set(version.ingredients.map((i) => i.itemId))];
-  const items = await tx.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, type: true, lastCost: true } });
+  const items = await tx.item.findMany({ where: { id: { in: itemIds }, companyId }, select: { id: true, type: true, lastCost: true } });
   const map = new Map(items.map((i) => [i.id, i]));
   const costIngredients: CostIngredientInput[] = version.ingredients.map((ing) => {
     const item = map.get(ing.itemId);
@@ -120,9 +127,9 @@ async function buildCostInputsTx(tx: Prisma.TransactionClient, version: VersionI
 }
 
 export default async function recipeRoutes(app: FastifyInstance) {
-  app.get('/', { preHandler: requirePasswordChanged }, async () => {
+  app.get('/', { preHandler: requireCompany }, async (req) => {
     const recipes = await prisma.recipe.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, companyId: req.user.companyId! },
       orderBy: { updatedAt: 'desc' },
       include: {
         product: { select: { id: true, code: true, name: true, imageUrl: true } },
@@ -145,10 +152,10 @@ export default async function recipeRoutes(app: FastifyInstance) {
     }));
   });
 
-  app.get('/:id', { preHandler: requirePasswordChanged }, async (req, reply) => {
+  app.get('/:id', { preHandler: requireCompany }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const recipe = await prisma.recipe.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, companyId: req.user.companyId! },
       include: {
         product: { select: { id: true, code: true, name: true, imageUrl: true } },
         versions: {
@@ -185,34 +192,46 @@ export default async function recipeRoutes(app: FastifyInstance) {
 
   app.post('/', { preHandler: MANAGE }, async (req, reply) => {
     const body = createRecipeSchema.parse(req.body);
-    const product = await prisma.item.findFirst({ where: { id: body.productId, deletedAt: null } });
-    if (!product) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบเมนู/สินค้าที่เลือก'));
-    const { missing } = await buildCostInputs(body.version);
+    const companyId = req.user.companyId!;
+    const product = body.productId
+      ? await prisma.item.findFirst({ where: { id: body.productId, deletedAt: null, companyId, type: ItemType.FINISHED_GOOD } })
+      : null;
+    if (body.productId && !product) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบเมนูที่เลือก'));
+    if (body.newMenu) {
+      const duplicate = await prisma.item.findFirst({ where: { companyId, deletedAt: null, type: ItemType.FINISHED_GOOD, name: { equals: body.newMenu.name, mode: 'insensitive' } }, select: { id: true } });
+      if (duplicate) return reply.status(409).send(fail('CONFLICT', 'มีเมนูชื่อนี้อยู่แล้ว กรุณาเลือกเมนูเดิม'));
+      const unit = await prisma.unit.findFirst({ where: { id: body.newMenu.sellingUnitId, deletedAt: null, isActive: true }, select: { id: true } });
+      if (!unit) return reply.status(400).send(fail('VALIDATION_ERROR', 'ไม่พบหน่วยขายที่เลือก'));
+    }
+    const { missing } = await buildCostInputs(body.version, companyId);
     if (missing.length) return reply.status(400).send(fail('VALIDATION_ERROR', 'มีวัตถุดิบที่ไม่พบในระบบ', { missing }));
 
-    let code = body.code?.trim() || `RCP-${product.code}`;
+    const productCode = product?.code ?? body.newMenu?.code?.trim() ?? `MENU-${Date.now().toString().slice(-6)}`;
+    if (!product && await prisma.item.findUnique({ where: { code: productCode } })) return reply.status(409).send(fail('CONFLICT', 'มีรหัสเมนูนี้อยู่แล้ว'));
+    let code = body.code?.trim() || `RCP-${productCode}`;
     if (await prisma.recipe.findUnique({ where: { code } })) code = `${code}-${Date.now().toString().slice(-5)}`;
 
     const result = await prisma.$transaction(async (tx) => {
-      const recipe = await tx.recipe.create({ data: { code, name: body.name ?? product.name, productId: product.id, description: body.description ?? null, createdById: req.user.sub, updatedById: req.user.sub } });
-      const { breakdown } = await persistVersion(tx, recipe.id, 1, body.version, req.user.sub);
-      return { recipe, breakdown };
+      const menu = product ?? await tx.item.create({ data: { companyId, code: productCode, name: body.newMenu!.name, type: ItemType.FINISHED_GOOD, baseUnitId: body.newMenu!.sellingUnitId, isLotTracked: true, isExpiryTracked: true, createdById: req.user.sub, updatedById: req.user.sub } });
+      const recipe = await tx.recipe.create({ data: { companyId, code, name: body.name ?? menu.name, productId: menu.id, description: body.description ?? null, createdById: req.user.sub, updatedById: req.user.sub } });
+      const { breakdown } = await persistVersion(tx, recipe.id, 1, body.version, req.user.sub, companyId);
+      return { recipe, breakdown, menuCreated: !product, menuId: menu.id };
     });
-    await writeAudit(req, { action: 'CREATE', entity: 'Recipe', entityId: result.recipe.id, after: { code, versionNo: 1 } });
-    return reply.status(201).send(ok({ id: result.recipe.id, code, versionNo: 1, cost: result.breakdown }, 'สร้างสูตรสำเร็จ'));
+    await writeAudit(req, { action: 'CREATE', entity: 'Recipe', entityId: result.recipe.id, after: { code, versionNo: 1, menuCreated: result.menuCreated, menuId: result.menuId } });
+    return reply.status(201).send(ok({ id: result.recipe.id, code, versionNo: 1, cost: result.breakdown, menuCreated: result.menuCreated }, 'สร้างสูตรสำเร็จ'));
   });
 
   app.post('/:id/versions', { preHandler: MANAGE }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = newVersionSchema.parse(req.body);
-    const recipe = await prisma.recipe.findFirst({ where: { id, deletedAt: null }, include: { versions: { orderBy: { versionNo: 'desc' }, take: 1 } } });
+    const recipe = await prisma.recipe.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! }, include: { versions: { orderBy: { versionNo: 'desc' }, take: 1 } } });
     if (!recipe) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบสูตร'));
-    const { missing } = await buildCostInputs(body);
+    const { missing } = await buildCostInputs(body, req.user.companyId!);
     if (missing.length) return reply.status(400).send(fail('VALIDATION_ERROR', 'มีวัตถุดิบที่ไม่พบในระบบ', { missing }));
     const nextNo = (recipe.versions[0]?.versionNo ?? 0) + 1;
 
     const result = await prisma.$transaction(async (tx) => {
-      const { created, breakdown } = await persistVersion(tx, id, nextNo, body, req.user.sub);
+      const { created, breakdown } = await persistVersion(tx, id, nextNo, body, req.user.sub, req.user.companyId!);
       await tx.recipe.update({ where: { id }, data: { updatedById: req.user.sub } });
       return { created, breakdown };
     });

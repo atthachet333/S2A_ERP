@@ -1,5 +1,9 @@
 # ARCHITECTURE — S2A ERP
 
+## Multi-company request context (2026-08-10)
+
+Authentication initially creates a session without a tenant. `POST /api/auth/select-company` validates an active `CompanyMembership` and issues a JWT containing the server-approved company, role, and permissions. Company guards revalidate membership; request bodies are never trusted as the tenant source. The existing User/Role/Permission tables remain the only RBAC system.
+
 ## Authentication flow
 
 Frontend เก็บ access/refresh token ใน local storage เพื่อ session restore, ส่ง Bearer access token ไป Fastify และ refresh ได้หนึ่งครั้งเมื่อพบ 401 Backend ตรวจสถานะผู้ใช้และ `mustChangePassword` จาก PostgreSQL ทุก protected request ก่อนอนุญาต dashboard หรือ users API

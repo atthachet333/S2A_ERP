@@ -10,6 +10,7 @@ export function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
     id: 'u1', username: 'win', email: 'win@s2a.co', fullName: 'วิน ผู้ดูแล',
     mustChangePassword: false, roles: ['SUPER_ADMIN'], permissions: ['DASHBOARD_VIEW', 'USER_MANAGE'],
+    companies: [], activeCompany: null, defaultLandingPage: '/admin',
     lastLoginAt: '2026-08-06T02:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
     ...overrides,
   };

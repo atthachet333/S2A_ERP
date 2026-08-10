@@ -8,6 +8,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import './home.css';
+import CookieConsent from '@/components/CookieConsent';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { useI18n } from '@/i18n/i18n';
 
 /** ค่าเริ่มต้นในหน้า public — เป็น "ตัวอย่างเชิงแนวคิด" เพื่อสื่อว่าระบบแสดงอะไร ไม่ใช่ข้อมูลธุรกิจจริง */
 const FLOW = [
@@ -100,6 +103,7 @@ const NAV = [
 
 export default function HomePage() {
   const { user } = useAuth();
+  const { messages } = useI18n();
   const rootRef = useReveal();
   const [scrolled, setScrolled] = useState(false);
   const [activeId, setActiveId] = useState('');
@@ -125,7 +129,8 @@ export default function HomePage() {
 
   const loggedIn = Boolean(user && !user.mustChangePassword);
   const loginTo = loggedIn ? '/dashboard' : '/login';
-  const loginLabel = loggedIn ? 'ไปที่แดชบอร์ด' : 'เข้าสู่ระบบ';
+  const loginLabel = loggedIn ? messages.home.dashboard : messages.home.signIn;
+  const navLabels = messages.home.nav;
 
   return (
     <div className="hp-root" ref={rootRef as React.RefObject<HTMLDivElement>}>
@@ -141,10 +146,10 @@ export default function HomePage() {
           </a>
           <nav className="hp-nav">
             {NAV.map((n) => (
-              <a key={n.id} href={`#${n.id}`} className={activeId === n.id ? 'active' : ''}>{n.label}</a>
+              <a key={n.id} href={`#${n.id}`} className={activeId === n.id ? 'active' : ''}>{navLabels[NAV.indexOf(n)]}</a>
             ))}
           </nav>
-          <Link to={loginTo} className="hp-login-btn"><LogIn aria-hidden />{loginLabel}</Link>
+          <LanguageSwitcher compact /><Link to={loginTo} className="hp-login-btn"><LogIn aria-hidden />{loginLabel}</Link>
         </div>
       </header>
 
@@ -156,18 +161,15 @@ export default function HomePage() {
             <div className="hp-hero-badge">
               <b><i />LIVE</b> ระบบคิดต้นทุน &amp; สูตรเมนูอาหาร
             </div>
-            <h1 className="hp-h1">ระบบคิดคำนวณต้นทุนและคิดคำนวณสูตรเมนูอาหาร</h1>
+            <h1 className="hp-h1">{messages.home.hero}</h1>
             <div className="hp-brand-line">
               <span className="l2">S2 Accounting Consultant</span>
               <span className="l3">PRODUCTION &amp; INVENTORY</span>
             </div>
-            <p className="hp-hero-sub">
-              ระบบสำหรับจัดการต้นทุนอาหาร สูตรเมนู วัตถุดิบ บรรจุภัณฑ์ ราคาขาย และกำไร —
-              ครบในที่เดียว อ่านง่าย ใช้ได้จริงหน้างาน
-            </p>
+            <p className="hp-hero-sub">{messages.home.support}</p>
             <div className="hp-cta-row">
               <Link to={loginTo} className="hp-cta primary"><LogIn aria-hidden />{loginLabel}<ArrowRight aria-hidden /></Link>
-              <a href="#process" className="hp-cta ghost"><PlayCircle aria-hidden />ดูการทำงานของระบบ</a>
+              <a href="#process" className="hp-cta ghost"><PlayCircle aria-hidden />{messages.home.process}</a>
             </div>
             <div className="hp-hero-stats">
               <div><b className="hp-num">7</b><span>โมดูลหลักครบวงจร</span></div>
@@ -185,11 +187,11 @@ export default function HomePage() {
               <i><b />คำนวณอัตโนมัติ</i>
             </div>
             <div className="hp-flow">
-              {FLOW.map(({ icon: Icon, title, desc }, i) => (
+              {FLOW.map(({ icon: Icon, title }, i) => (
                 <div key={title}>
                   <div className="hp-flow-node">
                     <span className="hp-flow-ic"><Icon aria-hidden /></span>
-                    <span className="hp-flow-body"><strong>{title}</strong><span>{desc}</span></span>
+                    <span className="hp-flow-body"><strong>{messages.home.flow[i]}</strong><span>{messages.home.flowDetails[i]}</span></span>
                     <span className="hp-flow-step hp-num">0{i + 1}</span>
                   </div>
                   {i < FLOW.length - 1 && <div className="hp-flow-connector" />}
@@ -413,9 +415,11 @@ export default function HomePage() {
           <div className="hp-footer-bottom">
             <small>© {new Date().getFullYear()} S2 Accounting Consultant · ระบบคิดคำนวณต้นทุนและสูตรเมนูอาหาร</small>
             <span className="tag">PRODUCTION &amp; INVENTORY</span>
+            <button className="hp-cookie-settings" onClick={() => window.dispatchEvent(new Event('s2a:cookie-settings'))}>การตั้งค่าคุกกี้</button>
           </div>
         </div>
       </footer>
+      <CookieConsent />
     </div>
   );
 }

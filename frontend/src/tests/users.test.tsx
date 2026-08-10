@@ -11,15 +11,15 @@ vi.mock('@/lib/api-client', () => ({ apiClient: { get: apiGet } }));
 import UsersPage from '@/pages/UsersPage';
 
 const sampleUsers = [
-  { id: '1', username: 'win', fullName: 'วิน ผู้ดูแล', email: 'win@s2a.co', isActive: true, mustChangePassword: false, roles: ['SUPER_ADMIN'], lastLoginAt: '2026-08-06T02:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z' },
-  { id: '2', username: 'pueng', fullName: 'ปึ้ง แอดมิน', email: 'pueng@s2a.co', isActive: false, mustChangePassword: true, roles: ['ADMIN'], lastLoginAt: null, createdAt: '2026-02-01T00:00:00.000Z' },
+  { id: '1', username: 'win', fullName: 'วิน ผู้ดูแล', email: 'win@s2a.co', isActive: true, mustChangePassword: false, roles: ['SUPER_ADMIN'], company: { id: 'c1', nameTh: 'ครัวสดดี' }, lastLoginAt: '2026-08-06T02:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: '2', username: 'pueng', fullName: 'ปึ้ง แอดมิน', email: 'pueng@s2a.co', isActive: false, mustChangePassword: true, roles: ['ADMIN'], company: { id: 'c1', nameTh: 'ครัวสดดี' }, lastLoginAt: null, createdAt: '2026-02-01T00:00:00.000Z' },
 ];
 
 describe('UsersPage', () => {
   beforeEach(() => apiGet.mockReset());
 
   it('ผู้ใช้ที่ไม่ใช่ SUPER_ADMIN เห็นหน้าไม่มีสิทธิ์', () => {
-    store.user = makeUser({ roles: ['ADMIN'] });
+    store.user = makeUser({ roles: ['ADMIN'], permissions: [] });
     renderWithProviders(<UsersPage />, { route: '/users' });
     expect(screen.getByRole('heading', { name: 'ไม่มีสิทธิ์เข้าถึง' })).toBeInTheDocument();
   });
