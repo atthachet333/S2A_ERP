@@ -33,6 +33,7 @@ import RoleDashboardPage from '@/pages/RoleDashboardPage';
 import OrdersPage, { CustomersPage } from '@/pages/OrdersPage';
 import { ReceivingPage, StockIssuePage } from '@/pages/OperationsPages';
 import CompanySettingsPage from '@/pages/CompanySettingsPage';
+import { useI18n } from '@/i18n/i18n';
 
 /** เมนูที่ยังไม่มีระบบจริง — เปิด Placeholder page ที่ออกแบบไว้ */
 const PLACEHOLDER_PATHS = [
@@ -41,8 +42,9 @@ const PLACEHOLDER_PATHS = [
 ];
 
 export default function App() {
+  const { messages } = useI18n();
   return (
-    <Suspense fallback={<div className="route-loading" role="status">กำลังเปิดหน้า…</div>}><Routes>
+    <Suspense fallback={<div className="route-loading" role="status">{messages.common.loading}</div>}><Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
