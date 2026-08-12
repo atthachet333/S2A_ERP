@@ -1,5 +1,12 @@
 # CHANGELOG — S2A ERP
 
+## 2026-08-12 — MariaDB baseline
+
+- Switched Prisma to MariaDB (`provider = "mysql"`) without changing business models or Decimal precision.
+- Preserved PostgreSQL migrations as legacy reference and created the active MariaDB baseline.
+- Removed PostgreSQL-only Prisma case-insensitive filter options; the configured Unicode collation preserves case-insensitive searches.
+- Added strict `s2a_erp_test` safety checks and migration documentation. No Docker, commit, push, or PostgreSQL mutation was performed.
+
 ## 2026-08-10
 
 - Added multi-company membership, company selection, role-aware JWTs, and backend permission enforcement.

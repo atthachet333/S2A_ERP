@@ -1,5 +1,20 @@
 # DEPLOYMENT — S2A ERP
 
+## Current MariaDB deployment (authoritative, 2026-08-12)
+
+S2A ERP uses native MariaDB on port 3306 and does not use Docker. URLs use Prisma's `mysql://` scheme and must never be committed or copied into frontend configuration. The application database is `s2a_erp`; integration tests must use only `s2a_erp_test`.
+
+```sh
+npm run db:generate
+npm --workspace backend run prisma:deploy
+npm run db:seed
+npm run dev
+```
+
+Active MariaDB migrations are under `backend/prisma/migrations`. PostgreSQL migrations under `backend/prisma/migrations-postgresql-legacy` are reference-only. See `POSTGRESQL_TO_MARIADB_MIGRATION.md`.
+
+## Legacy PostgreSQL deployment reference
+
 ## Food Costing runtime
 ใช้ PostgreSQL native บน localhost; `DATABASE_URL` สำหรับ runtime และ `DIRECT_URL` สำหรับ migration เท่านั้น ห้ามส่งค่าเหล่านี้เข้า frontend bundleหรือ commit `.env`
 

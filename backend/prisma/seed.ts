@@ -99,7 +99,7 @@ async function main() {
   await prisma.companyMembership.upsert({ where: { userId_companyId: { userId: admin.id, companyId: primaryCompany.id } }, update: {}, create: { userId: admin.id, companyId: primaryCompany.id, roleId: superAdmin.id, isDefault: true } });
 
   const developmentUsers = [
-    { username: 'win', email: 'win@s2a.local', password: '3333', fullName: 'วิน', roleId: superAdmin.id },
+    { username: 'win', email: 'atthachetthongchat333@gmail.com', password: '3333', fullName: 'วิน', roleId: superAdmin.id },
     { username: 'pueng', email: 'pueng@s2a.local', password: '1234', fullName: 'ผึ้ง', roleId: (await prisma.role.findUniqueOrThrow({ where: { name: RoleName.MANAGER } })).id },
   ];
   for (const definition of developmentUsers) {

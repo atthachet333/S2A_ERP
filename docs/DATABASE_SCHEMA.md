@@ -1,5 +1,7 @@
 # DATABASE SCHEMA — S2A ERP
 
+> Current database (2026-08-12): MariaDB 12.3 (`s2a_erp`), Prisma provider `mysql`, port 3306, `utf8mb4_unicode_ci`. Active migrations are in `backend/prisma/migrations`; PostgreSQL sections below are legacy reference.
+
 ## Food Costing persistence
 Menu reuse `Item(FINISHED_GOOD)`; สูตรใช้ `Recipe`, `RecipeVersion`, `RecipeIngredient`, `RecipeCost`; ราคาขายใช้ `SellingPrice`; conversion เฉพาะวัตถุดิบใช้ `Item.purchaseToBaseFactor` โดยไม่มี model ซ้ำ
 

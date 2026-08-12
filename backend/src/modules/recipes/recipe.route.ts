@@ -198,7 +198,7 @@ export default async function recipeRoutes(app: FastifyInstance) {
       : null;
     if (body.productId && !product) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบเมนูที่เลือก'));
     if (body.newMenu) {
-      const duplicate = await prisma.item.findFirst({ where: { companyId, deletedAt: null, type: ItemType.FINISHED_GOOD, name: { equals: body.newMenu.name, mode: 'insensitive' } }, select: { id: true } });
+      const duplicate = await prisma.item.findFirst({ where: { companyId, deletedAt: null, type: ItemType.FINISHED_GOOD, name: { equals: body.newMenu.name } }, select: { id: true } });
       if (duplicate) return reply.status(409).send(fail('CONFLICT', 'มีเมนูชื่อนี้อยู่แล้ว กรุณาเลือกเมนูเดิม'));
       const unit = await prisma.unit.findFirst({ where: { id: body.newMenu.sellingUnitId, deletedAt: null, isActive: true }, select: { id: true } });
       if (!unit) return reply.status(400).send(fail('VALIDATION_ERROR', 'ไม่พบหน่วยขายที่เลือก'));

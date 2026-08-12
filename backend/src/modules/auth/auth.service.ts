@@ -14,7 +14,7 @@ const includeAccess = {
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
 export const findUser = (username: string) => prisma.user.findFirst({
-  where: { username: { equals: username, mode: 'insensitive' }, deletedAt: null },
+  where: { username: { equals: username }, deletedAt: null },
   include: includeAccess,
 });
 export const findUserById = (id: string) => prisma.user.findFirst({ where: { id, deletedAt: null }, include: includeAccess });

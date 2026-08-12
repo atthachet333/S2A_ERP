@@ -106,9 +106,9 @@ export default async function itemRoutes(app: FastifyInstance) {
     const q = listQuery.parse(req.query ?? {});
     const where: Prisma.ItemWhereInput = { deletedAt: null, companyId: req.user.companyId! };
     if (q.search) where.OR = [
-      { code: { contains: q.search, mode: 'insensitive' } },
-      { name: { contains: q.search, mode: 'insensitive' } },
-      { barcode: { contains: q.search, mode: 'insensitive' } },
+      { code: { contains: q.search } },
+      { name: { contains: q.search } },
+      { barcode: { contains: q.search } },
     ];
     if (q.categoryId) where.categoryId = q.categoryId;
     if (q.type) where.type = q.type;

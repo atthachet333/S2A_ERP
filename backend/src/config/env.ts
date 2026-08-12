@@ -8,11 +8,11 @@ import { z } from 'zod';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(1415),
-  // Runtime ใช้ DATABASE_URL (บัญชีสิทธิ์จำกัด s2a_app) เท่านั้น
+  // Runtime ใช้ DATABASE_URL (MariaDB application account) เท่านั้น
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  // ใช้เฉพาะ integration test (food_erp_test) — ไม่บังคับตอนรัน production
+  // ใช้เฉพาะ integration test (s2a_erp_test) — ไม่บังคับตอนรัน production
   TEST_DATABASE_URL: z.string().optional(),
-  // ใช้เฉพาะ Prisma migration (บัญชี owner) — ไม่โหลดเข้าสู่ runtime logic
+  // ใช้เฉพาะ Prisma migration (บัญชี DDL ที่จำกัดสิทธิ์) — ไม่โหลดเข้าสู่ runtime logic
   DIRECT_URL: z.string().optional(),
   JWT_SECRET: z.string().min(8, 'JWT_SECRET must be at least 8 characters').default('change-this-secret'),
   JWT_EXPIRES_IN: z.string().default('8h'),

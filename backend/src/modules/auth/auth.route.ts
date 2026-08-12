@@ -40,7 +40,7 @@ export default async function authRoutes(app: FastifyInstance) {
   });
   app.post('/forgot-password', async (req) => {
     const { identifier } = forgotPasswordSchema.parse(req.body);
-    const user = await prisma.user.findFirst({ where: { deletedAt: null, isActive: true, OR: [{ username: { equals: identifier, mode: 'insensitive' } }, { email: { equals: identifier, mode: 'insensitive' } }] }, select: { id: true } });
+    const user = await prisma.user.findFirst({ where: { deletedAt: null, isActive: true, OR: [{ username: { equals: identifier } }, { email: { equals: identifier } }] }, select: { id: true } });
     if (user) await prisma.auditLog.create({ data: { userId: user.id, action: 'PASSWORD_RESET_REQUESTED', entity: 'User', entityId: user.id, ip: req.ip, after: { deliveryConfigured: false } } });
     return ok({ deliveryAvailable: false }, 'หากข้อมูลตรงกับบัญชีในระบบ เราได้เริ่มขั้นตอนรีเซ็ตรหัสผ่านให้แล้ว กรุณาติดต่อผู้ดูแลระบบเพื่อดำเนินการต่อ');
   });

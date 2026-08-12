@@ -1,5 +1,12 @@
 # PROGRESS — S2A ERP
 
+## MariaDB migration — 2026-08-12
+
+- MariaDB 12.3.2 connection to `s2a_erp` verified; it was empty before initialization.
+- Prisma 6.19.3 MariaDB baseline deployed; 46 tables including migration history use `utf8mb4_unicode_ci`; seed succeeded.
+- PostgreSQL migrations are preserved in `backend/prisma/migrations-postgresql-legacy` and excluded from active deployment.
+- Tests are blocked until an administrator creates/grants `s2a_erp_test`; configuration fails closed and cannot use `s2a_erp`.
+
 ## Multi-company checkpoint — 2026-08-10
 
 Implemented the additive company/membership foundation, company-scoped functional RBAC, company selector, role landing pages, permission navigation, customers, orders, recipe demand warnings, delivered-order KPI, transactional receiving, idempotent stock issue, audit, and web notifications. LINE/email adapters degrade safely without credentials. Dedicated binary PDF rendering and complete receiving/issue frontend forms remain unfinished.

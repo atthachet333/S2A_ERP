@@ -41,7 +41,7 @@ export default async function userRoutes(app: FastifyInstance) {
   app.post('/', { preHandler: requirePermission('USER_MANAGE') }, async (req, reply) => {
     const body = z.object({ fullName: z.string().trim().min(2).max(160), username: z.string().trim().min(3).max(60).regex(/^[a-zA-Z0-9._-]+$/), email: z.string().email().optional().or(z.literal('')), role: z.nativeEnum(RoleName), isActive: z.boolean().default(true), temporaryPassword: z.string().min(10).max(128).optional() }).parse(req.body);
     if (!isSuperAdmin(req) && protectedRoles.has(body.role)) return reply.status(403).send(fail('PROTECTED_ROLE', 'คุณไม่มีสิทธิ์สร้างผู้ดูแลระบบระดับสูง'));
-    const duplicate = await prisma.user.findFirst({ where: { OR: [{ username: { equals: body.username, mode: 'insensitive' } }, ...(body.email ? [{ email: { equals: body.email, mode: 'insensitive' as const } }] : [])] } });
+    const duplicate = await prisma.user.findFirst({ where: { OR: [{ username: { equals: body.username } }, ...(body.email ? [{ email: { equals: body.email } }] : [])] } });
     if (duplicate) return reply.status(409).send(fail('DUPLICATE_USER', 'Username หรือ Email นี้มีบัญชีอยู่แล้ว'));
     const role = await prisma.role.findUniqueOrThrow({ where: { name: body.role } }); const temporaryPassword = body.temporaryPassword ?? generatedPassword(); const passwordHash = await bcrypt.hash(temporaryPassword, 12); const companyId = req.user.companyId!;
     const user = await prisma.$transaction(async (tx) => {

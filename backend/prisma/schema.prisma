@@ -1,5 +1,5 @@
 // Prisma schema — Food ERP
-// ฐานข้อมูลหลัก: PostgreSQL
+// ฐานข้อมูลหลัก: MariaDB (Prisma provider: mysql)
 // หลักการ: Decimal สำหรับเงิน/ปริมาณ, soft delete, audit fields, stock ผ่าน ledger เท่านั้น
 
 generator client {
@@ -7,10 +7,9 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  // Runtime ใช้ url (บัญชีสิทธิ์จำกัด s2a_app) — ต่อผ่าน localhost เท่านั้น
+  provider  = "mysql"
   url       = env("DATABASE_URL")
-  // Migration/introspection ใช้ directUrl (บัญชี owner/postgres) เฉพาะตอนรัน migrate
+  // Migration/introspection ใช้ directUrl (บัญชี DDL ที่จำกัดสิทธิ์กับฐานข้อมูลนี้) เฉพาะตอนรัน migrate
   directUrl = env("DIRECT_URL")
 }
 

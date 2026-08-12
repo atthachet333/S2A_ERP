@@ -1,5 +1,7 @@
 # ARCHITECTURE — S2A ERP
 
+> Current database architecture (2026-08-12): MariaDB 12.3, port 3306, `utf8mb4_unicode_ci`; Prisma provider `mysql`; no Docker. PostgreSQL references below describe the legacy architecture only.
+
 ## Multi-company request context (2026-08-10)
 
 Authentication initially creates a session without a tenant. `POST /api/auth/select-company` validates an active `CompanyMembership` and issues a JWT containing the server-approved company, role, and permissions. Company guards revalidate membership; request bodies are never trusted as the tenant source. The existing User/Role/Permission tables remain the only RBAC system.
