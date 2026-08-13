@@ -3,11 +3,12 @@ import { z } from 'zod';
 import { Prisma, ItemType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
-import { requireCompany } from '../auth/auth.guard.js';
-import { requireRoles, writeAudit, num } from '../../lib/http.js';
+import { requireCompany, requirePermission } from '../auth/auth.guard.js';
+import { writeAudit, num } from '../../lib/http.js';
 import { computeRecipeCost, analyzePrice, priceFromMarkup, priceFromMargin, type CostIngredientInput } from '../../lib/costing.js';
 
-const MANAGE = requireRoles('ADMIN', 'PRODUCTION', 'SALES');
+// บันทึกราคาขาย = จัดการราคา/กำไร → ใช้สิทธิ์ PRICING_EDIT
+const MANAGE = requirePermission('PRICING_EDIT');
 
 const inlineIngredient = z.object({ itemId: z.string().min(1), quantityBase: z.number().nonnegative(), wastePercent: z.number().min(0).max(100).default(0) });
 

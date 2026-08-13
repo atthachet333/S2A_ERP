@@ -31,6 +31,8 @@ const ResetPasswordPage = lazy(() => import('@/pages/PasswordRecoveryPages').the
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
 import RoleDashboardPage from '@/pages/RoleDashboardPage';
 import OrdersPage, { CustomersPage } from '@/pages/OrdersPage';
+const AdminPermissionsPage = lazy(() => import('@/pages/AdminPermissionsPage'));
+const RegistrationsPage = lazy(() => import('@/pages/RegistrationsPage'));
 import { ReceivingPage, StockIssuePage } from '@/pages/OperationsPages';
 import CompanySettingsPage from '@/pages/CompanySettingsPage';
 import { useI18n } from '@/i18n/i18n';
@@ -76,6 +78,8 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/account/change-password" element={<ChangePasswordPage />} />
           <Route path="/users" element={<UsersPage />} />
+          <Route path="/admin/permissions" element={<AdminPermissionsPage />} />
+          <Route path="/admin/registrations" element={<RegistrationsPage />} />
           <Route path="/activity" element={<ActivityPage />} />
           {/* วัตถุดิบ (PART D1 — แยกจากบรรจุภัณฑ์ชัดเจน) */}
           <Route path="/ingredients" element={<IngredientsPage />} />

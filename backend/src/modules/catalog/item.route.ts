@@ -3,10 +3,12 @@ import { z } from 'zod';
 import { ItemType, Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok, paginate } from '../../lib/response.js';
-import { requireCompany } from '../auth/auth.guard.js';
-import { requireRoles, writeAudit, num } from '../../lib/http.js';
+import { requireCompany, requirePermission } from '../auth/auth.guard.js';
+import { writeAudit, num } from '../../lib/http.js';
 
-const MANAGE = requireRoles('ADMIN', 'PURCHASING', 'PRODUCTION');
+// สิทธิ์แบบ permission-code (source of truth ที่ backend) — ครอบคลุมทั้งวัตถุดิบและบรรจุภัณฑ์
+const CREATE = requirePermission('INGREDIENT_CREATE', 'PACKAGING_CREATE');
+const EDIT = requirePermission('INGREDIENT_EDIT', 'PACKAGING_EDIT');
 
 const itemInclude = {
   baseUnit: { select: { id: true, code: true, name: true } },
@@ -101,6 +103,23 @@ export default async function itemRoutes(app: FastifyInstance) {
     return ok({ total, active, noPrice, latestPriceUpdate: latest?.createdAt.toISOString() ?? null });
   });
 
+  // รายการวัตถุดิบ/บรรจุภัณฑ์ที่เลือกได้ในสูตร (ไม่แบ่งหน้า) — ผูก scope กับบริษัทปัจจุบันเสมอ
+  // ใช้โดย Recipe Builder เพื่อให้วัตถุดิบ/บรรจุภัณฑ์ที่เพิ่งเพิ่มปรากฏทันทีโดยไม่ต้องรีเฟรชทั้งหน้า
+  app.get('/selectable', { preHandler: requireCompany }, async (req) => {
+    const q = z.object({ type: z.nativeEnum(ItemType).optional() }).parse(req.query ?? {});
+    const rows = await prisma.item.findMany({
+      where: {
+        deletedAt: null,
+        isActive: true,
+        companyId: req.user.companyId!,
+        type: q.type ?? { in: [ItemType.RAW_MATERIAL, ItemType.PACKAGING] },
+      },
+      include: itemInclude,
+      orderBy: { name: 'asc' },
+    });
+    return ok(rows.map(serializeItem));
+  });
+
   // รายการวัตถุดิบ (filter + pagination)
   app.get('/', { preHandler: requireCompany }, async (req) => {
     const q = listQuery.parse(req.query ?? {});
@@ -144,7 +163,7 @@ export default async function itemRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post('/', { preHandler: MANAGE }, async (req, reply) => {
+  app.post('/', { preHandler: CREATE }, async (req, reply) => {
     const body = upsertSchema.parse(req.body);
     const dup = await prisma.item.findUnique({ where: { code: body.code } });
     if (dup) return reply.status(409).send(fail('CONFLICT', `มีรหัส ${body.code} อยู่แล้ว`));
@@ -182,7 +201,7 @@ export default async function itemRoutes(app: FastifyInstance) {
     return reply.status(201).send(ok(serializeItem(created), 'เพิ่มวัตถุดิบสำเร็จ'));
   });
 
-  app.patch('/:id', { preHandler: MANAGE }, async (req, reply) => {
+  app.patch('/:id', { preHandler: EDIT }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = upsertSchema.partial().parse(req.body);
     const existing = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! } });
@@ -212,7 +231,7 @@ export default async function itemRoutes(app: FastifyInstance) {
   });
 
   // ปิดการใช้งาน (soft) — ไม่ hard delete วัตถุดิบที่อาจถูกใช้ในสูตร
-  app.post('/:id/deactivate', { preHandler: MANAGE }, async (req, reply) => {
+  app.post('/:id/deactivate', { preHandler: EDIT }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const existing = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! } });
     if (!existing) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
@@ -221,7 +240,7 @@ export default async function itemRoutes(app: FastifyInstance) {
     return ok(serializeItem(updated), 'ปิดการใช้งานวัตถุดิบแล้ว');
   });
 
-  app.post('/:id/activate', { preHandler: MANAGE }, async (req, reply) => {
+  app.post('/:id/activate', { preHandler: EDIT }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const existing = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! } });
     if (!existing) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
@@ -239,7 +258,7 @@ export default async function itemRoutes(app: FastifyInstance) {
     return ok(history.map(parsePriceRow));
   });
 
-  app.post('/:id/prices', { preHandler: MANAGE }, async (req, reply) => {
+  app.post('/:id/prices', { preHandler: EDIT }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = priceSchema.parse(req.body);
     const item = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! } });

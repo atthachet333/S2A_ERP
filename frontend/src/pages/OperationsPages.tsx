@@ -1,8 +1,79 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { AlertTriangle, Boxes, CheckCircle2, ClipboardCheck, FileDown, PackageCheck, Plus, Search, Trash2, Truck, Warehouse } from 'lucide-react';
+import { AlertTriangle, Boxes, CheckCircle2, ClipboardCheck, FileDown, PackageCheck, Plus, Search, Trash2, Truck, Warehouse, X, Loader2 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
+import { useAuth } from '@/auth/AuthContext';
+import { useI18n } from '@/i18n/i18n';
+import CreatableCombobox from '@/components/ui/CreatableCombobox';
+
+type UnitOption = { id: string; code: string; name: string; isActive: boolean };
+type CreateState = { kind: 'warehouse' | 'supplier' | 'item'; prefill: string; lineKey?: string };
+
+/** Modal สร้าง master data ใหม่จากหน้ารับของ (คลัง/ซัพพลายเออร์/สินค้า) — persist + auto-select */
+function MasterCreateModal({ state, units, onClose, onCreated }: {
+  state: CreateState; units: UnitOption[];
+  onClose: () => void;
+  onCreated: (kind: CreateState['kind'], created: { id: string; code: string; name: string }, lineKey?: string) => void;
+}) {
+  const { messages } = useI18n(); const t = messages.receiving; const { toast } = useToast();
+  const [name, setName] = useState(state.prefill);
+  const [code, setCode] = useState('');
+  const [phone, setPhone] = useState(''); const [taxId, setTaxId] = useState('');
+  const [type, setType] = useState<'RAW_MATERIAL' | 'PACKAGING'>('RAW_MATERIAL');
+  const [baseUnitId, setBaseUnitId] = useState(units[0]?.id ?? '');
+  const [saving, setSaving] = useState(false); const [error, setError] = useState('');
+  const titleMap = { warehouse: t.addWarehouse, supplier: t.addSupplier, item: t.addItem };
+
+  const save = async () => {
+    if (!name.trim()) { setError(t.nameRequired); return; }
+    setSaving(true); setError('');
+    try {
+      let created: { id: string; code: string; name: string };
+      if (state.kind === 'warehouse') {
+        created = await apiClient.post('/business/warehouses', { name: name.trim(), code: code.trim() || undefined });
+        toast({ title: t.warehouseCreated, variant: 'success' });
+      } else if (state.kind === 'supplier') {
+        created = await apiClient.post('/business/suppliers', { name: name.trim(), code: code.trim() || undefined, phone: phone || undefined, taxId: taxId || undefined });
+        toast({ title: t.supplierCreated, variant: 'success' });
+      } else {
+        created = await apiClient.post('/business/receiving-items', { name: name.trim(), code: code.trim() || undefined, type, baseUnitId });
+        toast({ title: t.itemCreated, variant: 'success' });
+      }
+      onCreated(state.kind, created, state.lineKey);
+    } catch (e) { setError(e instanceof Error ? e.message : 'error'); setSaving(false); }
+  };
+
+  return (
+    <div className="dialog-backdrop" onMouseDown={onClose}>
+      <div className="dialog" style={{ width: 'min(100%, 460px)' }} onMouseDown={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <h3 style={{ margin: 0 }}>{titleMap[state.kind]}</h3>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={messages.common.close}><X aria-hidden width={16} /></button>
+        </div>
+        {error && <div className="alert" style={{ marginBottom: 10 }}>{error}</div>}
+        <div style={{ display: 'grid', gap: 10 }}>
+          <label>{t.name} *<input autoFocus value={name} onChange={(e) => setName(e.target.value)} /></label>
+          <label>{t.code}<input value={code} onChange={(e) => setCode(e.target.value)} /></label>
+          {state.kind === 'supplier' && <>
+            <label>{t.phone}<input value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
+            <label>{t.taxId}<input value={taxId} onChange={(e) => setTaxId(e.target.value)} /></label>
+          </>}
+          {state.kind === 'item' && <>
+            <label>{t.type}<select value={type} onChange={(e) => setType(e.target.value as 'RAW_MATERIAL' | 'PACKAGING')}><option value="RAW_MATERIAL">{t.ingredient}</option><option value="PACKAGING">{t.packaging}</option></select></label>
+            <label>{t.baseUnit} *<select value={baseUnitId} onChange={(e) => setBaseUnitId(e.target.value)}>{units.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.code})</option>)}</select></label>
+          </>}
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>{messages.common.cancel}</button>
+          <button type="button" className="btn primary" onClick={() => void save()} disabled={saving || (state.kind === 'item' && !baseUnitId)}>
+            {saving ? <Loader2 className="spin" aria-hidden /> : <Plus aria-hidden />}{saving ? t.saving : messages.common.save}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type WarehouseOption = { id: string; code: string; name: string };
 type Supplier = { id: string; code: string; name: string };
@@ -30,18 +101,30 @@ function Kpis({ items }: { items: { label: string; value: string | number; icon:
 
 export function ReceivingPage() {
   const {toast}=useToast();
+  const { user } = useAuth(); const { messages } = useI18n(); const rt = messages.receiving;
+  const canCreate = Boolean(user?.roles.includes('SUPER_ADMIN') || user?.permissions.includes('RECEIVING_CREATE'));
   const navigate = useNavigate(); const { pathname } = useLocation(); const creating = pathname.endsWith('/new');
-  const [receipts, setReceipts] = useState<Receipt[]>([]); const [lookups, setLookups] = useState<Lookups>(); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [query, setQuery] = useState('');
+  const [receipts, setReceipts] = useState<Receipt[]>([]); const [lookups, setLookups] = useState<Lookups>(); const [units, setUnits] = useState<UnitOption[]>([]); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [query, setQuery] = useState('');
   const [lines, setLines] = useState<ReceiptLine[]>([freshReceiptLine()]);
-  const load = async () => { try { const [history, options] = await Promise.all([apiClient.get<Receipt[]>('/business/receiving'), apiClient.get<Lookups>('/business/operations/lookups')]); setReceipts(history); setLookups(options); } catch (reason) { setError(reason instanceof Error ? reason.message : 'โหลดข้อมูลงานรับของไม่สำเร็จ'); } };
+  const [warehouseId, setWarehouseId] = useState(''); const [supplierId, setSupplierId] = useState('');
+  const [create, setCreate] = useState<CreateState | null>(null);
+  const load = async () => { try { const [history, options, unitList] = await Promise.all([apiClient.get<Receipt[]>('/business/receiving'), apiClient.get<Lookups>('/business/operations/lookups'), apiClient.get<UnitOption[]>('/units')]); setReceipts(history); setLookups(options); setUnits(unitList.filter((u) => u.isActive)); } catch (reason) { setError(reason instanceof Error ? reason.message : 'โหลดข้อมูลงานรับของไม่สำเร็จ'); } };
   useEffect(() => { void load(); }, []);
   const total = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0); const filtered = receipts.filter((r) => `${r.receiptNo} ${r.supplier?.name ?? ''}`.toLowerCase().includes(query.toLowerCase()));
   const updateLine = (key: string, field: keyof ReceiptLine, value: string | number) => setLines((current) => current.map((line) => line.key === key ? { ...line, [field]: value } : line));
-  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (busy) return; setBusy(true); setError(''); const data = new FormData(event.currentTarget); try { await apiClient.post('/business/receiving', { receiptNo: data.get('receiptNo'), warehouseId: data.get('warehouseId'), supplierId: data.get('supplierId') || undefined, receiptDate: data.get('receiptDate'), note: data.get('note') || undefined, items: lines.map(({ itemId, quantity, unitPrice, lotNo, expiryDate }) => ({ itemId, quantity, unitPrice, lotNo: lotNo || undefined, expiryDate: expiryDate || undefined })) }); await load(); toast({title:'รับของเข้าสำเร็จ',description:'Stock เพิ่มและ Price History ถูกบันทึกเรียบร้อยแล้ว',variant:'success'}); navigate('/receiving'); } catch (reason) { const message=reason instanceof Error ? reason.message : 'ยืนยันการรับของไม่สำเร็จ';setError(message);toast({title:'รับของเข้าไม่สำเร็จ',description:message,variant:'error'}); } finally { setBusy(false); } };
+  // สร้าง master data ใหม่แล้ว refetch + auto-select ทันที
+  const onCreated = async (kind: CreateState['kind'], created: { id: string; code: string; name: string }, lineKey?: string) => {
+    await load();
+    if (kind === 'warehouse') setWarehouseId(created.id);
+    else if (kind === 'supplier') setSupplierId(created.id);
+    else if (kind === 'item' && lineKey) setLines((cur) => cur.map((l) => l.key === lineKey ? { ...l, itemId: created.id } : l));
+    setCreate(null);
+  };
+  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (busy) return; if (!warehouseId) { setError('กรุณาเลือกคลัง'); return; } setBusy(true); setError(''); const data = new FormData(event.currentTarget); try { await apiClient.post('/business/receiving', { receiptNo: data.get('receiptNo'), warehouseId, supplierId: supplierId || undefined, receiptDate: data.get('receiptDate'), note: data.get('note') || undefined, items: lines.map(({ itemId, quantity, unitPrice, lotNo, expiryDate }) => ({ itemId, quantity, unitPrice, lotNo: lotNo || undefined, expiryDate: expiryDate || undefined })) }); await load(); toast({title:'รับของเข้าสำเร็จ',description:'Stock เพิ่มและ Price History ถูกบันทึกเรียบร้อยแล้ว',variant:'success'}); navigate('/receiving'); } catch (reason) { const message=reason instanceof Error ? reason.message : 'ยืนยันการรับของไม่สำเร็จ';setError(message);toast({title:'รับของเข้าไม่สำเร็จ',description:message,variant:'error'}); } finally { setBusy(false); } };
   if (creating) return <section className="ops-page"><WorkspaceHero eyebrow="GOODS RECEIPT WORKSPACE" title="รับวัตถุดิบ / บรรจุภัณฑ์เข้า" description="บันทึกการรับ เพิ่ม Stock และเก็บประวัติราคาซื้อในธุรกรรมเดียว" action={<Link className="ops-secondary" to="/receiving">กลับหน้ารายการ</Link>}/>{error && <div className="auth-alert">{error}</div>}<form className="ops-form-layout" onSubmit={(e) => void submit(e)}><main>
-    <section className="ops-section"><div className="ops-section-title"><Truck/><div><h2>ข้อมูลการรับ</h2><p>ระบุเอกสาร คลัง และคู่ค้าของรายการรับครั้งนี้</p></div></div><div className="ops-fields"><label>เลขที่รับ<input name="receiptNo" defaultValue={`GR-${Date.now().toString().slice(-8)}`} required/></label><label>วันที่รับ<input name="receiptDate" type="date" defaultValue={today()} required/></label><label>คลัง<select name="warehouseId" required><option value="">เลือกคลัง</option>{lookups?.warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</select></label><label>Supplier<select name="supplierId"><option value="">ไม่ระบุ</option>{lookups?.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label className="wide">หมายเหตุ<textarea name="note" placeholder="รายละเอียดการรับหรือเลขเอกสารอ้างอิง"/></label></div></section>
-    <section className="ops-section"><div className="ops-section-title"><Boxes/><div><h2>รายการรับเข้า</h2><p>ค่าปริมาณรวมและต้นทุนคำนวณจากข้อมูลจริงในแต่ละแถว</p></div><button type="button" onClick={() => setLines((v) => [...v, freshReceiptLine()])}><Plus/> เพิ่มรายการ</button></div><div className="ops-line-table receipt-lines"><div className="ops-line-head"><span>รายการ</span><span>จำนวน</span><span>ราคาซื้อ</span><span>ระบบคำนวณ</span><span>Lot / หมดอายุ</span><span/></div>{lines.map((line) => { const item = lookups?.items.find((entry) => entry.id === line.itemId); return <div className="ops-line" key={line.key}><select value={line.itemId} onChange={(e) => { const selected = lookups?.items.find((i) => i.id === e.target.value); updateLine(line.key, 'itemId', e.target.value); if (selected && !line.unitPrice) updateLine(line.key, 'unitPrice', Number(selected.lastCost)); }} required><option value="">เลือกวัตถุดิบ / บรรจุภัณฑ์</option>{lookups?.items.map((i) => <option key={i.id} value={i.id}>{i.code} · {i.name}</option>)}</select><label><input type="number" min="0.0001" step="0.0001" value={line.quantity} onChange={(e) => updateLine(line.key, 'quantity', Number(e.target.value))}/><small>{item?.purchaseUnit?.code ?? item?.baseUnit.code ?? 'หน่วย'}</small></label><input type="number" min="0" step="0.01" value={line.unitPrice} onChange={(e) => updateLine(line.key, 'unitPrice', Number(e.target.value))}/><div className="calculated"><small>ระบบคำนวณ</small><strong>{money(line.quantity * line.unitPrice)}</strong><span>{item ? `${line.quantity * Number(item.purchaseToBaseFactor)} ${item.baseUnit.code}` : '—'}</span></div><div className="lot-fields"><input placeholder="Lot" value={line.lotNo} onChange={(e) => updateLine(line.key, 'lotNo', e.target.value)}/><input type="date" value={line.expiryDate} onChange={(e) => updateLine(line.key, 'expiryDate', e.target.value)}/></div><button type="button" className="remove-line" disabled={lines.length === 1} onClick={() => setLines((v) => v.filter((x) => x.key !== line.key))}><Trash2/></button></div>; })}</div></section>
-  </main><aside className="ops-summary"><small>RECEIPT SUMMARY</small><h2>สรุปการรับ</h2><dl><div><dt>จำนวนรายการ</dt><dd>{lines.filter((l) => l.itemId).length}</dd></div><div><dt>มี Lot</dt><dd>{lines.filter((l) => l.lotNo).length}</dd></div><div><dt>มีวันหมดอายุ</dt><dd>{lines.filter((l) => l.expiryDate).length}</dd></div><div className="total"><dt>มูลค่ารับรวม</dt><dd>{money(total)}</dd></div></dl><div className="ops-confirm-note"><CheckCircle2/><span>เมื่อยืนยัน Stock จะเพิ่มและ Price History จะถูกบันทึก</span></div><button className="ops-primary" disabled={busy || !lines.every((l) => l.itemId)}><PackageCheck/>{busy ? 'กำลังบันทึก…' : 'ยืนยันรับของ'}</button></aside></form></section>;
+    <section className="ops-section"><div className="ops-section-title"><Truck/><div><h2>ข้อมูลการรับ</h2><p>ระบุเอกสาร คลัง และคู่ค้าของรายการรับครั้งนี้</p></div></div><div className="ops-fields"><label>เลขที่รับ<input name="receiptNo" defaultValue={`GR-${Date.now().toString().slice(-8)}`} required/></label><label>วันที่รับ<input name="receiptDate" type="date" defaultValue={today()} required/></label><label>คลัง<CreatableCombobox value={warehouseId} onChange={setWarehouseId} options={(lookups?.warehouses ?? []).map((w) => ({ value: w.id, label: w.name, sublabel: w.code }))} placeholder={rt.selectWarehouse} searchPlaceholder={rt.searchWarehouse} emptyText={rt.noWarehouse} createLabel={canCreate ? rt.addWarehouse : undefined} onCreate={canCreate ? ((q) => setCreate({ kind: 'warehouse', prefill: q })) : undefined} ariaLabel={rt.selectWarehouse} /></label><label>Supplier<CreatableCombobox value={supplierId} onChange={setSupplierId} options={(lookups?.suppliers ?? []).map((s) => ({ value: s.id, label: s.name, sublabel: s.code }))} placeholder={rt.selectSupplier} searchPlaceholder={rt.searchSupplier} emptyText={rt.noSupplier} createLabel={canCreate ? rt.addSupplier : undefined} onCreate={canCreate ? ((q) => setCreate({ kind: 'supplier', prefill: q })) : undefined} ariaLabel={rt.selectSupplier} /></label><label className="wide">หมายเหตุ<textarea name="note" placeholder="รายละเอียดการรับหรือเลขเอกสารอ้างอิง"/></label></div></section>
+    <section className="ops-section"><div className="ops-section-title"><Boxes/><div><h2>รายการรับเข้า</h2><p>ค่าปริมาณรวมและต้นทุนคำนวณจากข้อมูลจริงในแต่ละแถว</p></div><button type="button" onClick={() => setLines((v) => [...v, freshReceiptLine()])}><Plus/> เพิ่มรายการ</button></div><div className="ops-line-table receipt-lines"><div className="ops-line-head"><span>รายการ</span><span>จำนวน</span><span>ราคาซื้อ</span><span>ระบบคำนวณ</span><span>Lot / หมดอายุ</span><span/></div>{lines.map((line) => { const item = lookups?.items.find((entry) => entry.id === line.itemId); return <div className="ops-line" key={line.key}><CreatableCombobox value={line.itemId} onChange={(val) => { updateLine(line.key, 'itemId', val); const selected = lookups?.items.find((i) => i.id === val); if (selected && !line.unitPrice) updateLine(line.key, 'unitPrice', Number(selected.lastCost)); }} options={(lookups?.items ?? []).map((i) => ({ value: i.id, label: i.name, sublabel: `${i.code} · ${i.baseUnit.code}` }))} placeholder={rt.selectItem} searchPlaceholder={rt.searchItem} emptyText={rt.noItem} createLabel={canCreate ? rt.addItem : undefined} onCreate={canCreate ? ((q) => setCreate({ kind: 'item', prefill: q, lineKey: line.key })) : undefined} ariaLabel={rt.selectItem} /><label><input type="number" min="0.0001" step="0.0001" value={line.quantity} onChange={(e) => updateLine(line.key, 'quantity', Number(e.target.value))}/><small>{item?.purchaseUnit?.code ?? item?.baseUnit.code ?? 'หน่วย'}</small></label><input type="number" min="0" step="0.01" value={line.unitPrice} onChange={(e) => updateLine(line.key, 'unitPrice', Number(e.target.value))}/><div className="calculated"><small>ระบบคำนวณ</small><strong>{money(line.quantity * line.unitPrice)}</strong><span>{item ? `${line.quantity * Number(item.purchaseToBaseFactor)} ${item.baseUnit.code}` : '—'}</span></div><div className="lot-fields"><input placeholder="Lot" value={line.lotNo} onChange={(e) => updateLine(line.key, 'lotNo', e.target.value)}/><input type="date" value={line.expiryDate} onChange={(e) => updateLine(line.key, 'expiryDate', e.target.value)}/></div><button type="button" className="remove-line" disabled={lines.length === 1} onClick={() => setLines((v) => v.filter((x) => x.key !== line.key))}><Trash2/></button></div>; })}</div></section>
+  </main><aside className="ops-summary"><small>RECEIPT SUMMARY</small><h2>สรุปการรับ</h2><dl><div><dt>จำนวนรายการ</dt><dd>{lines.filter((l) => l.itemId).length}</dd></div><div><dt>มี Lot</dt><dd>{lines.filter((l) => l.lotNo).length}</dd></div><div><dt>มีวันหมดอายุ</dt><dd>{lines.filter((l) => l.expiryDate).length}</dd></div><div className="total"><dt>มูลค่ารับรวม</dt><dd>{money(total)}</dd></div></dl><div className="ops-confirm-note"><CheckCircle2/><span>เมื่อยืนยัน Stock จะเพิ่มและ Price History จะถูกบันทึก</span></div><button className="ops-primary" disabled={busy || !warehouseId || !lines.every((l) => l.itemId)}><PackageCheck/>{busy ? 'กำลังบันทึก…' : 'ยืนยันรับของ'}</button></aside></form>{create && <MasterCreateModal state={create} units={units} onClose={() => setCreate(null)} onCreated={onCreated} />}</section>;
   const receivedToday = receipts.filter((r) => r.receiptDate.slice(0,10) === today()); const valueToday = receivedToday.flatMap((r) => r.items).reduce((s,i) => s + Number(i.totalCost), 0);
   return <section className="ops-page"><WorkspaceHero eyebrow="INBOUND OPERATIONS" title="รับของเข้า" description="ติดตามวัตถุดิบและบรรจุภัณฑ์ที่เพิ่มเข้าคลัง พร้อมประวัติราคาและ Lot" action={<Link className="ops-primary link" to="/receiving/new"><Plus/> รับของเข้า</Link>}/><Kpis items={[{label:'รับวันนี้',value:receivedToday.length,icon:Truck},{label:'จำนวนรายการวันนี้',value:receivedToday.flatMap((r)=>r.items).length,icon:Boxes},{label:'มูลค่ารับวันนี้',value:money(valueToday),icon:PackageCheck},{label:'เอกสารทั้งหมด',value:receipts.length,icon:ClipboardCheck}]}/><div className="ops-toolbar"><Search/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="ค้นหาเลขที่รับหรือ Supplier"/></div>{error&&<div className="auth-alert">{error}</div>}<div className="ops-history-table"><div className="ops-history-head"><span>เลขที่รับ</span><span>วันที่</span><span>Supplier / คลัง</span><span>รายการ</span><span>มูลค่ารวม</span><span>เอกสาร</span></div>{filtered.map((receipt)=><article key={receipt.id}><strong>{receipt.receiptNo}</strong><span>{new Date(receipt.receiptDate).toLocaleDateString('th-TH')}</span><span>{receipt.supplier?.name ?? 'ไม่ระบุ'}<small>{receipt.warehouse.name}</small></span><span>{receipt.items.length}</span><span className="money">{money(receipt.items.reduce((s,i)=>s+Number(i.totalCost),0))}</span><button className="doc-action" onClick={()=>void openDocument(`/business/documents/GOODS_RECEIPT_SLIP/${receipt.id}.pdf`)}><FileDown/> PDF</button></article>)}</div>{!filtered.length&&<div className="business-empty"><Truck/><h2>ยังไม่มีรายการรับของ</h2><p>เริ่มรับของเพื่อเพิ่ม Stock และบันทึกราคาซื้อจริง</p><Link to="/receiving/new">+ รับของเข้า</Link></div>}</section>;
 }

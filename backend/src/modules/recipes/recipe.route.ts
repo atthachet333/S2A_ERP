@@ -3,11 +3,13 @@ import { z } from 'zod';
 import { Prisma, ItemType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
-import { requireCompany } from '../auth/auth.guard.js';
-import { requireRoles, writeAudit, num } from '../../lib/http.js';
+import { requireCompany, requirePermission } from '../auth/auth.guard.js';
+import { writeAudit, num } from '../../lib/http.js';
 import { computeRecipeCost, type CostIngredientInput } from '../../lib/costing.js';
 
-const MANAGE = requireRoles('ADMIN', 'PRODUCTION', 'CHEF', 'COSTING_STAFF');
+// สิทธิ์แบบ permission-code: สร้างสูตรใหม่ = RECIPE_CREATE, เพิ่มเวอร์ชัน = RECIPE_EDIT
+const CREATE = requirePermission('RECIPE_CREATE');
+const EDIT = requirePermission('RECIPE_EDIT', 'RECIPE_CREATE');
 
 const ingredientSchema = z.object({
   itemId: z.string().min(1),
@@ -190,7 +192,7 @@ export default async function recipeRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post('/', { preHandler: MANAGE }, async (req, reply) => {
+  app.post('/', { preHandler: CREATE }, async (req, reply) => {
     const body = createRecipeSchema.parse(req.body);
     const companyId = req.user.companyId!;
     const product = body.productId
@@ -221,7 +223,7 @@ export default async function recipeRoutes(app: FastifyInstance) {
     return reply.status(201).send(ok({ id: result.recipe.id, code, versionNo: 1, cost: result.breakdown, menuCreated: result.menuCreated }, 'สร้างสูตรสำเร็จ'));
   });
 
-  app.post('/:id/versions', { preHandler: MANAGE }, async (req, reply) => {
+  app.post('/:id/versions', { preHandler: EDIT }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = newVersionSchema.parse(req.body);
     const recipe = await prisma.recipe.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! }, include: { versions: { orderBy: { versionNo: 'desc' }, take: 1 } } });

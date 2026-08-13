@@ -109,6 +109,14 @@ model User {
   mustChangePassword Boolean   @default(true)
   lastLoginAt        DateTime?
 
+  // วงจรการสมัครใช้งานจากหน้าเว็บ (Issue 4) — null = บัญชีที่สร้างโดยผู้ดูแล/seed (ไม่ใช่คำขอสมัคร)
+  registrationStatus String?   // PENDING | APPROVED | REJECTED
+  approvedAt         DateTime?
+  approvedById       String?
+  rejectedAt         DateTime?
+  rejectedById       String?
+  rejectionReason    String?
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -125,6 +133,7 @@ model User {
   notificationPreferences NotificationPreference[]
 
   @@index([isActive])
+  @@index([registrationStatus])
   @@map("users")
 }
 
@@ -888,7 +897,10 @@ model Customer {
   contactName  String?
   phone        String?
   email        String?
-  address      String?
+  address      String? // ที่อยู่จัดส่ง
+  billingAddress String? // ที่อยู่ออกใบกำกับภาษี (ถ้าต่างจากที่อยู่จัดส่ง)
+  lineId       String?
+  branch       String? // สาขา / แผนก
   taxId        String?
   note         String?
   isActive     Boolean      @default(true)

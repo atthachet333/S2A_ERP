@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { Prisma, ItemType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
-import { requireCompany } from '../auth/auth.guard.js';
-import { requireRoles, writeAudit, num } from '../../lib/http.js';
+import { requireCompany, requirePermission } from '../auth/auth.guard.js';
+import { writeAudit, num } from '../../lib/http.js';
 
-const MANAGE = requireRoles('ADMIN', 'PRODUCTION', 'SALES');
+// เมนู (FINISHED_GOOD) ผูกกับสูตร/ราคาขาย — ให้ผู้จัดการสูตรหรือราคาขายดูแลได้
+const MANAGE = requirePermission('RECIPE_CREATE', 'RECIPE_EDIT', 'PRICING_EDIT');
 
 /**
  * เมนูอาหาร = Item ประเภท FINISHED_GOOD (ตาม architecture เดิม — ไม่สร้าง model ซ้ำ)

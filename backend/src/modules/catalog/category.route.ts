@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { ItemType } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
-import { requireCompany } from '../auth/auth.guard.js';
-import { requireRoles, writeAudit } from '../../lib/http.js';
+import { requireCompany, requirePermission } from '../auth/auth.guard.js';
+import { writeAudit } from '../../lib/http.js';
 
-const MANAGE = requireRoles('ADMIN', 'PURCHASING', 'PRODUCTION');
+// หมวดหมู่ใช้ร่วมทั้งวัตถุดิบ/บรรจุภัณฑ์ — ให้ผู้ที่จัดการ master data เหล่านั้นแก้ไขได้
+const MANAGE = requirePermission('INGREDIENT_CREATE', 'PACKAGING_CREATE', 'INGREDIENT_EDIT', 'PACKAGING_EDIT');
 
 const createSchema = z.object({
   code: z.string().trim().min(1).max(30),

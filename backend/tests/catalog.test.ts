@@ -96,6 +96,23 @@ describe.sequential('catalog + recipe + costing integration', () => {
     expect(res.json().data.lastCost).toBeCloseTo(3.5, 6);
   });
 
+  it('วัตถุดิบและบรรจุภัณฑ์ที่เพิ่งสร้างปรากฏใน /items/selectable ทันที (Issue 1)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/items/selectable', headers: auth() });
+    expect(res.statusCode).toBe(200);
+    const rows = res.json().data as Array<{ id: string; type: ItemType }>;
+    const ids = rows.map((row) => row.id);
+    // รายการที่เพิ่งสร้างในบริษัทเดียวกันต้องเลือกได้ทันที
+    expect(ids).toContain(itemId);
+    expect(ids).toContain(packagingId);
+    // selectable คืนเฉพาะ RAW_MATERIAL/PACKAGING เท่านั้น (ไม่ปนเมนู/สินค้าสำเร็จรูป)
+    expect(rows.every((row) => row.type === ItemType.RAW_MATERIAL || row.type === ItemType.PACKAGING)).toBe(true);
+    // กรองตามชนิดได้
+    const pkgOnly = await app.inject({ method: 'GET', url: '/api/items/selectable?type=PACKAGING', headers: auth() });
+    const pkgIds = (pkgOnly.json().data as Array<{ id: string }>).map((row) => row.id);
+    expect(pkgIds).toContain(packagingId);
+    expect(pkgIds).not.toContain(itemId);
+  });
+
   it('บันทึกราคาซื้อใหม่แล้วอัปเดต lastCost', async () => {
     const res = await app.inject({ method: 'POST', url: `/api/items/${itemId}/prices`, headers: auth(), payload: { purchasePrice: 200, purchaseQuantity: 1 } });
     expect(res.statusCode).toBe(201);

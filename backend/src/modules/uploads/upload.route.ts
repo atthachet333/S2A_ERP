@@ -5,7 +5,8 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { env } from '../../config/env.js';
 import { fail, ok } from '../../lib/response.js';
-import { requireRoles, writeAudit } from '../../lib/http.js';
+import { requirePermission } from '../auth/auth.guard.js';
+import { writeAudit } from '../../lib/http.js';
 
 /**
  * Image upload ที่ปลอดภัย (PART 10)
@@ -15,7 +16,8 @@ import { requireRoles, writeAudit } from '../../lib/http.js';
  * - GET เสิร์ฟรูปแบบ read-only ด้วยชื่อไฟล์ที่ผ่าน whitelist เท่านั้น
  */
 const KINDS = new Set(['items', 'menus']);
-const MANAGE = requireRoles('ADMIN', 'PURCHASING', 'PRODUCTION', 'SALES');
+// อัปโหลดรูปวัตถุดิบ/บรรจุภัณฑ์/เมนู — ให้ผู้ที่จัดการรายการเหล่านั้นอัปโหลดได้
+const MANAGE = requirePermission('INGREDIENT_CREATE', 'PACKAGING_CREATE', 'INGREDIENT_EDIT', 'PACKAGING_EDIT', 'RECIPE_CREATE', 'RECIPE_EDIT');
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',

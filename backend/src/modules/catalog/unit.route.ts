@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
-import { requirePasswordChanged } from '../auth/auth.guard.js';
-import { requireRoles, writeAudit } from '../../lib/http.js';
+import { requirePasswordChanged, requirePermission } from '../auth/auth.guard.js';
+import { writeAudit } from '../../lib/http.js';
 
-const MANAGE = requireRoles('ADMIN', 'PURCHASING', 'PRODUCTION');
+// หน่วยเป็น master data ที่ใช้ร่วม — ผู้ที่สร้าง/แก้วัตถุดิบ/บรรจุภัณฑ์เพิ่มหน่วยได้
+const MANAGE = requirePermission('INGREDIENT_CREATE', 'PACKAGING_CREATE', 'INGREDIENT_EDIT', 'PACKAGING_EDIT');
 
 const createSchema = z.object({
   code: z.string().trim().min(1).max(20),

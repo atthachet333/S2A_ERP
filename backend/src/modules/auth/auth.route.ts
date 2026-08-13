@@ -28,7 +28,7 @@ export default async function authRoutes(app: FastifyInstance) {
     const passwordHash = await bcrypt.hash(body.password, 12);
     try {
       const user = await prisma.$transaction(async (tx) => {
-        const created = await tx.user.create({ data: { fullName: body.fullName, username: body.username.toLowerCase(), email: body.email.toLowerCase(), passwordHash, mustChangePassword: false, isActive: true } });
+        const created = await tx.user.create({ data: { fullName: body.fullName, username: body.username.toLowerCase(), email: body.email.toLowerCase(), passwordHash, mustChangePassword: false, isActive: true, registrationStatus: 'PENDING' } });
         await tx.auditLog.create({ data: { userId: created.id, action: 'USER_SELF_REGISTERED', entity: 'User', entityId: created.id, ip: req.ip, after: { username: created.username, email: created.email, membershipCount: 0, verificationConfigured: false } } });
         return created;
       });

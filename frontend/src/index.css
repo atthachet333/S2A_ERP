@@ -226,7 +226,7 @@ input:focus { border-color: var(--blue-600); box-shadow: 0 0 0 3px rgba(42,112,1
 .app-main { position: relative; z-index: 1; margin-left: var(--sbw); min-height: 100vh; display: flex; flex-direction: column; transition: margin-left .22s ease; }
 .app-header {
   position: sticky; top: 0; z-index: 30; height: var(--header-h); display: flex; align-items: center; gap: 16px;
-  padding: 0 24px; background: rgba(255,255,255,.82); backdrop-filter: blur(10px);
+  padding: 0 24px; background: var(--surface-glass); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
 }
 .header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -262,15 +262,35 @@ input:focus { border-color: var(--blue-600); box-shadow: 0 0 0 3px rgba(42,112,1
 .user-trigger .um-text { text-align: left; line-height: 1.2; }
 .user-trigger .um-text strong { display: block; font-size: 13px; }
 .user-trigger .um-text span { display: block; font-size: 11px; color: var(--text-subtle); }
-.user-pop { position: absolute; right: 0; top: calc(100% + 8px); width: 240px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-pop); padding: 8px; z-index: 50; }
-.user-pop-head { padding: 10px 10px 12px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
-.user-pop-head strong { display: block; }
-.user-pop-head span { font-size: 12px; color: var(--text-muted); }
-.user-pop button, .user-pop a { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; background: transparent; border-radius: 9px; color: var(--text); cursor: pointer; font-size: 13.5px; text-decoration: none; text-align: left; }
-.user-pop button:hover, .user-pop a:hover { background: var(--surface-2); }
-.user-pop .danger { color: var(--danger); }
-.user-pop .danger:hover { background: var(--danger-bg); }
+.user-pop { position: absolute; right: 0; top: calc(100% + 10px); width: 300px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-pop); padding: 8px; z-index: 50; animation: slide-in .16s ease; }
+/* Profile header */
+.up-profile { display: flex; align-items: center; gap: 12px; padding: 12px 10px 10px; }
+.up-profile .up-id { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.up-profile .up-id strong { font-size: 14.5px; color: var(--text); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-profile .up-role { font-size: 11.5px; font-weight: 700; letter-spacing: .02em; color: var(--gold); text-transform: none; }
+.up-profile .up-email { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Company chip */
+.up-company { display: flex; align-items: center; gap: 10px; margin: 4px 4px 2px; padding: 9px 11px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--border); }
+.up-company svg { width: 17px; height: 17px; color: var(--blue); flex: none; }
+.up-company small { display: block; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-subtle); }
+.up-company strong { display: block; font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-divider { height: 1px; background: var(--border); margin: 8px 4px; }
+/* Theme segmented control */
+.up-theme { display: flex; align-items: center; gap: 8px; padding: 2px 6px 8px; }
+.up-theme .up-theme-label { font-size: 12.5px; color: var(--text-muted); font-weight: 600; }
+.theme-seg { margin-left: auto; display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); gap: 2px; }
+.theme-seg button { display: grid; place-items: center; width: 34px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--text-subtle); cursor: pointer; transition: background .14s ease, color .14s ease; }
+.theme-seg button svg { width: 15px; height: 15px; }
+.theme-seg button:hover { color: var(--text); }
+.theme-seg button.active { background: var(--surface); color: var(--blue); box-shadow: var(--shadow-sm); }
+/* Menu items */
+.user-pop button.up-item, .user-pop a.up-item { display: flex; align-items: center; gap: 11px; width: 100%; padding: 10px 11px; border: 0; background: transparent; border-radius: 10px; color: var(--text); cursor: pointer; font-size: 13.5px; font-weight: 500; text-decoration: none; text-align: left; transition: background .14s ease; }
+.user-pop button.up-item:hover, .user-pop a.up-item:hover { background: var(--blue-100); color: var(--blue); }
+.user-pop .up-item.danger { color: var(--danger); }
+.user-pop .up-item.danger:hover { background: var(--danger-bg); color: var(--danger); }
 .user-pop svg { width: 17px; height: 17px; }
+/* Header quick theme toggle */
+.theme-toggle-btn svg { width: 18px; height: 18px; }
 
 .app-content { flex: 1; padding: 26px 24px 40px; }
 .content-container { max-width: var(--content-max); margin: 0 auto; animation: fade-in .3s ease; }
@@ -588,3 +608,107 @@ input:focus { border-color: var(--blue-600); box-shadow: 0 0 0 3px rgba(42,112,1
 .content-container:has(.item-list-workspace){max-width:none;width:100%}.item-list-workspace,.item-list-workspace .items-surface,.item-list-workspace .table-wrap,.item-list-workspace .data-table{width:100%}.item-list-workspace .data-table{min-width:1180px;table-layout:auto}.item-list-workspace .item-name-col{min-width:220px}.item-list-workspace .toolbar .search-box{max-width:520px}.item-list-workspace .item-card-grid{grid-template-columns:repeat(4,minmax(0,1fr))}@media(max-width:1500px){.item-list-workspace .item-card-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:1100px){.item-list-workspace .item-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:700px){.item-list-workspace .item-card-grid{grid-template-columns:1fr}}
 .unit-picker-row{display:flex;gap:8px}.unit-picker-row select{flex:1}.unit-picker-row .btn{white-space:nowrap}.conversion-sentence{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:14px;padding:16px;border:1px solid #d7e3ef;border-radius:14px;background:#f7faff}.conversion-sentence>span,.conversion-sentence>label{display:grid;grid-template-columns:80px 1fr;align-items:center;gap:8px}.conversion-sentence b{height:44px;display:grid;place-items:center;border:1px solid var(--border);border-radius:10px;background:#fff}.conversion-sentence em{font-style:normal;font-weight:700;color:var(--navy)}.conversion-sentence>strong{padding-bottom:12px}.modal-backdrop{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;background:rgba(3,14,27,.58);backdrop-filter:blur(5px)}.unit-modal{width:min(100%,480px);display:grid;gap:14px;padding:22px;border-radius:18px;background:#fff;box-shadow:0 28px 80px rgba(0,0,0,.28)}.unit-modal h2{margin:3px 0 0}.unit-modal>label{display:grid;gap:6px;font-weight:650}.unit-modal input,.unit-modal select{height:44px;border:1px solid var(--border);border-radius:10px;padding:0 12px;background:#fff}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}@media(max-width:650px){.unit-picker-row{align-items:stretch;flex-direction:column}.conversion-sentence{grid-template-columns:1fr}.conversion-sentence>strong{padding:0;text-align:center}.conversion-sentence>span,.conversion-sentence>label{grid-template-columns:70px 1fr}}
 .app-header{position:fixed!important;top:0;left:var(--sbw);right:0;width:auto;z-index:80;background:linear-gradient(90deg,#071d35 0%,#0b3154 55%,#0d4775 100%)!important}.app-content{padding-top:calc(var(--header-h) + 26px)}.app-header--scrolled{box-shadow:0 8px 30px rgba(7,29,53,.25)!important;backdrop-filter:blur(16px)}@media(max-width:760px){.app-header{left:0}.app-content{padding-top:calc(var(--header-h) + 18px)}}
+
+/* ============================================================
+   THEME TOKENS — light additions + dark overrides
+   ============================================================ */
+:root {
+  --surface-glass: rgba(255,255,255,.82);
+  --heading: var(--navy);
+  /* App header (top bar) — light mode: bright glass */
+  --header-bg: rgba(255,255,255,.86);
+  --header-bg-scrolled: rgba(255,255,255,.95);
+  --header-fg: var(--navy);
+  --header-fg-muted: var(--text-muted);
+  --header-border: var(--border);
+  --header-border-scrolled: var(--border-strong);
+  --header-shadow: 0 4px 16px rgba(15,41,74,.06);
+  --header-control-bg: var(--surface);
+  --header-control-border: var(--border);
+  --header-search-bg: var(--surface-2);
+  --primary-btn: linear-gradient(110deg, var(--navy), var(--blue));
+}
+
+:root.dark {
+  /* Surfaces */
+  --bg: #0b1522;
+  --bg-tint: #10203300;
+  --surface: #121f31;
+  --surface-2: #0e1a29;
+  --surface-muted: #0e1a29;
+  --border: #24384f;
+  --border-strong: #314863;
+  /* Text */
+  --text: #e8eef7;
+  --text-muted: #a3b4cb;
+  --text-subtle: #758aa3;
+  /* Blues / tints used across chips, hovers, selected states */
+  --blue-100: #16304d;
+  --blue-soft: #142a43;
+  --blue-light: #163049;
+  /* Status backgrounds (darker tints; foregrounds stay the semantic hues) */
+  --success-bg: #10352a;
+  --warning-bg: #3a2f16;
+  --danger-bg: #3a2029;
+  --info-bg: #16304d;
+  /* Glass + headings */
+  --surface-glass: rgba(13,24,38,.82);
+  --heading: #e8eef7;
+  /* Shadows deepen on dark */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.45);
+  --shadow-card: 0 8px 24px rgba(0,0,0,.5);
+  --shadow-pop: 0 18px 48px rgba(0,0,0,.62);
+  --grad-brand: linear-gradient(120deg, #0d2a49, #1263ad);
+  /* App header — dark mode: deep navy glass */
+  --header-bg: rgba(9,20,33,.9);
+  --header-bg-scrolled: rgba(7,17,29,.96);
+  --header-fg: #f1f6fc;
+  --header-fg-muted: #9fb2c8;
+  --header-border: rgba(198,161,91,.26);
+  --header-border-scrolled: rgba(198,161,91,.44);
+  --header-shadow: 0 6px 22px rgba(0,0,0,.5);
+  --header-control-bg: rgba(255,255,255,.08);
+  --header-control-border: rgba(255,255,255,.14);
+  --header-search-bg: rgba(255,255,255,.06);
+}
+
+/* Headings that were hardcoded to navy → readable in dark */
+:root.dark .dialog h3,
+:root.dark .placeholder-hero h1,
+:root.dark .conversion-sentence em,
+:root.dark .status-page h1 { color: var(--text); }
+/* Subtle grid texture reads on dark */
+:root.dark .app-shell::before {
+  background:
+    radial-gradient(1200px 500px at 100% -5%, rgba(56,148,230,.10), transparent 60%),
+    linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+  background-size: 100% 100%, 32px 32px, 32px 32px;
+}
+/* Native inputs/scrollbars follow the theme */
+:root.dark input, :root.dark textarea, :root.dark select { color-scheme: dark; }
+
+/* Tokenized app header (replaces the old hardcoded dark-navy !important block) */
+.app-header {
+  background: var(--header-bg) !important;
+  color: var(--header-fg);
+  border-bottom: 1px solid var(--header-border) !important;
+  box-shadow: var(--header-shadow) !important;
+  backdrop-filter: blur(16px) saturate(1.2);
+  transition: background .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.app-header--scrolled { background: var(--header-bg-scrolled) !important; border-bottom-color: var(--header-border-scrolled) !important; }
+.app-header .header-title h1, .app-header .breadcrumb span:last-child, .app-header .header-date strong { color: var(--header-fg) !important; }
+.app-header .breadcrumb, .app-header .header-date { color: var(--header-fg-muted); }
+.app-header .header-search { background: var(--header-search-bg); border-color: var(--header-control-border); color: var(--header-fg-muted); }
+.app-header .header-search:hover { border-color: var(--blue); }
+.app-header .header-search kbd, .app-header .icon-btn, .app-header .user-trigger, .app-header .sys-status, .app-header .header-company-context {
+  background: var(--header-control-bg); border-color: var(--header-control-border); color: var(--header-fg);
+}
+.app-header .user-trigger .um-text strong, .app-header .header-company-context strong { color: var(--header-fg); }
+.app-header .user-trigger .um-text span, .app-header .sys-dot, .app-header .header-company-context small { color: var(--header-fg-muted); }
+.app-header .sys-sep { background: var(--header-control-border); }
+.app-header .icon-btn:hover, .app-header .user-trigger:hover, .app-header .header-company-context:hover { border-color: var(--blue); background: var(--blue-100); }
+.app-header .icon-btn:hover { color: var(--blue); }
+.app-header .header-search:hover { background: var(--header-search-bg); }
+@media (prefers-reduced-motion: reduce) { .app-header { transition: none; } }

@@ -521,3 +521,93 @@ option { color: #12233a; background: #ffffff; }
 .recipe-menu-modes button.active{background:#fff;color:#17345c;font-weight:700}
 .recipe-new-menu{display:grid;grid-template-columns:minmax(160px,2fr) minmax(110px,1fr);gap:6px}
 .recipe-new-menu select{grid-column:1/-1}
+
+/* ===== Searchable combobox (Order customer picker / Receiving) — premium polish ===== */
+.s2a-combo{position:relative}
+.s2a-combo-trigger{display:flex;align-items:center;gap:9px;width:100%;min-height:46px;padding:11px 14px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.s2a-combo-trigger:hover:not(:disabled){border-color:var(--blue)}
+.s2a-combo-trigger:focus-visible{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(22,119,200,.2)}
+.s2a-combo-trigger:disabled{cursor:not-allowed;opacity:.6}
+.s2a-combo-trigger[data-placeholder="true"]{color:var(--text-muted)}
+.s2a-combo-trigger .combo-value{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:14.5px}
+.s2a-combo-trigger[data-placeholder="true"] .combo-value{font-weight:400}
+.s2a-combo-trigger .chev{margin-left:auto;color:var(--text-subtle);flex-shrink:0}
+.s2a-combo-panel{position:absolute;z-index:60;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-pop);padding:10px;max-height:360px;display:flex;flex-direction:column}
+.s2a-combo-search{max-width:none;margin-bottom:10px}
+.s2a-combo-search input{color:var(--text)!important;font-weight:500}
+.s2a-combo-search input::placeholder{color:var(--text-muted)}
+.s2a-combo-list{overflow-y:auto;display:flex;flex-direction:column;gap:3px;margin:0 -2px;padding:0 2px}
+.s2a-combo-option{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:0;border-radius:11px;background:transparent;text-align:left;cursor:pointer;transition:background .12s}
+.s2a-combo-option:disabled{cursor:not-allowed;opacity:.5}
+.s2a-combo-option .co-avatar{width:34px;height:34px;flex-shrink:0;border-radius:10px;display:grid;place-items:center;background:var(--blue-100);color:var(--blue);font-weight:700;font-size:12.5px}
+.s2a-combo-option .co-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.s2a-combo-option .co-name{font-size:14.5px;font-weight:600;color:var(--text);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s2a-combo-option .co-sub{font-size:12.5px;color:var(--text-muted);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s2a-combo-option:hover,.s2a-combo-option.is-active{background:var(--blue-100)}
+.s2a-combo-option.is-selected{background:var(--blue-soft)}
+.s2a-combo-option.is-selected .co-name{color:var(--blue)}
+.s2a-combo-option.is-selected .co-avatar{background:var(--blue);color:#fff}
+.s2a-combo-option .co-check{margin-left:auto;color:var(--blue);flex-shrink:0}
+.s2a-combo-empty{padding:18px 12px;color:var(--text-muted);font-size:13.5px;text-align:center}
+.s2a-combo-add{margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border:0;border-radius:12px;cursor:pointer;background:var(--grad-brand);color:#fff;font:600 14px var(--font-thai);box-shadow:var(--shadow-sm);transition:filter .15s,transform .1s}
+.s2a-combo-add:hover{filter:brightness(1.08)}
+.s2a-combo-add:active{transform:scale(.99)}
+.s2a-combo-add .plus-gold{color:var(--gold-soft)}
+
+/* ===== Customer quick-create modal — premium polish ===== */
+.cust-modal{width:min(100%,760px)}
+.cust-modal-head{display:flex;align-items:flex-start;gap:14px}
+.cust-modal-head .cm-icon{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;background:var(--blue-100);color:var(--blue);flex-shrink:0}
+.cust-modal-head .cm-title{flex:1;min-width:0}
+.cust-modal-head h3{margin:0;font-size:18px;color:var(--text)}
+.cust-modal-head p{margin:3px 0 0;font-size:13px;color:var(--text-muted)}
+.cust-divider{height:1px;background:var(--border);margin:14px 0 16px;border:0}
+.cust-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.cust-grid .full{grid-column:1/-1}
+.cust-field{display:flex;flex-direction:column;gap:5px}
+.cust-field>label{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px}
+.cust-field .opt{font-weight:400;font-size:11.5px;color:var(--text-subtle)}
+.cust-field .req{color:var(--danger);font-weight:700}
+.cust-field .input-wrap{position:relative;display:flex;align-items:center}
+.cust-field .input-wrap>svg{position:absolute;left:11px;width:16px;height:16px;color:var(--text-subtle);pointer-events:none}
+.cust-field .input-wrap.has-icon input{padding-left:34px}
+.cust-field input,.cust-field textarea{width:100%;min-height:42px;padding:10px 12px;border:1px solid var(--border-strong);border-radius:10px;background:var(--surface);color:var(--text);font:400 13.5px var(--font-thai);transition:border-color .15s,box-shadow .15s}
+.cust-field textarea{min-height:64px;resize:vertical}
+.cust-field input::placeholder,.cust-field textarea::placeholder{color:var(--text-subtle)}
+.cust-field input:focus,.cust-field textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(22,119,200,.16)}
+.cust-field input[aria-invalid="true"]{border-color:var(--danger);box-shadow:0 0 0 3px rgba(196,66,81,.14)}
+.cust-field .err{font-size:11.5px;color:var(--danger)}
+.cust-modal-foot{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.btn.cust-save{background:var(--grad-brand);color:#fff;border:0;box-shadow:var(--shadow-sm)}
+.btn.cust-save:hover:not(:disabled){filter:brightness(1.08)}
+.btn.cust-save .save-gold{color:var(--gold-soft)}
+@media(max-width:680px){.cust-grid{grid-template-columns:1fr}.cust-modal{width:100%}}
+
+/* ============================================================
+   DARK THEME — /orders, /customers + shared primitives
+   (additive overrides only; light mode is untouched)
+   ============================================================ */
+:root.dark .business-page > header h1, :root.dark .customer-grid h3, :root.dark .business-empty h2 { color: var(--text); }
+:root.dark .business-page > header p, :root.dark .customer-grid p, :root.dark .business-form label, :root.dark .business-empty { color: var(--text-muted); }
+:root.dark .business-table, :root.dark .business-form, :root.dark .customer-grid article { background: var(--surface); border-color: var(--border); }
+:root.dark .business-row { border-top-color: var(--border); }
+:root.dark .business-row.head { background: var(--surface-2); color: var(--text-muted); }
+:root.dark .business-empty { background: var(--surface-2); border-color: var(--border); }
+:root.dark .business-empty svg { color: var(--text-subtle); }
+:root.dark .business-form input, :root.dark .business-form select, :root.dark .business-form textarea, :root.dark .customer-inline input { background: var(--surface-2); border-color: var(--border-strong); color: var(--text); }
+:root.dark .business-form button.secondary { background: var(--surface-2); color: var(--text-muted); }
+:root.dark .business-page > header button, :root.dark .business-form button:not(.secondary), :root.dark .customer-inline button { background: var(--grad-brand); }
+:root.dark .order-status { background: var(--surface-2); color: var(--text-muted); }
+/* Shared primitives */
+:root.dark .toolbar { background: var(--surface); border-color: var(--border); }
+:root.dark .data-table tbody tr:hover { background: var(--surface-2); }
+:root.dark .view-toggle { background: var(--surface-2); }
+:root.dark .view-toggle button.active { background: var(--surface); color: var(--blue); }
+:root.dark .card { border-color: var(--border); }
+:root.dark .conversion-sentence { background: var(--surface-2); border-color: var(--border); }
+:root.dark .conversion-sentence b { background: var(--surface); }
+:root.dark .unit-modal { background: var(--surface); color: var(--text); }
+:root.dark .unit-modal input, :root.dark .unit-modal select { background: var(--surface-2); color: var(--text); }
+:root.dark .sticky-form-actions { background: color-mix(in srgb, var(--surface) 92%, transparent); }
+/* Generic bare inputs on app pages read on dark */
+:root.dark input, :root.dark textarea, :root.dark select { border-color: var(--border-strong); }

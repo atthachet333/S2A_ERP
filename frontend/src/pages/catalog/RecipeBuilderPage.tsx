@@ -1,16 +1,19 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   UtensilsCrossed, Package, Plus, Trash2, Calculator, Lock, Save, ImageOff,
   Search, X, AlertTriangle, CheckCircle2, TrendingUp, ReceiptText, Sparkles, Loader2,
 } from 'lucide-react';
-import { catalogApi, type Item, type MenuRow, type RecipeDetail, type Unit } from '@/lib/catalog';
+import { catalogApi, type Item, type MenuRow, type Unit } from '@/lib/catalog';
 import {
   computeLine, computeSheet, priceFromMargin, priceFromMarkup, analyzePrice, round,
   EMPTY_OPERATING, type SheetLine, type OperatingCost,
 } from '@/lib/cost-sheet';
 import { formatMoney } from '@/lib/utils';
 import { useToast } from '@/components/ui/Toast';
+import { useAuth } from '@/auth/AuthContext';
+import { useI18n } from '@/i18n/i18n';
 
 let seq = 0;
 const uid = () => `line-${Date.now()}-${seq++}`;
@@ -45,11 +48,28 @@ export default function RecipeBuilderPage() {
   const { id, menuId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const { messages: t } = useI18n();
+  const canCreateItem = (kind: 'ingredient' | 'packaging') =>
+    (user?.roles.includes('SUPER_ADMIN') ?? false) ||
+    (user?.permissions.includes(kind === 'packaging' ? 'PACKAGING_CREATE' : 'INGREDIENT_CREATE') ?? false);
 
-  const [menus, setMenus] = useState<MenuRow[]>([]);
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
-  const [detail, setDetail] = useState<RecipeDetail | null>(null);
+  // แหล่งข้อมูลผ่าน React Query — ใช้ cache key ร่วมกับหน้าเพิ่มวัตถุดิบ/บรรจุภัณฑ์
+  // เมื่อสร้างรายการใหม่แล้ว invalidate ['items'] จะทำให้ตัวเลือกในสูตรอัปเดตทันทีโดยไม่ต้องรีเฟรชทั้งหน้า
+  const menusQuery = useQuery({ queryKey: ['menus'], queryFn: () => catalogApi.menus() });
+  const unitsQuery = useQuery({ queryKey: ['units'], queryFn: () => catalogApi.units() });
+  const itemsQuery = useQuery({ queryKey: ['items', 'selectable'], queryFn: () => catalogApi.selectableItems() });
+  const recipeQuery = useQuery({ queryKey: ['recipe', id], queryFn: () => catalogApi.recipe(id as string), enabled: Boolean(id) });
+
+  const menus = useMemo<MenuRow[]>(() => menusQuery.data ?? [], [menusQuery.data]);
+  const units = useMemo<Unit[]>(() => (unitsQuery.data ?? []).filter((unit) => unit.isActive), [unitsQuery.data]);
+  const items = useMemo<Item[]>(
+    () => (itemsQuery.data ?? []).filter((it) => it.type === 'RAW_MATERIAL' || it.type === 'PACKAGING'),
+    [itemsQuery.data],
+  );
+  const detail = recipeQuery.data ?? null;
+
   const [productId, setProductId] = useState(menuId ?? '');
   const [menuMode, setMenuMode] = useState<'existing' | 'new'>(menuId ? 'existing' : 'new');
   const [newMenuName, setNewMenuName] = useState('');
@@ -71,45 +91,46 @@ export default function RecipeBuilderPage() {
   const [priceMode, setPriceMode] = useState<'marginPercent' | 'markupPercent' | 'sellingPrice'>('marginPercent');
   const [priceValue, setPriceValue] = useState(40);
 
+  // ตั้งค่าหน่วยขายเริ่มต้นเมื่อโหลดหน่วยเสร็จ
   useEffect(() => {
-    void Promise.all([
-      catalogApi.menus(),
-      catalogApi.units(),
-      catalogApi.items({ pageSize: 200, status: 'active' }),
-      id ? catalogApi.recipe(id) : Promise.resolve(null),
-    ]).then(([menuRows, unitRows, itemRows, recipe]) => {
-      setMenus(menuRows);
-      setUnits(unitRows.filter((unit) => unit.isActive));
-      setNewMenuUnitId((current) => current || unitRows.find((unit) => unit.isActive)?.id || '');
-      const usable = itemRows.items.filter((it) => it.type === 'RAW_MATERIAL' || it.type === 'PACKAGING');
-      setItems(usable);
-      setDetail(recipe);
-      if (recipe) {
-        const version = recipe.versions.find((v) => v.isActive) ?? recipe.versions[0];
-        setProductId(recipe.product.id); setName(recipe.name); setCode(recipe.code);
-        if (version) {
-          setBatchOutput(version.standardYieldQty || 1);
-          setNote(version.note ?? '');
-          setOps({
-            laborCost: version.laborCost, electricCost: version.electricCost, waterCost: version.waterCost,
-            gasCost: version.gasCost, overheadCost: version.overheadCost, wasteCost: 0, otherCost: version.otherCost,
-          });
-          const map = new Map(usable.map((it) => [it.id, it]));
-          setLines(version.ingredients.map((ing) => {
-            const full = map.get(ing.itemId);
-            const factor = full?.purchaseToBaseFactor && full.purchaseToBaseFactor > 0 ? full.purchaseToBaseFactor : 1;
-            const cost = ing.item?.lastCost ?? full?.lastCost ?? 0;
-            return {
-              id: uid(), kind: ing.item?.type === 'PACKAGING' ? 'packaging' : 'ingredient', itemId: ing.itemId,
-              name: ing.item?.name ?? 'รายการ', purchasePrice: cost > 0 ? round(cost * factor, 2) : 0, purchaseQty: 1,
-              purchaseUnit: full?.purchaseUnit?.code ?? ing.item?.baseUnitCode ?? 'หน่วย', qtyPerPurchase: factor,
-              usage: ing.quantityBase, baseUnit: ing.item?.baseUnitCode ?? full?.baseUnit?.code ?? 'หน่วย', wastePercent: ing.wastePercent,
-            } as SheetLine;
-          }));
-        }
-      }
-    }).catch((e: Error) => setError(e.message));
-  }, [id]);
+    if (units.length) setNewMenuUnitId((current) => current || units[0].id);
+  }, [units]);
+
+  // แสดง error ตอนโหลดข้อมูลไม่สำเร็จ
+  useEffect(() => {
+    const loadError = menusQuery.error ?? unitsQuery.error ?? itemsQuery.error ?? recipeQuery.error;
+    if (loadError instanceof Error) setError(loadError.message);
+  }, [menusQuery.error, unitsQuery.error, itemsQuery.error, recipeQuery.error]);
+
+  // เติมข้อมูลฟอร์มจากสูตรเดิม (ครั้งเดียวหลังโหลด detail + items เสร็จ)
+  const initedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!id || !detail || itemsQuery.isLoading) return;
+    if (initedRef.current === detail.id) return;
+    initedRef.current = detail.id;
+    const version = detail.versions.find((v) => v.isActive) ?? detail.versions[0];
+    setProductId(detail.product.id); setName(detail.name); setCode(detail.code);
+    if (version) {
+      setBatchOutput(version.standardYieldQty || 1);
+      setNote(version.note ?? '');
+      setOps({
+        laborCost: version.laborCost, electricCost: version.electricCost, waterCost: version.waterCost,
+        gasCost: version.gasCost, overheadCost: version.overheadCost, wasteCost: 0, otherCost: version.otherCost,
+      });
+      const map = new Map(items.map((it) => [it.id, it]));
+      setLines(version.ingredients.map((ing) => {
+        const full = map.get(ing.itemId);
+        const factor = full?.purchaseToBaseFactor && full.purchaseToBaseFactor > 0 ? full.purchaseToBaseFactor : 1;
+        const cost = ing.item?.lastCost ?? full?.lastCost ?? 0;
+        return {
+          id: uid(), kind: ing.item?.type === 'PACKAGING' ? 'packaging' : 'ingredient', itemId: ing.itemId,
+          name: ing.item?.name ?? 'รายการ', purchasePrice: cost > 0 ? round(cost * factor, 2) : 0, purchaseQty: 1,
+          purchaseUnit: full?.purchaseUnit?.code ?? ing.item?.baseUnitCode ?? 'หน่วย', qtyPerPurchase: factor,
+          usage: ing.quantityBase, baseUnit: ing.item?.baseUnitCode ?? full?.baseUnit?.code ?? 'หน่วย', wastePercent: ing.wastePercent,
+        } as SheetLine;
+      }));
+    }
+  }, [id, detail, items, itemsQuery.isLoading]);
 
   const itemMap = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
   const summary = useMemo(() => computeSheet(lines, ops, batchOutput), [lines, ops, batchOutput]);
@@ -121,6 +142,24 @@ export default function RecipeBuilderPage() {
     setLines((prev) => prev.map((l) => (l.id === lineId ? { ...l, ...patch } : l)));
   const remove = (lineId: string) => setLines((prev) => prev.filter((l) => l.id !== lineId));
   const addItem = (item: Item) => { setLines((prev) => [...prev, lineFromItem(item)]); setPickerKind(null); };
+
+  // สร้างวัตถุดิบ/บรรจุภัณฑ์ใหม่แบบ inline แล้วเลือกเข้าสูตรทันที (ไม่ต้องออกจากหน้า)
+  const createAndSelect = async (kind: 'ingredient' | 'packaging', payload: { name: string; code?: string; baseUnitId: string; purchasePrice?: number; purchaseQuantity?: number }) => {
+    const prefix = kind === 'packaging' ? 'PKG' : 'RM';
+    const created = await catalogApi.createItem({
+      name: payload.name,
+      code: payload.code?.trim() || `${prefix}-${Date.now().toString().slice(-6)}`,
+      type: kind === 'packaging' ? 'PACKAGING' : 'RAW_MATERIAL',
+      baseUnitId: payload.baseUnitId,
+      ...(payload.purchasePrice && payload.purchasePrice > 0
+        ? { purchasePrice: payload.purchasePrice, purchaseQuantity: payload.purchaseQuantity || 1 }
+        : {}),
+    });
+    // อัปเดต cache ให้ทุกที่ที่ใช้ ['items'] เห็นรายการใหม่ทันที
+    await qc.invalidateQueries({ queryKey: ['items'] });
+    addItem(created);
+    toast({ title: t.recipeBuilder.createdSelected, variant: 'success' });
+  };
 
   // ---- pricing preview ----
   const unitCost = summary.costPerUnit;
@@ -319,7 +358,9 @@ export default function RecipeBuilderPage() {
 
       {pickerKind && (
         <ItemPicker kind={pickerKind} items={items} used={lines.map((l) => l.itemId).filter(Boolean) as string[]}
-          onPick={addItem} onClose={() => setPickerKind(null)} />
+          onPick={addItem} onClose={() => setPickerKind(null)}
+          units={units} canCreate={canCreateItem(pickerKind)} onCreate={createAndSelect}
+          t={t.recipeBuilder} />
       )}
     </form>
   );
@@ -385,44 +426,109 @@ function DistRow({ label, value, total, color }: { label: string; value: number;
   );
 }
 
-function ItemPicker({ kind, items, used, onPick, onClose }: {
+type RecipeBuilderStrings = {
+  emptyIngredient: string; emptyPackaging: string; noSearchResult: string; addIngredient: string; addPackaging: string;
+  quickAddTitle: string; name: string; code: string; baseUnit: string; purchasePrice: string; purchaseQty: string;
+  saving: string; createAndSelect: string; createdSelected: string; nameRequired: string; addedAlready: string;
+};
+
+function ItemPicker({ kind, items, used, onPick, onClose, units, canCreate, onCreate, t }: {
   kind: 'ingredient' | 'packaging'; items: Item[]; used: string[];
   onPick: (item: Item) => void; onClose: () => void;
+  units: Unit[]; canCreate: boolean;
+  onCreate: (kind: 'ingredient' | 'packaging', payload: { name: string; code?: string; baseUnitId: string; purchasePrice?: number; purchaseQuantity?: number }) => Promise<void>;
+  t: RecipeBuilderStrings;
 }) {
   const [q, setQ] = useState('');
+  const [mode, setMode] = useState<'list' | 'create'>('list');
+  const defaultUnitId = useMemo(() => {
+    const preferred = kind === 'packaging'
+      ? units.find((u) => ['PCS', 'PC', 'EA'].includes(u.code) || u.name.includes('ชิ้น'))
+      : undefined;
+    return (preferred ?? units[0])?.id ?? '';
+  }, [kind, units]);
+  const [form, setForm] = useState({ name: '', code: '', baseUnitId: '', purchasePrice: '', purchaseQty: '1' });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => { setForm((f) => (f.baseUnitId ? f : { ...f, baseUnitId: defaultUnitId })); }, [defaultUnitId]);
+
   const type = kind === 'packaging' ? 'PACKAGING' : 'RAW_MATERIAL';
   const list = items.filter((it) => it.type === type && (q.trim() === '' || it.name.toLowerCase().includes(q.toLowerCase()) || it.code.toLowerCase().includes(q.toLowerCase())));
+  const addLabel = kind === 'packaging' ? t.addPackaging : t.addIngredient;
+  const emptyLabel = q.trim() ? t.noSearchResult : (kind === 'packaging' ? t.emptyPackaging : t.emptyIngredient);
+
+  const openCreate = () => { setErr(''); setForm((f) => ({ ...f, name: q.trim(), baseUnitId: f.baseUnitId || defaultUnitId })); setMode('create'); };
+  const submitCreate = async () => {
+    if (!form.name.trim()) { setErr(t.nameRequired); return; }
+    if (!form.baseUnitId) { setErr(t.baseUnit); return; }
+    setSaving(true); setErr('');
+    try {
+      await onCreate(kind, {
+        name: form.name.trim(), code: form.code.trim() || undefined, baseUnitId: form.baseUnitId,
+        purchasePrice: Number(form.purchasePrice) || undefined, purchaseQuantity: Number(form.purchaseQty) || 1,
+      });
+    } catch (e) { setErr(e instanceof Error ? e.message : 'error'); setSaving(false); }
+  };
 
   return (
     <div className="dialog-backdrop" onMouseDown={onClose}>
       <div className="dialog" style={{ width: 'min(100%, 560px)' }} onMouseDown={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h3 style={{ margin: 0 }}>เลือก{kind === 'packaging' ? 'บรรจุภัณฑ์' : 'วัตถุดิบ'}จากคลังข้อมูล</h3>
+          <h3 style={{ margin: 0 }}>{mode === 'create' ? t.quickAddTitle : `เลือก${kind === 'packaging' ? 'บรรจุภัณฑ์' : 'วัตถุดิบ'}จากคลังข้อมูล`}</h3>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="ปิด"><X aria-hidden width={16} /></button>
         </div>
-        <div className="search-box" style={{ maxWidth: 'none', marginBottom: 12 }}>
-          <Search aria-hidden /><input autoFocus placeholder="ค้นหาชื่อหรือรหัส" value={q} onChange={(e) => setQ(e.target.value)} />
-        </div>
-        <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {list.length === 0 && (
-            <div className="empty-state" style={{ padding: '26px 10px' }}>
-              <p style={{ margin: 0 }}>ไม่พบรายการ</p>
-              <Link to={kind === 'packaging' ? '/packaging/new' : '/ingredients/new'} className="btn" style={{ marginTop: 10 }}><Plus aria-hidden />เพิ่ม{kind === 'packaging' ? 'บรรจุภัณฑ์' : 'วัตถุดิบ'}ใหม่</Link>
+
+        {mode === 'create' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {err && <div className="alert">{err}</div>}
+            <label>{t.name} *<input autoFocus value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <label>{t.code}<input value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))} placeholder={kind === 'packaging' ? 'PKG-…' : 'RM-…'} /></label>
+              <label>{t.baseUnit} *
+                <select value={form.baseUnitId} onChange={(e) => setForm((f) => ({ ...f, baseUnitId: e.target.value }))}>
+                  {units.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.code})</option>)}
+                </select>
+              </label>
+              <label>{t.purchasePrice}<input type="number" min="0" step="any" value={form.purchasePrice} onChange={(e) => setForm((f) => ({ ...f, purchasePrice: e.target.value }))} /></label>
+              <label>{t.purchaseQty}<input type="number" min="0" step="any" value={form.purchaseQty} onChange={(e) => setForm((f) => ({ ...f, purchaseQty: e.target.value }))} /></label>
             </div>
-          )}
-          {list.map((it) => (
-            <button type="button" key={it.id} className="cs-pick-item" onClick={() => onPick(it)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 10, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--surface)', cursor: 'pointer', textAlign: 'left' }}>
-              {it.imageUrl ? <img src={it.imageUrl} alt="" width={40} height={40} style={{ borderRadius: 9, objectFit: 'cover' }} /> : <span className="icon-chip slate" style={{ width: 40, height: 40 }}><Package aria-hidden /></span>}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <strong style={{ display: 'block', fontSize: 14 }}>{it.name}</strong>
-                <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>{it.code} · {it.lastCost > 0 ? `฿${formatMoney(it.lastCost, 4)}/${it.baseUnit?.code}` : 'ยังไม่มีราคา'}</span>
-              </div>
-              {used.includes(it.id) && <span className="badge muted">เพิ่มแล้ว</span>}
-              <Plus aria-hidden width={18} style={{ color: 'var(--blue)' }} />
-            </button>
-          ))}
-        </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button type="button" className="btn" onClick={() => setMode('list')} disabled={saving}>{'←'}</button>
+              <button type="button" className="btn primary" onClick={() => void submitCreate()} disabled={saving}>
+                {saving ? <Loader2 className="spin" aria-hidden /> : <Plus aria-hidden />}{saving ? t.saving : t.createAndSelect}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="search-box" style={{ maxWidth: 'none', marginBottom: 12 }}>
+              <Search aria-hidden /><input autoFocus placeholder="ค้นหาชื่อหรือรหัส" value={q} onChange={(e) => setQ(e.target.value)} />
+            </div>
+            <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {list.length === 0 && (
+                <div className="empty-state" style={{ padding: '26px 10px' }}>
+                  <p style={{ margin: 0 }}>{emptyLabel}</p>
+                  {canCreate && <button type="button" className="btn" style={{ marginTop: 10 }} onClick={openCreate}><Plus aria-hidden />{addLabel}</button>}
+                </div>
+              )}
+              {list.map((it) => (
+                <button type="button" key={it.id} className="cs-pick-item" onClick={() => onPick(it)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 10, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--surface)', cursor: 'pointer', textAlign: 'left' }}>
+                  {it.imageUrl ? <img src={it.imageUrl} alt="" width={40} height={40} style={{ borderRadius: 9, objectFit: 'cover' }} /> : <span className="icon-chip slate" style={{ width: 40, height: 40 }}><Package aria-hidden /></span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ display: 'block', fontSize: 14 }}>{it.name}</strong>
+                    <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>{it.code} · {it.lastCost > 0 ? `฿${formatMoney(it.lastCost, 4)}/${it.baseUnit?.code}` : 'ยังไม่มีราคา'}</span>
+                  </div>
+                  {used.includes(it.id) && <span className="badge muted">{t.addedAlready}</span>}
+                  <Plus aria-hidden width={18} style={{ color: 'var(--blue)' }} />
+                </button>
+              ))}
+            </div>
+            {canCreate && list.length > 0 && (
+              <button type="button" className="btn" style={{ marginTop: 12, width: '100%', justifyContent: 'center' }} onClick={openCreate}><Plus aria-hidden />{addLabel}</button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

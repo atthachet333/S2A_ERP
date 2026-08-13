@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { ToastProvider } from '@/components/ui/Toast';
+import { ThemeProvider } from '@/theme/ThemeContext';
 import type { AuthUser } from '@/auth/AuthContext';
 
 /** ผู้ใช้ตัวอย่างสำหรับเทสต์ (ปรับ role ได้) */
@@ -25,9 +26,11 @@ export function renderWithProviders(ui: ReactElement, { route = '/dashboard' }: 
   });
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[route]}>
-        <ToastProvider>{children}</ToastProvider>
-      </MemoryRouter>
+      <ThemeProvider>
+        <MemoryRouter initialEntries={[route]}>
+          <ToastProvider>{children}</ToastProvider>
+        </MemoryRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   );
   return render(ui, { wrapper: Wrapper });

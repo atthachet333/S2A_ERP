@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Building2, CheckCheck, ChevronDown, ChevronRight, CircleAlert, KeyRound, LogOut, Menu, PanelLeft, Search, UserRound, X } from 'lucide-react';
+import { Bell, Building2, CheckCheck, ChevronDown, ChevronRight, CircleAlert, KeyRound, LogOut, Menu, Monitor, Moon, PanelLeft, Search, Sun, UserRound, X } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
+import { useTheme } from '@/theme/ThemeContext';
 import { MODULES } from './nav-config';
 import { formatDate, navigationKeyByPath, useI18n } from '@/i18n/i18n';
 import Avatar from '@/components/ui/Avatar';
@@ -21,6 +22,7 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
   onLogout: () => void;
 }) {
   const { user } = useAuth();
+  const { theme, resolved, setTheme, toggle } = useTheme();
   const { locale, messages } = useI18n(); const shell = messages.shell; const nav = messages.navigation;
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -94,6 +96,7 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
           <strong>{formatDate(new Date(), locale)}</strong>
         </div>
         <button className="icon-btn notification-trigger" aria-label={shell.notifications} onClick={() => setNotificationsOpen(true)}><Bell />{unread > 0 && <span>{unread > 9 ? '9+' : unread}</span>}</button>
+        <button className="icon-btn theme-toggle-btn" aria-label={shell.theme} title={`${shell.theme} · ${resolved === 'dark' ? shell.dark : shell.light}`} onClick={toggle}>{resolved === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}</button>
 
         <div className="user-menu" ref={menuRef}>
           <button className="user-trigger" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen}>
@@ -106,15 +109,38 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
           </button>
           {menuOpen && (
             <div className="user-pop" role="menu">
-              <div className="user-pop-head">
-                <strong>{user?.fullName}</strong>
-                <span>{user?.email}</span>
+              <div className="up-profile">
+                <Avatar name={user?.fullName} />
+                <div className="up-id">
+                  <strong>{user?.fullName}</strong>
+                  <span className="up-role">{user?.roles.map((role) => messages.roles[role as keyof typeof messages.roles] ?? role).join(', ')}</span>
+                  {user?.email && <span className="up-email">{user.email}</span>}
+                </div>
               </div>
-              <div className="user-pop-head"><strong>{user?.activeCompany?.nameTh}</strong><span>{user?.activeCompany?.code}</span></div>
-              <button role="menuitem" onClick={() => { setMenuOpen(false); navigate('/select-company'); }}><Building2 aria-hidden />{shell.changeCompany}</button>
-              <Link to="/profile" role="menuitem" onClick={() => setMenuOpen(false)}><UserRound aria-hidden />{shell.profile}</Link>
-              <button role="menuitem" onClick={() => { setMenuOpen(false); navigate('/account/change-password'); }}><KeyRound aria-hidden />{shell.changePassword}</button>
-              <button role="menuitem" className="danger" onClick={() => { setMenuOpen(false); onLogout(); }}><LogOut aria-hidden />{nav.signOut}</button>
+              {user?.activeCompany && (
+                <div className="up-company">
+                  <Building2 aria-hidden />
+                  <div style={{ minWidth: 0 }}>
+                    <small>{shell.currentCompany}</small>
+                    <strong>{user.activeCompany.nameTh}</strong>
+                  </div>
+                </div>
+              )}
+              <div className="up-divider" />
+              <div className="up-theme">
+                <span className="up-theme-label">{shell.theme}</span>
+                <div className="theme-seg" role="group" aria-label={shell.theme}>
+                  <button className={theme === 'light' ? 'active' : ''} onClick={() => setTheme('light')} aria-label={shell.light} aria-pressed={theme === 'light'} title={shell.light}><Sun aria-hidden /></button>
+                  <button className={theme === 'dark' ? 'active' : ''} onClick={() => setTheme('dark')} aria-label={shell.dark} aria-pressed={theme === 'dark'} title={shell.dark}><Moon aria-hidden /></button>
+                  <button className={theme === 'system' ? 'active' : ''} onClick={() => setTheme('system')} aria-label={shell.system} aria-pressed={theme === 'system'} title={shell.system}><Monitor aria-hidden /></button>
+                </div>
+              </div>
+              <div className="up-divider" />
+              <button className="up-item" role="menuitem" onClick={() => { setMenuOpen(false); navigate('/select-company'); }}><Building2 aria-hidden />{shell.changeCompany}</button>
+              <Link className="up-item" to="/profile" role="menuitem" onClick={() => setMenuOpen(false)}><UserRound aria-hidden />{shell.profile}</Link>
+              <button className="up-item" role="menuitem" onClick={() => { setMenuOpen(false); navigate('/account/change-password'); }}><KeyRound aria-hidden />{shell.changePassword}</button>
+              <div className="up-divider" />
+              <button className="up-item danger" role="menuitem" onClick={() => { setMenuOpen(false); onLogout(); }}><LogOut aria-hidden />{nav.signOut}</button>
             </div>
           )}
         </div>

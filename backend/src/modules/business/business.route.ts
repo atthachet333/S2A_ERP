@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { Prisma, SalesOrderStatus } from '@prisma/client';
+import { Prisma, SalesOrderStatus, ItemType } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
@@ -9,10 +9,12 @@ import { notificationChannels } from '../notifications/channel.service.js';
 import { renderBusinessPdf, type BusinessDocument, type DocumentType } from './document.service.js';
 
 const customerSchema = z.object({
-  code: z.string().trim().min(1).max(40), name: z.string().trim().min(1).max(160),
+  // code เป็น optional เพื่อรองรับ "เพิ่มลูกค้าด่วน" (ต้องการเพียงชื่อ) — ระบบจะออกรหัสให้อัตโนมัติ
+  code: z.string().trim().min(1).max(40).optional(), name: z.string().trim().min(1).max(160),
   customerType: z.string().max(60).optional(), contactName: z.string().max(120).optional(),
   phone: z.string().max(40).optional(), email: z.string().email().optional().or(z.literal('')),
   address: z.string().max(500).optional(), taxId: z.string().max(30).optional(), note: z.string().max(500).optional(),
+  billingAddress: z.string().max(500).optional(), lineId: z.string().max(80).optional(), branch: z.string().max(120).optional(),
 });
 const orderSchema = z.object({
   customerId: z.string().min(1), deliveryDate: z.coerce.date(), deliveryTime: z.string().max(10).optional(),
@@ -71,6 +73,64 @@ export default async function businessRoutes(app: FastifyInstance) {
     return ok({ warehouses, suppliers, items, orders });
   });
 
+  // ---- Inline master-data creation จากหน้ารับของ (Issue 5) — persist + auto-select ----
+  // สร้างคลังใหม่ (reusable) — ไม่เก็บเป็น free text ในเอกสารรับของ
+  app.post('/warehouses', { preHandler: requirePermission('RECEIVING_CREATE') }, async (req, reply) => {
+    const body = z.object({ name: z.string().trim().min(1).max(160), code: z.string().trim().max(40).optional(), type: z.nativeEnum(ItemType).optional() }).parse(req.body);
+    const companyId = req.user.companyId!;
+    const dup = await prisma.warehouse.findFirst({ where: { companyId, deletedAt: null, name: body.name } });
+    if (dup) return reply.status(409).send(fail('DUPLICATE_WAREHOUSE', 'มีคลังชื่อนี้อยู่แล้ว'));
+    const create = (code: string) => prisma.warehouse.create({ data: { companyId, code, name: body.name, type: body.type ?? null } });
+    let warehouse;
+    try { warehouse = await create(body.code?.trim() || `WH-${Date.now().toString().slice(-6)}`); }
+    catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        if (body.code?.trim()) return reply.status(409).send(fail('DUPLICATE_WAREHOUSE', 'มีรหัสคลังนี้อยู่แล้ว'));
+        warehouse = await create(`WH-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 900 + 100)}`);
+      } else throw error;
+    }
+    await prisma.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'WAREHOUSE_CREATED', entity: 'Warehouse', entityId: warehouse.id, after: { code: warehouse.code, name: warehouse.name } } });
+    return reply.status(201).send(ok({ id: warehouse.id, code: warehouse.code, name: warehouse.name }, 'เพิ่มคลังใหม่แล้ว'));
+  });
+
+  // สร้างซัพพลายเออร์ใหม่ (reusable)
+  app.post('/suppliers', { preHandler: requirePermission('RECEIVING_CREATE') }, async (req, reply) => {
+    const body = z.object({ name: z.string().trim().min(1).max(160), code: z.string().trim().max(40).optional(), phone: z.string().max(40).optional(), taxId: z.string().max(30).optional(), email: z.string().email().optional().or(z.literal('')), address: z.string().max(500).optional() }).parse(req.body);
+    const companyId = req.user.companyId!;
+    const dup = await prisma.supplier.findFirst({ where: { companyId, deletedAt: null, name: body.name } });
+    if (dup) return reply.status(409).send(fail('DUPLICATE_SUPPLIER', 'มีซัพพลายเออร์ชื่อนี้อยู่แล้ว'));
+    const create = (code: string) => prisma.supplier.create({ data: { companyId, code, name: body.name, phone: body.phone ?? null, taxId: body.taxId ?? null, email: body.email || null, address: body.address ?? null } });
+    let supplier;
+    try { supplier = await create(body.code?.trim() || `SUP-${Date.now().toString().slice(-6)}`); }
+    catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        if (body.code?.trim()) return reply.status(409).send(fail('DUPLICATE_SUPPLIER', 'มีรหัสซัพพลายเออร์นี้อยู่แล้ว'));
+        supplier = await create(`SUP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 900 + 100)}`);
+      } else throw error;
+    }
+    await prisma.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'SUPPLIER_CREATED', entity: 'Supplier', entityId: supplier.id, after: { code: supplier.code, name: supplier.name } } });
+    return reply.status(201).send(ok({ id: supplier.id, code: supplier.code, name: supplier.name }, 'เพิ่มซัพพลายเออร์ใหม่แล้ว'));
+  });
+
+  // สร้างสินค้า/วัตถุดิบใหม่จากหน้ารับของ (ข้อมูลขั้นต่ำที่ไม่ทำให้ต้นทุน/สต๊อกพัง)
+  app.post('/receiving-items', { preHandler: requirePermission('RECEIVING_CREATE') }, async (req, reply) => {
+    const body = z.object({ name: z.string().trim().min(1).max(120), code: z.string().trim().max(40).optional(), type: z.nativeEnum(ItemType).default(ItemType.RAW_MATERIAL), baseUnitId: z.string().min(1, 'ต้องระบุหน่วยฐาน'), purchaseUnitId: z.string().optional(), purchaseToBaseFactor: z.coerce.number().positive().default(1) }).parse(req.body);
+    const companyId = req.user.companyId!;
+    const unit = await prisma.unit.findFirst({ where: { id: body.baseUnitId, isActive: true, deletedAt: null } });
+    if (!unit) return reply.status(400).send(fail('VALIDATION_ERROR', 'ไม่พบหน่วยฐานที่เลือก'));
+    const create = (code: string) => prisma.item.create({ data: { companyId, code, name: body.name, type: body.type, baseUnitId: body.baseUnitId, purchaseUnitId: body.purchaseUnitId ?? null, purchaseToBaseFactor: new Prisma.Decimal(body.purchaseToBaseFactor), createdById: req.user.sub, updatedById: req.user.sub }, include: { baseUnit: { select: { code: true, name: true } } } });
+    let item;
+    try { item = await create(body.code?.trim() || `ITM-${Date.now().toString().slice(-6)}`); }
+    catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        if (body.code?.trim()) return reply.status(409).send(fail('DUPLICATE_ITEM', 'มีรหัสสินค้านี้อยู่แล้ว'));
+        item = await create(`ITM-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 900 + 100)}`);
+      } else throw error;
+    }
+    await prisma.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'ITEM_CREATED', entity: 'Item', entityId: item.id, after: { code: item.code, name: item.name, source: 'RECEIVING' } } });
+    return reply.status(201).send(ok({ id: item.id, code: item.code, name: item.name, type: item.type, baseUnit: item.baseUnit }, 'เพิ่มรายการใหม่แล้ว'));
+  });
+
   app.get('/receiving', { preHandler: requirePermission('RECEIVING_VIEW', 'RECEIVING_CREATE') }, async (req) => ok(await prisma.goodsReceipt.findMany({
     where: { companyId: req.user.companyId! },
     include: { supplier: { select: { name: true } }, warehouse: { select: { name: true } }, items: { include: { item: { select: { name: true, code: true } } } } },
@@ -108,14 +168,51 @@ export default async function businessRoutes(app: FastifyInstance) {
   });
 
   app.get('/customers', { preHandler: requirePermission('CUSTOMER_VIEW') }, async (req) => {
-    const customers = await prisma.customer.findMany({ where: { companyId: req.user.companyId!, isActive: true }, include: { orders: { select: { id: true, orderNo: true, deliveryDate: true, status: true, totalAmount: true }, orderBy: { deliveryDate: 'desc' } } }, orderBy: { name: 'asc' } });
+    // hasOrders=1 → เฉพาะลูกค้าที่เคยมีออเดอร์จริง (ใช้ในหน้ารายชื่อลูกค้า) · ไม่ส่ง → คืนทั้งหมด (ใช้ในตัวเลือกตอนสร้างออเดอร์)
+    const { hasOrders } = z.object({ hasOrders: z.enum(['0', '1']).optional() }).parse(req.query ?? {});
+    const customers = await prisma.customer.findMany({
+      where: { companyId: req.user.companyId!, isActive: true, ...(hasOrders === '1' ? { orders: { some: {} } } : {}) },
+      include: { orders: { select: { id: true, orderNo: true, deliveryDate: true, status: true, totalAmount: true }, orderBy: { deliveryDate: 'desc' } } },
+      orderBy: { name: 'asc' },
+    });
     return ok(customers.map(({ orders, ...customer }) => ({ ...customer, orderCount: orders.length, lastOrder: orders[0] ?? null, deliveredSales: orders.filter((order) => order.status === 'DELIVERED').reduce((sum, order) => sum.plus(order.totalAmount), new Prisma.Decimal(0)), upcomingOrders: orders.filter((order) => !['DELIVERED','CANCELLED'].includes(order.status) && order.deliveryDate >= new Date()).length })));
   });
   app.post('/customers', { preHandler: requirePermission('CUSTOMER_CREATE') }, async (req, reply) => {
     const body = customerSchema.parse(req.body);
-    const customer = await prisma.customer.create({ data: { ...body, email: body.email || null, companyId: req.user.companyId! } });
-    await prisma.auditLog.create({ data: { userId: req.user.sub, companyId: req.user.companyId, action: 'CREATE', entity: 'Customer', entityId: customer.id } });
-    return reply.status(201).send(ok(customer));
+    const companyId = req.user.companyId!;
+    // ออกรหัสอัตโนมัติเมื่อไม่ได้ระบุ (รองรับเพิ่มลูกค้าด่วนที่ใช้เพียงชื่อ) — ไม่ชนกับรหัสเดิมในบริษัท
+    let code = body.code?.trim();
+    if (!code) {
+      const count = await prisma.customer.count({ where: { companyId } });
+      code = `CUS-${String(count + 1).padStart(5, '0')}`;
+    }
+    const { code: _ignore, ...rest } = body;
+    void _ignore;
+    let customer;
+    try {
+      customer = await prisma.customer.create({ data: { ...rest, code, email: body.email || null, companyId } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        // รหัสซ้ำในบริษัท: ถ้าเป็นรหัสที่ผู้ใช้กรอกเอง → แจ้งซ้ำ; ถ้าออกอัตโนมัติ → เติม suffix แล้วลองใหม่ครั้งเดียว
+        if (body.code?.trim()) return reply.status(409).send(fail('DUPLICATE_CUSTOMER', 'มีรหัสลูกค้านี้อยู่แล้วในบริษัท'));
+        customer = await prisma.customer.create({ data: { ...rest, code: `${code}-${Date.now().toString().slice(-4)}`, email: body.email || null, companyId } });
+      } else throw error;
+    }
+    await prisma.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'CUSTOMER_CREATED', entity: 'Customer', entityId: customer.id, after: { code: customer.code, name: customer.name } } });
+    return reply.status(201).send(ok(customer, 'เพิ่มลูกค้าสำเร็จ'));
+  });
+
+  // นำลูกค้าออกจากรายชื่อแบบปลอดภัย (soft archive) — ประวัติออเดอร์เดิมยังคงอยู่เสมอ
+  app.post('/customers/:id/archive', { preHandler: requirePermission('CUSTOMER_EDIT') }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const companyId = req.user.companyId!;
+    const customer = await prisma.customer.findFirst({ where: { id, companyId } });
+    if (!customer) return reply.status(404).send(fail('CUSTOMER_NOT_FOUND', 'ไม่พบลูกค้าในบริษัทปัจจุบัน'));
+    if (!customer.isActive) return ok(customer);
+    const orderCount = await prisma.salesOrder.count({ where: { customerId: id } });
+    const archived = await prisma.customer.update({ where: { id }, data: { isActive: false } });
+    await prisma.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'CUSTOMER_ARCHIVED', entity: 'Customer', entityId: id, before: { isActive: true }, after: { isActive: false, preservedOrders: orderCount } } });
+    return ok(archived, 'นำลูกค้าออกจากรายชื่อแล้ว');
   });
 
   app.get('/orders', { preHandler: requirePermission('ORDER_VIEW') }, async (req) => ok(await prisma.salesOrder.findMany({ where: { companyId: req.user.companyId! }, include: { customer: true, items: true }, orderBy: [{ deliveryDate: 'asc' }, { createdAt: 'desc' }] })));

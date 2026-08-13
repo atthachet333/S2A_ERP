@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Boxes, UtensilsCrossed, Calculator, CircleDollarSign,
   Truck, Factory, Warehouse, ArrowLeftRight, ClipboardCheck,
   BarChart3, UsersRound, History, Settings, Sprout, Package,
-  Database, ChartColumnBig, type LucideIcon,
+  Database, ChartColumnBig, ShieldCheck, UserRoundPlus, type LucideIcon,
 } from 'lucide-react';
 
 export type ModuleStatus = 'ready' | 'in-progress' | 'planned';
@@ -143,6 +143,8 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'ระบบ',
     items: [
       { path: '/users', label: 'ผู้ใช้งาน', icon: UsersRound, requiredRole: 'SUPER_ADMIN' },
+      { path: '/admin/registrations', label: 'คำขอสมัครใช้งาน', icon: UserRoundPlus, requiredPermission: 'USER_MANAGE' },
+      { path: '/admin/permissions', label: 'จัดการสิทธิ์และบทบาท', icon: ShieldCheck, requiredRole: 'SUPER_ADMIN' },
       { path: '/activity', label: 'ประวัติการใช้งาน', icon: History, requiredRole: 'SUPER_ADMIN' },
       { path: '/settings', label: 'ตั้งค่าระบบ', icon: Settings, requiredRole: 'SUPER_ADMIN' },
     ],

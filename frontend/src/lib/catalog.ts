@@ -75,6 +75,8 @@ export const catalogApi = {
     return apiClient.get<Paginated<Item>>(`/items?${q.toString()}`);
   },
   item: (id: string) => apiClient.get<ItemDetail>(`/items/${id}`),
+  // วัตถุดิบ/บรรจุภัณฑ์ที่เลือกได้ในสูตร (active เท่านั้น, ผูกกับบริษัทปัจจุบัน, ไม่แบ่งหน้า)
+  selectableItems: (type?: ItemType) => apiClient.get<Item[]>(`/items/selectable${type ? `?type=${type}` : ''}`),
   createItem: (body: unknown) => apiClient.post<Item>('/items', body),
   updateItem: (id: string, body: unknown) => apiClient.patch<Item>(`/items/${id}`, body),
   deactivateItem: (id: string) => apiClient.post<Item>(`/items/${id}/deactivate`),
