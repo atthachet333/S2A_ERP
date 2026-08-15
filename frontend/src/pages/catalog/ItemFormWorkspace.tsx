@@ -10,6 +10,9 @@ import { formatMoney, formatThaiDateTime } from '@/lib/utils';
 import ImageUpload from '@/components/ui/ImageUpload';
 import Badge from '@/components/ui/Badge';
 import { useToast } from '@/components/ui/Toast';
+import { useAuth } from '@/auth/AuthContext';
+import { useI18n } from '@/i18n/i18n';
+import CreatableCombobox from '@/components/ui/CreatableCombobox';
 
 export interface ItemFormVariant {
   kind: 'ingredient' | 'packaging';
@@ -49,6 +52,8 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const { messages } = useI18n(); const t = messages.quickCreate;
 
   const units = useQuery({ queryKey: ['units'], queryFn: () => catalogApi.units() });
   const categories = useQuery({ queryKey: ['categories'], queryFn: () => catalogApi.categories() });
@@ -74,6 +79,29 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
       setNewUnit({ name: '', code: '', category: 'COUNT' }); setUnitTarget(null);
     } catch (e) { toast(e instanceof Error ? e.message : 'เพิ่มหน่วยไม่สำเร็จ', 'error'); }
     finally { setSavingUnit(false); }
+  };
+
+  // เพิ่มหมวดหมู่แบบด่วน — reuse POST /categories, ออกรหัสอัตโนมัติ, auto-select เข้าฟอร์ม
+  const canCreateMaster = Boolean(user?.roles.includes('SUPER_ADMIN') || ['INGREDIENT_CREATE', 'INGREDIENT_EDIT', 'PACKAGING_CREATE', 'PACKAGING_EDIT'].some((p) => user?.permissions.includes(p)));
+  const [catOpen, setCatOpen] = useState(false);
+  const [newCat, setNewCat] = useState('');
+  const [savingCat, setSavingCat] = useState(false);
+  const addCategory = async () => {
+    if (!newCat.trim()) { toast(t.categoryName, 'error'); return; }
+    setSavingCat(true);
+    try {
+      const prefix = variant.type === 'PACKAGING' ? 'PKG' : 'RM';
+      const created = await catalogApi.createCategory({ name: newCat.trim(), code: `CAT-${prefix}-${Date.now().toString().slice(-6)}`, type: variant.type });
+      await qc.invalidateQueries({ queryKey: ['categories'] });
+      set({ categoryId: created.id });
+      toast({ title: t.categoryAdded, variant: 'success' });
+      setNewCat(''); setCatOpen(false);
+    } catch (e) {
+      // ล้มเหลว → คงค่าที่กรอกไว้และเปิด modal ต่อ (ไม่รีเซ็ตฟอร์มหลัก)
+      const err = e instanceof Error ? e : null;
+      const isDup = Boolean(err && (/DUPLICATE_CATEGORY|CONFLICT/i.test((err as { code?: string }).code ?? '') || err.message.includes('อยู่แล้ว')));
+      toast({ title: isDup ? t.categoryDup : (err?.message || t.createFailed), variant: 'error' });
+    } finally { setSavingCat(false); }
   };
 
   useEffect(() => {
@@ -165,10 +193,12 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
               <label>รหัส *<input value={form.code} onChange={(e) => set({ code: e.target.value })} placeholder={variant.codePlaceholder} /></label>
               <label>บาร์โค้ด<input value={form.barcode} onChange={(e) => set({ barcode: e.target.value })} placeholder="(ไม่บังคับ)" /></label>
               <label className="full">{variant.categoryLabel}
-                <select value={form.categoryId} onChange={(e) => set({ categoryId: e.target.value })}>
-                  <option value="">— ไม่ระบุ —</option>
-                  {categories.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <CreatableCombobox value={form.categoryId} onChange={(v) => set({ categoryId: v })}
+                  options={[{ value: '', label: t.none }, ...(categories.data ?? []).map((c) => ({ value: c.id, label: c.name }))]}
+                  placeholder={t.selectCategory} searchPlaceholder={t.searchCategory} emptyText={t.noCategory}
+                  createLabel={canCreateMaster ? t.addCategory : undefined}
+                  onCreate={canCreateMaster ? ((q) => { setNewCat(q); setCatOpen(true); }) : undefined}
+                  ariaLabel={variant.categoryLabel} />
               </label>
             </div>
           </section>
@@ -181,10 +211,12 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
             </p>
             <div className="field-grid">
               <label className="full">หน่วยที่ซื้อจากผู้ขาย
-                <div className="unit-picker-row"><select value={form.purchaseUnitId} onChange={(e) => set({ purchaseUnitId: e.target.value })}>
-                  <option value="">— เหมือนหน่วยฐาน —</option>
-                  {units.data?.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.code})</option>)}
-                </select><button type="button" className="btn" onClick={() => setUnitTarget('purchase')}><Plus aria-hidden />เพิ่มหน่วย</button></div>
+                <CreatableCombobox value={form.purchaseUnitId} onChange={(v) => set({ purchaseUnitId: v })}
+                  options={[{ value: '', label: t.sameAsBase }, ...(units.data ?? []).map((u) => ({ value: u.id, label: `${u.name} (${u.code})` }))]}
+                  placeholder={t.sameAsBase} searchPlaceholder={t.searchUnit} emptyText={t.noUnit}
+                  createLabel={canCreateMaster ? t.addUnit : undefined}
+                  onCreate={canCreateMaster ? ((q) => { setNewUnit((u) => ({ ...u, name: q })); setUnitTarget('purchase'); }) : undefined}
+                  ariaLabel="หน่วยที่ซื้อจากผู้ขาย" />
                 <span className="field-hint">เช่น ซื้อไก่เป็นกิโลกรัม ซื้อกล่องอาหารเป็นแพ็ค</span>
               </label>
               {!isEdit && <>
@@ -205,10 +237,12 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
             <p className="form-section-sub">{variant.baseUnitHint}</p>
             <div className="field-grid">
               <label className="full">หน่วยที่ใช้ตอนทำสูตร * <small>(หน่วยฐานของรายการ)</small>
-                <div className="unit-picker-row"><select value={form.baseUnitId} onChange={(e) => set({ baseUnitId: e.target.value })}>
-                  <option value="">— เลือก —</option>
-                  {units.data?.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.code})</option>)}
-                </select><button type="button" className="btn" onClick={() => setUnitTarget('recipe')}><Plus aria-hidden />เพิ่มหน่วย</button></div>
+                <CreatableCombobox value={form.baseUnitId} onChange={(v) => set({ baseUnitId: v })}
+                  options={(units.data ?? []).map((u) => ({ value: u.id, label: `${u.name} (${u.code})` }))}
+                  placeholder={t.selectUnit} searchPlaceholder={t.searchUnit} emptyText={t.noUnit}
+                  createLabel={canCreateMaster ? t.addUnit : undefined}
+                  onCreate={canCreateMaster ? ((q) => { setNewUnit((u) => ({ ...u, name: q })); setUnitTarget('recipe'); }) : undefined}
+                  ariaLabel="หน่วยที่ใช้ตอนทำสูตร" />
                 <span className="field-hint">หน่วยนี้คือหน่วยที่ใช้ระบุปริมาณจริงในสูตรอาหาร</span>
               </label>
               <div className="conversion-sentence full"><span><b>1</b><em>{purchaseUnitCode}</em></span><strong>=</strong><label><input aria-label="จำนวนหน่วยที่ใช้ในสูตรต่อหน่วยซื้อ" type="number" min="0" step="any" value={form.purchaseToBaseFactor} onChange={(e) => set({ purchaseToBaseFactor: e.target.value })} /><em>{baseUnitCode}</em></label></div>
@@ -281,6 +315,7 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
           </div>
         </div>
       </div>
+      {catOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setCatOpen(false)}><section className="unit-modal" role="dialog" aria-modal="true" aria-labelledby="add-cat-title" onMouseDown={(e) => e.stopPropagation()}><div className="add-unit-head"><div><p className="eyebrow">CATEGORY MASTER</p><h2 id="add-cat-title">{t.categoryTitle}</h2></div><button type="button" className="icon-btn" onClick={() => setCatOpen(false)} aria-label={messages.common.close}><X aria-hidden /></button></div><p className="field-hint">{t.categoryHint}</p><label>{t.categoryName}<input autoFocus placeholder={t.categoryPh} value={newCat} onChange={(e) => setNewCat(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addCategory(); } }} /></label><div className="modal-actions"><button type="button" className="btn" onClick={() => setCatOpen(false)}>{t.cancel}</button><button type="button" className="btn primary" onClick={() => void addCategory()} disabled={savingCat}>{savingCat ? <Loader2 className="spin" aria-hidden /> : <Plus aria-hidden />}{t.addCategory}</button></div></section></div>}
       {unitTarget && <div className="modal-backdrop" role="presentation"><section className="unit-modal" role="dialog" aria-modal="true" aria-labelledby="add-unit-title"><div className="add-unit-head"><div><p className="eyebrow">UNIT MASTER</p><h2 id="add-unit-title">เพิ่มหน่วยใหม่</h2></div><button type="button" className="icon-btn" onClick={() => setUnitTarget(null)} aria-label="ปิด"><X aria-hidden /></button></div><p className="field-hint">เพิ่มแล้วระบบจะเลือกกลับเข้า “{unitTarget === 'purchase' ? 'หน่วยที่ซื้อจากผู้ขาย' : 'หน่วยที่ใช้ตอนทำสูตร'}” ทันที</p><label>ชื่อหน่วย<input autoFocus placeholder="เช่น กระสอบ" value={newUnit.name} onChange={(e) => setNewUnit((u) => ({ ...u, name: e.target.value }))} /></label><label>ตัวย่อ<input placeholder="เช่น SACK" value={newUnit.code} onChange={(e) => setNewUnit((u) => ({ ...u, code: e.target.value.toUpperCase() }))} /></label><label>ประเภท<select value={newUnit.category} onChange={(e) => setNewUnit((u) => ({ ...u, category: e.target.value }))}><option value="WEIGHT">น้ำหนัก</option><option value="VOLUME">ปริมาตร</option><option value="COUNT">จำนวน</option><option value="PACKAGING">บรรจุภัณฑ์</option><option value="CUSTOM">กำหนดเอง</option></select><span className="field-hint">ใช้ช่วยเลือกความหมายของหน่วยในหน้าจอนี้ โดย Unit Master เดิมเก็บชื่อและตัวย่อ</span></label><div className="modal-actions"><button type="button" className="btn" onClick={() => setUnitTarget(null)}>ยกเลิก</button><button type="button" className="btn primary" onClick={() => void addUnit()} disabled={savingUnit}>{savingUnit ? <Loader2 className="spin" aria-hidden /> : <Plus aria-hidden />}เพิ่มหน่วย</button></div></section></div>}
     </>
   );

@@ -29,9 +29,17 @@ export default async function categoryRoutes(app: FastifyInstance) {
 
   app.post('/', { preHandler: MANAGE }, async (req, reply) => {
     const body = createSchema.parse(req.body);
+    const companyId = req.user.companyId!;
+    // กันชื่อซ้ำ (ต่อบริษัท + ชนิดเดียวกัน, ไม่นับที่ลบแล้ว) — collation ของ MariaDB เป็น case-insensitive
+    const name = body.name.replace(/\s+/g, ' ').trim();
+    const dupName = await prisma.category.findFirst({
+      where: { companyId, deletedAt: null, name: { equals: name }, ...(body.type ? { type: body.type } : {}) },
+      select: { id: true },
+    });
+    if (dupName) return reply.status(409).send(fail('DUPLICATE_CATEGORY', 'มีหมวดหมู่นี้อยู่แล้ว'));
     const existing = await prisma.category.findUnique({ where: { code: body.code } });
     if (existing) return reply.status(409).send(fail('CONFLICT', `มีหมวดหมู่รหัส ${body.code} อยู่แล้ว`));
-    const category = await prisma.category.create({ data: { companyId: req.user.companyId!, code: body.code, name: body.name, type: body.type } });
+    const category = await prisma.category.create({ data: { companyId, code: body.code, name, type: body.type } });
     await writeAudit(req, { action: 'CREATE', entity: 'Category', entityId: category.id, after: category });
     return reply.status(201).send(ok(category, 'เพิ่มหมวดหมู่สำเร็จ'));
   });

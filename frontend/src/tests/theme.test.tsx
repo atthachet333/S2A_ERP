@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
 
@@ -52,6 +53,19 @@ describe('ThemeProvider', () => {
     render(<ThemeProvider><Probe /></ThemeProvider>);
     expect(screen.getByTestId('theme').textContent).toBe('dark');
     expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
+
+  it('switching theme is visual-only and preserves child form state', () => {
+    function Form() {
+      const { toggle } = useTheme();
+      const [v, setV] = useState('');
+      return (<><input aria-label="field" value={v} onChange={(e) => setV(e.target.value)} /><button onClick={toggle}>toggle</button></>);
+    }
+    render(<ThemeProvider><Form /></ThemeProvider>);
+    fireEvent.change(screen.getByLabelText('field'), { target: { value: 'พริกไทย' } });
+    fireEvent.click(screen.getByText('toggle'));
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect((screen.getByLabelText('field') as HTMLInputElement).value).toBe('พริกไทย');
   });
 
   it('system mode follows the OS dark preference', () => {

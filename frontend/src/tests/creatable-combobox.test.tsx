@@ -33,6 +33,14 @@ describe('CreatableCombobox', () => {
     expect(onCreate).toHaveBeenCalledWith('ไม่มีจริง');
   });
 
+  it('hides the "+ add" action when no create handler is provided (no permission)', () => {
+    render(<CreatableCombobox value="" onChange={() => {}} options={options} ariaLabel="ลูกค้า" searchPlaceholder="ค้นหาลูกค้า…" emptyText="ไม่พบลูกค้า" createLabel="เพิ่มลูกค้าใหม่" />);
+    fireEvent.click(screen.getByRole('button', { name: 'ลูกค้า' }));
+    fireEvent.change(screen.getByLabelText('ค้นหาลูกค้า…'), { target: { value: 'ไม่มีจริง' } });
+    expect(screen.getByText('ไม่พบลูกค้า')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /เพิ่มลูกค้าใหม่/ })).not.toBeInTheDocument();
+  });
+
   it('marks the selected option and shows a check', () => {
     render(<CreatableCombobox value="2" onChange={() => {}} options={options} ariaLabel="ลูกค้า" />);
     fireEvent.click(screen.getByRole('button', { name: 'ลูกค้า' }));

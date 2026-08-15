@@ -308,9 +308,10 @@ model Unit {
 
   itemsBase         Item[]             @relation("ItemBaseUnit")
   itemsPurchase     Item[]             @relation("ItemPurchaseUnit")
-  conversionsFrom   UnitConversion[]   @relation("ConvFrom")
-  conversionsTo     UnitConversion[]   @relation("ConvTo")
-  recipeIngredients RecipeIngredient[]
+  conversionsFrom     UnitConversion[]   @relation("ConvFrom")
+  conversionsTo       UnitConversion[]   @relation("ConvTo")
+  recipeIngredients   RecipeIngredient[]
+  recipeVersionsYield RecipeVersion[]    @relation("YieldUnit")
 
   @@map("units")
 }
@@ -579,8 +580,10 @@ model Recipe {
 
   versions         RecipeVersion[]
   productionOrders ProductionOrder[]
+  usedInRecipes    RecipeIngredient[] @relation("SubRecipeChild")
 
   @@index([productId])
+  @@index([companyId, isActive, deletedAt])
   @@map("recipes")
 }
 
@@ -602,6 +605,17 @@ model RecipeVersion {
   overheadCost Decimal @default(0) @db.Decimal(18, 4)
   otherCost    Decimal @default(0) @db.Decimal(18, 4)
 
+  // Recipe Builder 2.0 — yield unit + portion + flexible overhead (all additive/nullable)
+  yieldUnitId     String?
+  yieldUnit       Unit?    @relation("YieldUnit", fields: [yieldUnitId], references: [id])
+  portionQty      Decimal? @db.Decimal(18, 4)
+  portionUnit     String?
+  overheadMode    String?  // TOTAL | PERCENTAGE | DETAILED
+  overheadPercent Decimal? @db.Decimal(9, 4)
+  overheadBase    String?  // INGREDIENT | DIRECT | TOTAL
+  overheadTotal   Decimal? @db.Decimal(18, 4)
+  overheadDetails Json?
+
   note        String?
   createdAt   DateTime @default(now())
   createdById String?
@@ -618,15 +632,20 @@ model RecipeIngredient {
   id              String        @id @default(cuid())
   recipeVersionId String
   recipeVersion   RecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
-  itemId          String
-  item            Item          @relation(fields: [itemId], references: [id])
+  componentType   String        @default("ITEM") // ITEM | SUB_RECIPE | PACKAGING
+  itemId          String?
+  item            Item?         @relation(fields: [itemId], references: [id])
+  childRecipeId   String?
+  childRecipe     Recipe?       @relation("SubRecipeChild", fields: [childRecipeId], references: [id])
   quantity        Decimal       @db.Decimal(18, 4)
   unitId          String?
   unit            Unit?         @relation(fields: [unitId], references: [id])
   wastePercent    Decimal       @default(0) @db.Decimal(9, 4)
+  sortOrder       Int           @default(0)
   note            String?
 
   @@index([recipeVersionId])
+  @@index([childRecipeId])
   @@map("recipe_ingredients")
 }
 

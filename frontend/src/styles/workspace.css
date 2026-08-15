@@ -611,3 +611,100 @@ option { color: #12233a; background: #ffffff; }
 :root.dark .sticky-form-actions { background: color-mix(in srgb, var(--surface) 92%, transparent); }
 /* Generic bare inputs on app pages read on dark */
 :root.dark input, :root.dark textarea, :root.dark select { border-color: var(--border-strong); }
+
+/* ============================================================
+   DARK THEME SWEEP — remaining authenticated surfaces
+   (flat selectors; unknown classes are harmless no-ops)
+   ============================================================ */
+/* Operations: Receiving / Stock Issue */
+:root.dark .ops-hero, :root.dark .ops-section, :root.dark .ops-summary { background: var(--surface); border-color: var(--border); color: var(--text); }
+:root.dark .ops-hero h1, :root.dark .ops-section h2, :root.dark .ops-summary h2, :root.dark .ops-hero span { color: var(--text); }
+:root.dark .ops-hero p, :root.dark .ops-section p, :root.dark .ops-summary small, :root.dark .ops-summary dt, :root.dark .ops-section-title p { color: var(--text-muted); }
+:root.dark .ops-summary dd, :root.dark .ops-summary .total dd { color: var(--text); }
+:root.dark .ops-toolbar { background: var(--surface); border-color: var(--border); color: var(--text-muted); }
+:root.dark .ops-history-table, :root.dark .ops-line-table { background: var(--surface); border-color: var(--border); color: var(--text); }
+:root.dark .ops-history-head, :root.dark .ops-line-head, :root.dark .issue-head { background: var(--surface-2); color: var(--text-muted); border-color: var(--border); }
+:root.dark .ops-history-table article, :root.dark .issue-row, :root.dark .ops-line { border-color: var(--border); color: var(--text); }
+:root.dark .ops-history-table article:hover, :root.dark .issue-row:hover { background: var(--surface-hover); }
+:root.dark .ops-history-table article small, :root.dark .issue-row small { color: var(--text-muted); }
+:root.dark .ops-kpis article { background: var(--surface); border-color: var(--border); color: var(--text); }
+:root.dark .ops-fields input, :root.dark .ops-fields select, :root.dark .ops-fields textarea, :root.dark .ops-line input, :root.dark .ops-line select, :root.dark .issue-row input { background: var(--input-bg); border-color: var(--input-border); color: var(--text); }
+:root.dark .ops-warning, :root.dark .ops-confirm-note { background: var(--surface-2); color: var(--text-muted); border-color: var(--border); }
+:root.dark .order-preview span, :root.dark .calculated { color: var(--text); }
+:root.dark .calculated small { color: var(--text-muted); }
+/* KPI cards on orders / users / dashboard */
+:root.dark .order-kpis article, :root.dark .user-admin-kpis article, :root.dark .command-kpis article { background: var(--surface); border-color: var(--border); color: var(--text); }
+:root.dark .order-kpis article span, :root.dark .user-admin-kpis article span, :root.dark .command-kpis article span { color: var(--text-muted); }
+:root.dark .order-kpis article strong, :root.dark .user-admin-kpis article strong, :root.dark .command-kpis article strong { color: var(--text); }
+/* Users admin: table, drawer, dialogs */
+:root.dark .users-admin-page header h1 { color: var(--text); }
+:root.dark .user-detail-drawer, :root.dark .user-form-dialog, :root.dark .credential-dialog { background: var(--surface-elevated); border-color: var(--border); color: var(--text); }
+:root.dark .user-detail-drawer dt, :root.dark .user-detail-drawer header small, :root.dark .user-detail-drawer header p { color: var(--text-muted); }
+:root.dark .user-detail-drawer dd, :root.dark .user-detail-drawer h2, :root.dark .user-form-dialog h2, :root.dark .credential-dialog h2 { color: var(--text); }
+:root.dark .user-form-dialog label, :root.dark .credential-dialog p { color: var(--text-muted); }
+:root.dark .user-form-dialog input, :root.dark .user-form-dialog select { background: var(--input-bg); border-color: var(--input-border); color: var(--text); }
+:root.dark .credential-dialog dd code { background: var(--surface-2); color: var(--brand-gold-soft); }
+:root.dark .cell-user .cu-text span, :root.dark .table-sub { color: var(--text-muted); }
+:root.dark .cell-user .cu-text strong { color: var(--text); }
+/* Notification drawer + toast */
+:root.dark .notification-drawer { background: var(--surface-elevated); border-color: var(--border); color: var(--text); }
+:root.dark .notification-drawer header, :root.dark .notification-drawer footer, :root.dark .notification-drawer nav { border-color: var(--border); }
+:root.dark .notification-drawer header h2 { color: var(--text); }
+:root.dark .notification-drawer header p, :root.dark .notification-drawer header small { color: var(--text-muted); }
+:root.dark .notification-list article { background: var(--surface); border-color: var(--border); }
+:root.dark .notification-list article.unread { background: var(--surface-2); }
+:root.dark .notification-list article:hover { background: var(--surface-hover); }
+:root.dark .notification-list h3 { color: var(--text); }
+:root.dark .notification-list p, :root.dark .notification-list small, :root.dark .notification-empty { color: var(--text-muted); }
+:root.dark .toast { background: var(--surface-elevated); border: 1px solid var(--border); color: var(--text); }
+:root.dark .toast p { color: var(--text-muted); }
+/* Settings + generic content */
+:root.dark .settings-page, :root.dark .settings-page .card { background: var(--surface); border-color: var(--border); color: var(--text); }
+:root.dark .route-loading, :root.dark .company-empty { color: var(--text-muted); }
+/* Recipe cost-sheet sections (RecipeBuilder) */
+:root.dark .cs-section, :root.dark .cs-sum-card, :root.dark .cs-summary section { background: var(--surface); border-color: var(--border); color: var(--text); }
+:root.dark .cs-row.body, :root.dark .cs-row.head { border-color: var(--border); }
+:root.dark .cs-row.head { color: var(--text-muted); }
+:root.dark .cs-cell input, :root.dark .cs-cell select, :root.dark .cs-tb-field input, :root.dark .cs-tb-field select, :root.dark .cs-ops input, :root.dark .cs-price-input input { background: var(--input-bg); border-color: var(--input-border); color: var(--text); }
+:root.dark .cs-empty, :root.dark .cs-sum-row span { color: var(--text-muted); }
+:root.dark .cs-sum-row strong, :root.dark .cs-sum-total strong { color: var(--text); }
+
+/* ============================================================
+   THEMED SCROLLBARS
+   ============================================================ */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c3d0df; border-radius: 9px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: #a9bccf; }
+:root.dark ::-webkit-scrollbar-thumb { background: #2c4a67; border: 3px solid transparent; background-clip: padding-box; }
+:root.dark ::-webkit-scrollbar-thumb:hover { background: #3c5f80; }
+:root.dark * { scrollbar-color: #2c4a67 transparent; }
+
+/* ============================================================
+   RESPONSIVE — tablet / mobile refinements
+   ============================================================ */
+@media (max-width: 1024px) {
+  .order-kpis, .ops-kpis, .user-admin-kpis, .command-kpis { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+  .dialog, .cust-modal, .unit-modal, .user-form-dialog, .credential-dialog { width: min(94vw, 680px) !important; max-height: 90vh; overflow-y: auto; }
+}
+@media (max-width: 640px) {
+  .order-kpis, .ops-kpis, .user-admin-kpis, .command-kpis { grid-template-columns: 1fr !important; }
+  .dialog, .cust-modal, .unit-modal, .user-form-dialog, .credential-dialog { width: 96vw !important; max-height: 92vh; }
+  .cust-grid { grid-template-columns: 1fr !important; }
+  .ops-form-layout, .business-form { grid-template-columns: 1fr !important; }
+  .app-content { padding-left: 12px; padding-right: 12px; }
+}
+.s2a-combo-panel { max-width: calc(100vw - 24px); }
+
+/* Dark: authenticated content headings/values were color:var(--navy) → invisible on dark cards.
+   Force them to primary text in dark only (auth pages use always-white cards, untouched). */
+:root.dark .app-content :is(h1, h2, h3, h4) { color: var(--text); }
+:root.dark .stat-value,
+:root.dark .fcx-rank .nm strong,
+:root.dark .activity-item .ai-main strong,
+:root.dark .cell-user .cu-text strong,
+:root.dark .customer-grid h3,
+:root.dark .business-page > header h1 { color: var(--text); }
+/* Icon accent tiles: keep tinted (were hard light) in dark */
+:root.dark .icon-chip.slate { background: var(--surface-3); color: var(--text-muted); }
+:root.dark .icon-chip.gold { background: #3a2f16; color: var(--brand-gold-soft); }
