@@ -9,6 +9,7 @@ import {
   calcRecipeCost, overheadFromRecord, RecipeCostError,
   type RecipeNode, type Component, type OverheadInput,
 } from '../../lib/recipe-cost.js';
+import { effectiveYieldMode, toBaseQuantity, toChildYieldQuantity, type ConvEdge } from '../../lib/unit-convert.js';
 
 // สิทธิ์ (permission-code) — สร้าง = RECIPE_CREATE, แก้ไข/เก็บถาวร/ลบ/ทำสำเนา = RECIPE_EDIT
 const CREATE = requirePermission('RECIPE_CREATE');
@@ -36,8 +37,9 @@ const overheadSchema = z.object({
   note: z.string().max(300).nullable().optional(),
 }).nullable().optional();
 
-const versionSchema = z.object({
+const versionBase = z.object({
   standardYieldQty: z.number().positive('ผลผลิตต้องมากกว่า 0'),
+  yieldMode: z.enum(['ACTUAL', 'BATCH']).optional().nullable(),
   yieldUnitId: z.string().optional().nullable(),
   yieldPercent: z.number().positive().max(100).default(100),
   standardWaste: z.number().min(0).default(0),
@@ -47,7 +49,14 @@ const versionSchema = z.object({
   note: z.string().max(300).optional().nullable(),
   components: z.array(componentSchema).min(1, 'ต้องมีอย่างน้อย 1 รายการ'),
 });
-type VersionInput = z.infer<typeof versionSchema>;
+
+/** ACTUAL ต้องมีหน่วยผลผลิตเสมอ · BATCH ไม่ต้องมี (คิดเป็น 1 Batch) */
+const requireYieldUnitForActual = (v: { yieldMode?: 'ACTUAL' | 'BATCH' | null; yieldUnitId?: string | null }) =>
+  v.yieldMode !== 'ACTUAL' || Boolean(v.yieldUnitId);
+const YIELD_UNIT_ISSUE = { message: 'โหมดผลผลิตจริงต้องระบุหน่วยผลผลิต', path: ['yieldUnitId'] };
+
+const versionSchema = versionBase.refine(requireYieldUnitForActual, YIELD_UNIT_ISSUE);
+type VersionInput = z.infer<typeof versionBase>;
 
 const createRecipeSchema = z.object({
   productId: z.string().min(1).optional(),
@@ -58,10 +67,10 @@ const createRecipeSchema = z.object({
   version: versionSchema,
 }).refine((b) => Boolean(b.productId) !== Boolean(b.newMenu), { message: 'เลือกเมนูเดิมหรือสร้างเมนูใหม่อย่างใดอย่างหนึ่ง' });
 
-const newVersionSchema = versionSchema.extend({ reason: z.string().max(300).optional() });
+const newVersionSchema = versionBase.extend({ reason: z.string().max(300).optional() }).refine(requireYieldUnitForActual, YIELD_UNIT_ISSUE);
 
 // ---------- helpers ----------
-type DraftComp = { componentType: string; itemId?: string | null; childRecipeId?: string | null; quantity: number; wastePercent: number };
+type DraftComp = { componentType: string; itemId?: string | null; childRecipeId?: string | null; quantity: number; unitId?: string | null; wastePercent: number };
 
 function overheadInputFromDraft(o: VersionInput['overhead']): OverheadInput {
   if (o?.mode) return { mode: o.mode, total: o.total ?? null, percent: o.percent ?? null, base: o.base ?? null, details: o.details ?? null };
@@ -71,15 +80,48 @@ function overheadInputFromDraft(o: VersionInput['overhead']): OverheadInput {
 /** โหลดกราฟสูตร (root + สูตรย่อยทั้งหมดในบริษัทเดียวกัน) → Map สำหรับ engine · มี guard กันลูปตอนโหลด */
 async function loadGraph(companyId: string, rootId: string, comps: DraftComp[], overhead: OverheadInput, yieldQty: number, yieldPercent: number, portionQty: number | null): Promise<Map<string, RecipeNode>> {
   const nodes = new Map<string, RecipeNode>();
+  // ตารางแปลงหน่วยมาตรฐาน โหลดครั้งเดียวต่อการคำนวณ (ใช้ร่วมทุก node ในกราฟ)
+  const edges: ConvEdge[] = (await prisma.unitConversion.findMany({ select: { fromUnitId: true, toUnitId: true, factor: true } }))
+    .map((e) => ({ fromUnitId: e.fromUnitId, toUnitId: e.toUnitId, factor: num(e.factor) }));
+
   async function add(id: string, c: DraftComp[], ov: OverheadInput, y: number, yp: number, pq: number | null) {
     if (nodes.has(id)) return;
     const itemIds = c.filter((x) => x.componentType !== 'SUB_RECIPE' && x.itemId).map((x) => x.itemId!);
-    const items = itemIds.length ? await prisma.item.findMany({ where: { id: { in: itemIds }, companyId, deletedAt: null }, select: { id: true, type: true, lastCost: true } }) : [];
+    const items = itemIds.length ? await prisma.item.findMany({ where: { id: { in: itemIds }, companyId, deletedAt: null }, select: { id: true, type: true, lastCost: true, baseUnitId: true, purchaseUnitId: true, purchaseToBaseFactor: true } }) : [];
     const im = new Map(items.map((i) => [i.id, i]));
+    // สูตรย่อยที่ถูกอ้างถึง — ต้องรู้หน่วยผลผลิตเพื่อแปลงปริมาณที่ใช้ให้ถูกหน่วย
+    const childIds = c.filter((x) => x.componentType === 'SUB_RECIPE' && x.childRecipeId).map((x) => x.childRecipeId!);
+    const childYieldUnits = new Map<string, string | null>();
+    const childYieldModes = new Map<string, 'ACTUAL' | 'BATCH' | null>();
+    if (childIds.length) {
+      const rows = await prisma.recipe.findMany({ where: { id: { in: childIds }, companyId, deletedAt: null }, select: { id: true, versions: { where: { isActive: true }, take: 1, select: { yieldUnitId: true, yieldMode: true, standardYieldQty: true } } } });
+      for (const r of rows) {
+        const cv = r.versions[0];
+        childYieldUnits.set(r.id, cv?.yieldUnitId ?? null);
+        // สูตรเก่าที่มีผลผลิตจริงครบ (qty + หน่วย) ถือเป็น ACTUAL โดยไม่ต้องแก้ DB
+        childYieldModes.set(r.id, effectiveYieldMode(cv?.yieldMode as 'ACTUAL' | 'BATCH' | null, cv?.yieldUnitId, cv ? num(cv.standardYieldQty) : 0));
+      }
+    }
+
     const engineComps: Component[] = c.map((x) => {
-      if (x.componentType === 'SUB_RECIPE') return { type: 'SUB_RECIPE', childRecipeId: x.childRecipeId!, quantity: x.quantity, wastePercent: x.wastePercent };
+      if (x.componentType === 'SUB_RECIPE') {
+        // ปริมาณสูตรย่อยคิดเป็นหน่วยผลผลิตของสูตรลูกเสมอ
+        const childMode = childYieldModes.get(x.childRecipeId!) ?? null;
+        const qty = toChildYieldQuantity(x.quantity, x.unitId, childYieldUnits.get(x.childRecipeId!) ?? null, edges, childMode);
+        if (qty == null) {
+          if (childMode === 'BATCH') throw new RecipeCostError('BATCH_UNIT_NOT_CONVERTIBLE', 'สูตรย่อยนี้ยังไม่ทราบผลผลิตจริง จึงแปลงเป็นหน่วยอื่นไม่ได้ — ใช้เป็นจำนวน Batch หรือกำหนด Yield จริงก่อน');
+          if (childMode === null) throw new RecipeCostError('YIELD_MODE_REQUIRED', 'สูตรย่อยยังไม่ได้กำหนดวิธีคิดผลผลิต (ผลผลิตจริง หรือ 1 รอบการผลิต) กรุณากำหนดก่อน');
+          throw new RecipeCostError('MISSING_CONVERSION', 'ไม่มีอัตราแปลงหน่วยระหว่างหน่วยที่เลือกกับหน่วยผลผลิตของสูตรย่อย กรุณาตั้งค่าอัตราแปลงก่อน');
+        }
+        return { type: 'SUB_RECIPE', childRecipeId: x.childRecipeId!, quantity: qty, wastePercent: x.wastePercent };
+      }
       const it = im.get(x.itemId!);
-      return { type: x.componentType === 'PACKAGING' ? 'PACKAGING' : 'ITEM', quantityBase: x.quantity, unitCostPerBase: it ? num(it.lastCost) : 0, wastePercent: x.wastePercent };
+      // lastCost คือต้นทุนต่อ "หน่วยฐาน" จึงต้องแปลงปริมาณเป็นหน่วยฐานก่อนคูณเสมอ
+      const qtyBase = it
+        ? toBaseQuantity(x.quantity, x.unitId, { baseUnitId: it.baseUnitId, purchaseUnitId: it.purchaseUnitId, purchaseToBaseFactor: num(it.purchaseToBaseFactor) }, edges)
+        : x.quantity;
+      if (qtyBase == null) throw new RecipeCostError('MISSING_CONVERSION', 'ไม่มีอัตราแปลงหน่วยของวัตถุดิบนี้ กรุณาตั้งค่าอัตราแปลงหน่วยสำหรับสูตรก่อน');
+      return { type: x.componentType === 'PACKAGING' ? 'PACKAGING' : 'ITEM', quantityBase: qtyBase, unitCostPerBase: it ? num(it.lastCost) : 0, wastePercent: x.wastePercent };
     });
     nodes.set(id, { id, components: engineComps, overhead: ov, yieldQty: y, yieldPercent: yp, portionQty: pq });
     for (const x of c.filter((x) => x.componentType === 'SUB_RECIPE' && x.childRecipeId)) {
@@ -89,7 +131,7 @@ async function loadGraph(companyId: string, rootId: string, comps: DraftComp[], 
       const cv = child.versions[0];
       if (!cv) throw new RecipeCostError('NO_ACTIVE_VERSION', 'สูตรย่อยยังไม่มีเวอร์ชันที่ใช้งาน');
       await add(child.id,
-        cv.ingredients.map((g) => ({ componentType: g.componentType, itemId: g.itemId, childRecipeId: g.childRecipeId, quantity: num(g.quantity), wastePercent: num(g.wastePercent) })),
+        cv.ingredients.map((g) => ({ componentType: g.componentType, itemId: g.itemId, childRecipeId: g.childRecipeId, quantity: num(g.quantity), unitId: g.unitId, wastePercent: num(g.wastePercent) })),
         overheadFromRecord({ overheadMode: cv.overheadMode, overheadTotal: cv.overheadTotal != null ? num(cv.overheadTotal) : null, overheadPercent: cv.overheadPercent != null ? num(cv.overheadPercent) : null, overheadBase: cv.overheadBase, overheadDetails: cv.overheadDetails, laborCost: num(cv.laborCost), electricCost: num(cv.electricCost), waterCost: num(cv.waterCost), gasCost: num(cv.gasCost), overheadCost: num(cv.overheadCost), otherCost: num(cv.otherCost) }),
         num(cv.standardYieldQty), num(cv.yieldPercent), cv.portionQty != null ? num(cv.portionQty) : null);
     }
@@ -100,9 +142,52 @@ async function loadGraph(companyId: string, rootId: string, comps: DraftComp[], 
 
 /** คำนวณต้นทุน draft (rootId = id จริงสำหรับ edit เพื่อจับ cycle; placeholder สำหรับ create) */
 async function computeDraft(companyId: string, rootId: string, v: VersionInput) {
-  const comps: DraftComp[] = v.components.map((c) => ({ componentType: c.componentType, itemId: c.itemId, childRecipeId: c.childRecipeId, quantity: c.quantity, wastePercent: c.wastePercent }));
+  const comps: DraftComp[] = v.components.map((c) => ({ componentType: c.componentType, itemId: c.itemId, childRecipeId: c.childRecipeId, quantity: c.quantity, unitId: c.unitId, wastePercent: c.wastePercent }));
   const nodes = await loadGraph(companyId, rootId, comps, overheadInputFromDraft(v.overhead), v.standardYieldQty, v.yieldPercent, v.portionQty ?? null);
   return calcRecipeCost(rootId, nodes);
+}
+
+/** overhead ของเวอร์ชันที่บันทึกไว้ → รูปแบบ draft · สูตรเก่าที่ยังใช้ช่องค่าใช้จ่ายเดิมถูกรวมเป็นรายการเดียว */
+function overheadDraftFromVersion(v: {
+  overheadMode: string | null; overheadTotal: Prisma.Decimal | null; overheadPercent: Prisma.Decimal | null;
+  overheadBase: string | null; overheadDetails: Prisma.JsonValue | null;
+  laborCost: Prisma.Decimal; electricCost: Prisma.Decimal; waterCost: Prisma.Decimal;
+  gasCost: Prisma.Decimal; overheadCost: Prisma.Decimal; otherCost: Prisma.Decimal;
+}): VersionInput['overhead'] {
+  if (v.overheadMode) {
+    return {
+      mode: v.overheadMode as 'TOTAL' | 'PERCENTAGE' | 'DETAILED',
+      total: v.overheadTotal != null ? num(v.overheadTotal) : null,
+      percent: v.overheadPercent != null ? num(v.overheadPercent) : null,
+      base: v.overheadBase as 'INGREDIENT' | 'DIRECT' | 'TOTAL' | null,
+      details: Array.isArray(v.overheadDetails) ? (v.overheadDetails as { label: string; amount: number }[]) : null,
+    };
+  }
+  const legacyTotal = num(v.laborCost) + num(v.electricCost) + num(v.waterCost) + num(v.gasCost) + num(v.overheadCost) + num(v.otherCost);
+  return legacyTotal > 0 ? { mode: 'TOTAL', total: legacyTotal } : null;
+}
+
+/**
+ * ต้นทุนของ "เวอร์ชันที่บันทึกไว้" — ใช้ engine ตัวเดียวกับ Recipe Builder (calcRecipeCost)
+ * เพื่อให้หน้า /costing และ /pricing ได้เลขชุดเดียวกันเสมอ (แปลงหน่วย + สูตรย่อย + overhead โหมดใหม่)
+ * อ่านราคาวัตถุดิบ/อัตราแปลงล่าสุดทุกครั้งที่เรียก จึงเป็น real-time ตามราคาปัจจุบัน
+ */
+export async function computeSavedVersionCost(companyId: string, versionId: string) {
+  const v = await prisma.recipeVersion.findFirst({
+    where: { id: versionId, recipe: { companyId } },
+    include: { ingredients: true, recipe: { select: { id: true } } },
+  });
+  if (!v) return null;
+  const draft: VersionInput = {
+    standardYieldQty: num(v.standardYieldQty), yieldMode: v.yieldMode as 'ACTUAL' | 'BATCH' | null,
+    yieldUnitId: v.yieldUnitId, yieldPercent: num(v.yieldPercent), standardWaste: num(v.standardWaste),
+    portionQty: v.portionQty != null ? num(v.portionQty) : null, portionUnit: v.portionUnit,
+    overhead: overheadDraftFromVersion(v),
+    note: v.note,
+    components: v.ingredients.map((g) => ({ componentType: g.componentType as 'ITEM' | 'SUB_RECIPE' | 'PACKAGING', itemId: g.itemId, childRecipeId: g.childRecipeId, quantity: num(g.quantity), unitId: g.unitId, wastePercent: num(g.wastePercent), note: g.note })),
+  };
+  const cost = await computeDraft(companyId, v.recipeId, draft);
+  return { cost, versionNo: v.versionNo, recipeId: v.recipeId, yieldUnitId: v.yieldUnitId, portionUnit: v.portionUnit };
 }
 
 function costErrorReply(reply: import('fastify').FastifyReply, e: unknown) {
@@ -134,8 +219,9 @@ async function persistVersion(tx: Prisma.TransactionClient, recipeId: string, ve
   const created = await tx.recipeVersion.create({
     data: {
       recipeId, versionNo, isActive: true,
-      standardYieldQty: new Prisma.Decimal(v.standardYieldQty), yieldPercent: new Prisma.Decimal(v.yieldPercent), standardWaste: new Prisma.Decimal(v.standardWaste),
-      yieldUnitId: v.yieldUnitId ?? null, portionQty: v.portionQty != null ? new Prisma.Decimal(v.portionQty) : null, portionUnit: v.portionUnit ?? null,
+      standardYieldQty: new Prisma.Decimal(v.yieldMode === 'BATCH' ? 1 : v.standardYieldQty), yieldPercent: new Prisma.Decimal(v.yieldPercent), standardWaste: new Prisma.Decimal(v.standardWaste),
+      yieldMode: v.yieldMode ?? null,
+      yieldUnitId: v.yieldMode === 'BATCH' ? null : (v.yieldUnitId ?? null), portionQty: v.portionQty != null ? new Prisma.Decimal(v.portionQty) : null, portionUnit: v.portionUnit ?? null,
       overheadMode: o?.mode ?? null, overheadPercent: o?.percent != null ? new Prisma.Decimal(o.percent) : null, overheadBase: o?.base ?? null,
       overheadTotal: o?.total != null ? new Prisma.Decimal(o.total) : null, overheadDetails: (o?.details ?? undefined) as Prisma.InputJsonValue | undefined,
       // legacy fields kept 0 (new recipes use overhead modes)
@@ -161,7 +247,7 @@ async function persistVersion(tx: Prisma.TransactionClient, recipeId: string, ve
 // serialize a stored version → builder view (recompute live for sub-recipe accuracy)
 async function serializeVersion(companyId: string, recipeId: string, v: Prisma.RecipeVersionGetPayload<{ include: { ingredients: { include: { item: { include: { baseUnit: true; purchaseUnit: true } }; childRecipe: true; unit: true } }; yieldUnit: true; costs: true } }>) {
   const draft: VersionInput = {
-    standardYieldQty: num(v.standardYieldQty), yieldUnitId: v.yieldUnitId, yieldPercent: num(v.yieldPercent), standardWaste: num(v.standardWaste),
+    standardYieldQty: num(v.standardYieldQty), yieldMode: (v.yieldMode as 'ACTUAL' | 'BATCH' | null) ?? null, yieldUnitId: v.yieldUnitId, yieldPercent: num(v.yieldPercent), standardWaste: num(v.standardWaste),
     portionQty: v.portionQty != null ? num(v.portionQty) : null, portionUnit: v.portionUnit,
     overhead: v.overheadMode ? { mode: v.overheadMode as 'TOTAL' | 'PERCENTAGE' | 'DETAILED', total: v.overheadTotal != null ? num(v.overheadTotal) : null, percent: v.overheadPercent != null ? num(v.overheadPercent) : null, base: v.overheadBase as 'INGREDIENT' | 'DIRECT' | 'TOTAL' | null, details: Array.isArray(v.overheadDetails) ? (v.overheadDetails as { label: string; amount: number }[]) : null } : null,
     note: v.note,
@@ -176,17 +262,46 @@ async function serializeVersion(companyId: string, recipeId: string, v: Prisma.R
     const cv = await prisma.recipeVersion.findFirst({ where: { recipeId: cid, isActive: true }, include: { costs: { orderBy: { calculatedAt: 'desc' }, take: 1 } } });
     if (cv) childCosts.set(cid, { yieldQty: num(cv.standardYieldQty), unitCost: cv.costs[0] ? num(cv.costs[0].unitCost) : 0, yieldUnitId: cv.yieldUnitId });
   }
+  // ปริมาณในหน่วยฐานของแต่ละแถว — ใช้ทั้งการแสดงผลและ lineCost ให้ตรงกับ engine
+  const convEdges: ConvEdge[] = (await prisma.unitConversion.findMany({ select: { fromUnitId: true, toUnitId: true, factor: true } }))
+    .map((e) => ({ fromUnitId: e.fromUnitId, toUnitId: e.toUnitId, factor: num(e.factor) }));
+  const baseQtyOf = (g: (typeof v.ingredients)[number]): number | null => (g.item
+    ? toBaseQuantity(num(g.quantity), g.unitId, { baseUnitId: g.item.baseUnitId, purchaseUnitId: g.item.purchaseUnitId, purchaseToBaseFactor: num(g.item.purchaseToBaseFactor) }, convEdges)
+    : num(g.quantity));
+
+  const components = v.ingredients.map((g) => ({
+    id: g.id, componentType: g.componentType, itemId: g.itemId, childRecipeId: g.childRecipeId, quantity: num(g.quantity), unitId: g.unitId, quantityInBaseUnit: baseQtyOf(g), wastePercent: num(g.wastePercent), note: g.note,
+    item: g.item ? { id: g.item.id, code: g.item.code, name: g.item.name, type: g.item.type, imageUrl: g.item.imageUrl, baseUnitCode: g.item.baseUnit?.code ?? null, purchaseUnitCode: g.item.purchaseUnit?.code ?? null, purchaseToBaseFactor: num(g.item.purchaseToBaseFactor), lastCost: num(g.item.lastCost) } : null,
+    unit: g.unit ? { id: g.unit.id, code: g.unit.code, name: g.unit.name } : null,
+    childRecipe: g.childRecipe ? { id: g.childRecipe.id, code: g.childRecipe.code, name: g.childRecipe.name, ...(childCosts.get(g.childRecipe.id) ?? { yieldQty: 0, unitCost: 0, yieldUnitId: null }) } : null,
+  }));
+  const storedCost = v.costs[0];
+  const legacyOverheadCost = v.overheadMode ? (breakdown?.overheadCost ?? num(v.overheadTotal)) : num(v.overheadCost);
   return {
     id: v.id, versionNo: v.versionNo, isActive: v.isActive,
-    standardYieldQty: num(v.standardYieldQty), yieldUnitId: v.yieldUnitId, yieldUnit: v.yieldUnit ? { id: v.yieldUnit.id, code: v.yieldUnit.code, name: v.yieldUnit.name } : null,
-    yieldPercent: num(v.yieldPercent), portionQty: v.portionQty != null ? num(v.portionQty) : null, portionUnit: v.portionUnit,
+    standardYieldQty: num(v.standardYieldQty), yieldMode: effectiveYieldMode(v.yieldMode as 'ACTUAL' | 'BATCH' | null, v.yieldUnitId, num(v.standardYieldQty)), yieldUnitId: v.yieldUnitId, yieldUnit: v.yieldUnit ? { id: v.yieldUnit.id, code: v.yieldUnit.code, name: v.yieldUnit.name } : null,
+    yieldPercent: num(v.yieldPercent), standardWaste: num(v.standardWaste), portionQty: v.portionQty != null ? num(v.portionQty) : null, portionUnit: v.portionUnit,
     overhead: draft.overhead, note: v.note, createdAt: v.createdAt.toISOString(),
-    components: v.ingredients.map((g) => ({
-      id: g.id, componentType: g.componentType, itemId: g.itemId, childRecipeId: g.childRecipeId, quantity: num(g.quantity), unitId: g.unitId, wastePercent: num(g.wastePercent), note: g.note,
-      item: g.item ? { id: g.item.id, code: g.item.code, name: g.item.name, type: g.item.type, imageUrl: g.item.imageUrl, baseUnitCode: g.item.baseUnit?.code ?? null, purchaseUnitCode: g.item.purchaseUnit?.code ?? null, purchaseToBaseFactor: num(g.item.purchaseToBaseFactor), lastCost: num(g.item.lastCost) } : null,
-      childRecipe: g.childRecipe ? { id: g.childRecipe.id, code: g.childRecipe.code, name: g.childRecipe.name, ...(childCosts.get(g.childRecipe.id) ?? { yieldQty: 0, unitCost: 0, yieldUnitId: null }) } : null,
+    components,
+    // Legacy Recipe Builder contract. Keep item-backed rows in their original
+    // locations; sub-recipes remain available only through `components`.
+    ingredients: components.filter((g) => g.itemId && g.item).map((g) => ({
+      id: g.id, itemId: g.itemId!, item: g.item, quantityBase: g.quantityInBaseUnit ?? g.quantity, unitId: g.unitId,
+      unit: g.unit, wastePercent: g.wastePercent,
+      lineCost: (g.quantityInBaseUnit ?? g.quantity) * (1 + g.wastePercent / 100) * g.item!.lastCost,
     })),
-    cost: breakdown ?? null, costError,
+    laborCost: num(v.laborCost), electricCost: num(v.electricCost), electricityCost: num(v.electricCost),
+    waterCost: num(v.waterCost), gasCost: num(v.gasCost), overheadCost: legacyOverheadCost, otherCost: num(v.otherCost),
+    cost: breakdown ? {
+      ...breakdown,
+      materialCost: storedCost ? num(storedCost.materialCost) : breakdown.ingredientCost,
+      laborCost: storedCost ? num(storedCost.laborCost) : num(v.laborCost),
+      utilityCost: storedCost ? num(storedCost.utilityCost) : num(v.electricCost) + num(v.waterCost) + num(v.gasCost),
+      overheadCost: storedCost ? num(storedCost.overheadCost) : breakdown.overheadCost,
+      wasteCost: storedCost ? num(storedCost.wasteCost) : 0,
+      otherCost: num(v.otherCost), unitCost: storedCost ? num(storedCost.unitCost) : breakdown.costPerYieldUnit,
+    } : null,
+    costError,
   };
 }
 
@@ -213,7 +328,7 @@ export default async function recipeRoutes(app: FastifyInstance) {
       orderBy: { name: 'asc' }, take: 100,
       include: { versions: { where: { isActive: true }, take: 1, include: { costs: { orderBy: { calculatedAt: 'desc' }, take: 1 }, yieldUnit: true } } },
     });
-    return ok(rows.filter((r) => r.versions[0]).map((r) => { const v = r.versions[0]; const c = v.costs[0]; return { id: r.id, code: r.code, name: r.name, yieldQty: num(v.standardYieldQty), yieldUnit: v.yieldUnit?.code ?? null, yieldUnitId: v.yieldUnitId, totalCost: c ? num(c.totalCost) : 0, unitCost: c ? num(c.unitCost) : 0 }; }));
+    return ok(rows.filter((r) => r.versions[0]).map((r) => { const v = r.versions[0]; const c = v.costs[0]; return { id: r.id, code: r.code, name: r.name, yieldQty: num(v.standardYieldQty), yieldMode: effectiveYieldMode(v.yieldMode as 'ACTUAL' | 'BATCH' | null, v.yieldUnitId, num(v.standardYieldQty)), yieldUnit: v.yieldUnit?.code ?? null, yieldUnitId: v.yieldUnitId, totalCost: c ? num(c.totalCost) : 0, unitCost: c ? num(c.unitCost) : 0 }; }));
   });
 
   // draft preview (no persistence)
@@ -326,7 +441,7 @@ export default async function recipeRoutes(app: FastifyInstance) {
       const created = await tx.recipe.create({ data: { companyId: req.user.companyId!, code: newCode, name: `${recipe.name} - สำเนา`, productId: recipe.productId, description: recipe.description, createdById: req.user.sub, updatedById: req.user.sub } });
       await tx.recipeVersion.create({ data: {
         recipeId: created.id, versionNo: 1, isActive: true,
-        standardYieldQty: src.standardYieldQty, yieldPercent: src.yieldPercent, standardWaste: src.standardWaste, yieldUnitId: src.yieldUnitId, portionQty: src.portionQty, portionUnit: src.portionUnit,
+        standardYieldQty: src.standardYieldQty, yieldMode: src.yieldMode, yieldPercent: src.yieldPercent, standardWaste: src.standardWaste, yieldUnitId: src.yieldUnitId, portionQty: src.portionQty, portionUnit: src.portionUnit,
         overheadMode: src.overheadMode, overheadPercent: src.overheadPercent, overheadBase: src.overheadBase, overheadTotal: src.overheadTotal, overheadDetails: (src.overheadDetails ?? undefined) as Prisma.InputJsonValue | undefined,
         laborCost: src.laborCost, electricCost: src.electricCost, waterCost: src.waterCost, gasCost: src.gasCost, overheadCost: src.overheadCost, otherCost: src.otherCost, createdById: req.user.sub,
         ingredients: { create: src.ingredients.map((g) => ({ componentType: g.componentType, itemId: g.itemId, childRecipeId: g.childRecipeId, quantity: g.quantity, unitId: g.unitId, wastePercent: g.wastePercent, sortOrder: g.sortOrder, note: g.note })) },

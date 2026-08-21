@@ -20,9 +20,21 @@ export interface OverheadInput {
   legacy?: { laborCost: number; electricCost: number; waterCost: number; gasCost: number; overheadCost: number; otherCost: number } | null;
 }
 
-export type Component =
-  | { type: 'ITEM' | 'PACKAGING'; quantityBase: number; unitCostPerBase: number; wastePercent?: number }
-  | { type: 'SUB_RECIPE'; childRecipeId: string; quantity: number; wastePercent?: number };
+export type ItemComponent = {
+  type: 'ITEM' | 'PACKAGING';
+  quantityBase: number;
+  unitCostPerBase: number;
+  wastePercent?: number;
+};
+
+export type SubRecipeComponent = {
+  type: 'SUB_RECIPE';
+  childRecipeId: string;
+  quantity: number;
+  wastePercent?: number;
+};
+
+export type Component = ItemComponent | SubRecipeComponent;
 
 export interface RecipeNode {
   id: string;
@@ -77,16 +89,16 @@ function totalCostOf(id: string, nodes: Map<string, RecipeNode>, path: string[])
   let ingredient = D(0), packaging = D(0), sub = D(0);
   const nextPath = [...path, id];
   for (const c of node.components) {
-    const waste = D(1).plus(D(c.type === 'SUB_RECIPE' ? (c.wastePercent ?? 0) : (c.wastePercent ?? 0)).div(100));
-    if (c.type === 'ITEM' || c.type === 'PACKAGING') {
-      const line = D(c.quantityBase).mul(waste).mul(D(c.unitCostPerBase));
-      if (c.type === 'PACKAGING') packaging = packaging.plus(line); else ingredient = ingredient.plus(line);
-    } else {
+    const waste = D(1).plus(D(c.wastePercent ?? 0).div(100));
+    if (c.type === 'SUB_RECIPE') {
       const child = totalCostOf(c.childRecipeId, nodes, nextPath);
       const childYield = D(child.node.yieldQty).mul(D(child.node.yieldPercent ?? 100)).div(100);
       if (childYield.lte(0)) throw new RecipeCostError('ZERO_CHILD_YIELD', `Sub-recipe ${c.childRecipeId} has no yield.`);
       const perUnit = child.total.div(childYield);
       sub = sub.plus(D(c.quantity).mul(waste).mul(perUnit));
+    } else {
+      const line = D(c.quantityBase).mul(waste).mul(D(c.unitCostPerBase));
+      if (c.type === 'PACKAGING') packaging = packaging.plus(line); else ingredient = ingredient.plus(line);
     }
   }
   const direct = ingredient.plus(packaging).plus(sub);
@@ -102,14 +114,14 @@ export function calcRecipeCost(rootId: string, nodes: Map<string, RecipeNode>): 
   let ingredient = D(0), packaging = D(0), sub = D(0);
   for (const c of node.components) {
     const waste = D(1).plus(D(c.wastePercent ?? 0).div(100));
-    if (c.type === 'ITEM' || c.type === 'PACKAGING') {
-      const line = D(c.quantityBase).mul(waste).mul(D(c.unitCostPerBase));
-      if (c.type === 'PACKAGING') packaging = packaging.plus(line); else ingredient = ingredient.plus(line);
-    } else {
+    if (c.type === 'SUB_RECIPE') {
       const child = totalCostOf(c.childRecipeId, nodes, [rootId]);
       const childYield = D(child.node.yieldQty).mul(D(child.node.yieldPercent ?? 100)).div(100);
       if (childYield.lte(0)) throw new RecipeCostError('ZERO_CHILD_YIELD', `Sub-recipe ${c.childRecipeId} has no yield.`);
       sub = sub.plus(D(c.quantity).mul(waste).mul(child.total.div(childYield)));
+    } else {
+      const line = D(c.quantityBase).mul(waste).mul(D(c.unitCostPerBase));
+      if (c.type === 'PACKAGING') packaging = packaging.plus(line); else ingredient = ingredient.plus(line);
     }
   }
   const direct = ingredient.plus(packaging).plus(sub);

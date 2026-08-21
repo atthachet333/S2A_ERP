@@ -1,0 +1,263 @@
+/* ============================================================
+   S2A ERP — DASHBOARD (Phase 5)
+   หน้าสรุปเพื่อการตัดสินใจ ไม่ใช่ที่รวมข้อมูลทุกอย่าง
+   ระยะ/สี/รัศมี ใช้ token จาก tokens.css ทั้งหมด
+   ============================================================ */
+
+/* ============================================================
+   DASHBOARD V2 (Phase 11) — Balanced Executive Workspace
+   ปัญหาเดิมที่วัดได้ใน Phase 10 ที่ 1440px:
+     8+4 ต่างกัน 208px · 7+5 ต่างกัน 111px · 6+6 ต่างกัน 116px
+     รวมพื้นที่ว่างที่มองเห็นได้ 446px
+   สาเหตุ: align-items:start ทำให้การ์ดคู่กันไม่ยืดเท่ากัน
+   วิธีแก้: ยืดเต็มแถว + จัดโครงภายในการ์ดเป็น flex column
+           ไม่ใช้ min-height ปลอมและไม่เติมเนื้อหาหลอกให้สูงเท่ากัน
+   ============================================================ */
+
+/* ---------- 12-column grid ---------- */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-5);
+  /* stretch = การ์ดในแถวเดียวกันสูงเท่ากันเสมอ */
+  align-items: stretch;
+}
+
+/* การ์ดในแดชบอร์ดเป็นคอลัมน์: หัว → เนื้อหา (ยืด) → ปุ่มท้าย (ชิดล่าง)
+   ทำให้ปุ่มของการ์ดคู่กันอยู่ระดับเดียวกัน */
+.dashboard-page .dash-grid > .s2-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dashboard-page .dash-grid > .s2-card > .s2-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+.dashboard-page .dash-grid > .s2-card > .s2-card-foot { margin-top: auto; }
+
+/* รายการในการ์ดกินพื้นที่ที่เหลือ แล้วเลื่อนเองถ้ายาวเกิน
+   (ไม่ดันการ์ดให้สูงกว่าคู่ของมัน) */
+.dashboard-page .dash-fill { flex: 1; min-height: 0; }
+.dashboard-page .dash-scroll { overflow-y: auto; }
+
+/* PHASE 12 — วัดจริงใน dark mode: ข้อความเล็กสองชนิดคอนทราสต์ไม่ผ่าน
+     .dash-ok  ใช้ var(--success)    = 3.55:1  (ต้องการ 4.5:1)
+     .dl-open  ใช้ var(--brand-blue) = 3.57:1
+   tokens.css มีคู่สีสำหรับพื้นเข้มอยู่แล้ว (--success-fg 8.94:1, --info-fg 9.17:1)
+   จึงใช้ token เดิม ไม่สร้าง token ใหม่ */
+:root.dark .dash-ok { color: var(--success-fg); }
+:root.dark .dash-list .dl-open { color: var(--info-fg); }
+/* ลิงก์ "เปิด" ในการ์ดเอกสารปฏิบัติการก็ใช้ var(--blue) เหมือนกัน = 3.57:1 บนพื้นเข้ม */
+:root.dark .dash-op .op-head a { color: var(--info-fg); }
+
+/* สถานะว่าง/ผิดพลาด ต้องกินพื้นที่เท่าที่เหลือ ไม่ทำให้การ์ดเตี้ยกว่าคู่ */
+.dashboard-page .dash-grid > .s2-card .s2-empty,
+.dashboard-page .dash-grid > .s2-card .dash-error {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+.dash-span-4 { grid-column: span 4; }
+.dash-span-5 { grid-column: span 5; }
+.dash-span-6 { grid-column: span 6; }
+.dash-span-7 { grid-column: span 7; }
+.dash-span-8 { grid-column: span 8; }
+
+/* ---------- ลำดับความสำคัญ ----------
+   การ์ด "ต้องจัดการตอนนี้" คือชั้นที่ 1 จึงเน้นด้วยเส้นขอบทองบาง ๆ
+   ที่เดียวในหน้า — gold เป็น accent ไม่ใช่สีพื้นของทุกการ์ด */
+.dashboard-page .dash-span-8:first-child {
+  border-color: color-mix(in srgb, var(--gold) 38%, var(--border));
+  box-shadow: var(--shadow-card);
+}
+
+/* ---------- Alerts ---------- */
+.dash-alerts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.dash-alerts li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  align-items: center; gap: var(--space-3);
+  min-height: var(--control-h);
+  padding: var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-field);
+  background: var(--surface);
+}
+.dash-alerts .al-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: var(--radius-sm); }
+.dash-alerts .al-icon svg { width: 17px; height: 17px; }
+.dash-alerts .al-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dash-alerts .al-body strong { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.dash-alerts .al-body span { font-size: 12.5px; color: var(--text-muted); overflow-wrap: anywhere; }
+/* ระดับความรุนแรงมีทั้งไอคอน สี และ "ข้อความ" — ไม่ได้สื่อด้วยสีอย่างเดียว */
+.dash-alerts .al-sev { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: var(--radius-pill); white-space: nowrap; }
+.dash-alerts .btn { flex: none; }
+
+.dash-alerts li.sev-critical { border-color: color-mix(in srgb, var(--danger) 38%, var(--border)); background: color-mix(in srgb, var(--danger) 6%, var(--surface)); }
+.dash-alerts li.sev-critical .al-icon { background: var(--danger-bg); color: var(--danger); }
+.dash-alerts li.sev-critical .al-sev { background: var(--danger-bg); color: var(--danger-fg); }
+
+.dash-alerts li.sev-warning { border-color: color-mix(in srgb, var(--note-warn-accent) 38%, var(--border)); background: color-mix(in srgb, var(--note-warn-accent) 7%, var(--surface)); }
+.dash-alerts li.sev-warning .al-icon { background: var(--warning-bg); color: var(--note-warn-fg); }
+.dash-alerts li.sev-warning .al-sev { background: var(--warning-bg); color: var(--warning-fg); }
+
+.dash-alerts li.sev-info .al-icon { background: var(--surface-2); color: var(--text-subtle); }
+.dash-alerts li.sev-info .al-sev { background: var(--neutral-bg); color: var(--neutral-fg); }
+
+/* ---------- Quick actions ---------- */
+/* ทางลัดอยู่คู่กับการ์ด "ต้องจัดการตอนนี้" ที่สูงกว่ามาก
+   จึงให้ปุ่มยืดเต็มพื้นที่ที่เหลือแทนการปล่อยช่องว่างไว้ท้ายการ์ด
+   ปุ่มที่ใหญ่ขึ้นคือเป้าคลิกที่ใหญ่ขึ้นจริง ไม่ใช่การเติมเนื้อหาปลอม */
+.dash-quick {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  flex: 1; align-content: stretch; grid-auto-rows: minmax(var(--control-h), 1fr);
+}
+.dash-quick-btn {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  padding: var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-field);
+  background: var(--surface); color: var(--text);
+  font-size: 13px; font-weight: 600; text-decoration: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+.dash-quick-btn:hover { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+.dash-quick-btn:focus-visible { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
+.dash-quick-btn span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--radius-sm); background: var(--surface-2); flex: none; }
+.dash-quick-btn svg { width: 15px; height: 15px; }
+
+/* ---------- แถวตัวเลขย่อยในการ์ด ---------- */
+.dash-statrow {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.dash-statrow > div {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-2);
+}
+.dash-statrow span { font-size: 11.5px; font-weight: 600; color: var(--text-muted); }
+.dash-statrow b { font-family: var(--font-num); font-size: 19px; font-weight: 800; color: var(--text); }
+.dash-statrow .is-warn { border-color: color-mix(in srgb, var(--note-warn-accent) 40%, var(--border)); }
+.dash-statrow .is-warn b { color: var(--note-warn-fg); }
+.dash-statrow .is-bad { border-color: color-mix(in srgb, var(--danger) 36%, var(--border)); }
+.dash-statrow .is-bad b { color: var(--danger); }
+
+.dash-sub { margin: var(--space-4) 0 var(--space-2); font-size: 13px; font-weight: 700; color: var(--heading); }
+.dash-note { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-2); font-size: 12.5px; color: var(--note-warn-fg); }
+.dash-ok { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: 12.5px; font-weight: 600; color: var(--success); }
+
+/* ---------- รายการย่อย (restock / below-cost / orders) ---------- */
+.dash-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.dash-list li {
+  /* คอลัมน์แรกยืด ส่วนที่เหลือวางต่อกันตามจำนวนจริงของแถวนั้น
+     — บางรายการมีสองตัวเลข บางรายการมีลิงก์เดียว ทั้งคู่ต้องชิดขวาเหมือนกัน */
+  display: grid; grid-template-columns: minmax(0, 1.6fr);
+  grid-auto-flow: column; grid-auto-columns: max-content; justify-content: space-between;
+  align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface);
+}
+.dash-list .dl-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.dash-list .dl-main strong { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-list .dl-main small { font-size: 11.5px; color: var(--text-subtle); }
+.dash-list .dl-num { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.dash-list .dl-num b { font-family: var(--font-num); font-size: 13.5px; font-weight: 700; color: var(--text); }
+.dash-list .dl-num small { font-size: 10.5px; color: var(--text-subtle); }
+/* ลิงก์เปิดเอกสารในรายการ — ใช้แทนคอลัมน์ตัวเลขเมื่อรายการนั้นไม่มีตัวเลขให้เทียบ */
+.dash-list .dl-open {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 600; color: var(--brand-blue); text-decoration: none; white-space: nowrap;
+}
+.dash-list .dl-open:hover { text-decoration: underline; }
+
+/* ---------- Operations ---------- */
+.dash-ops { display: flex; flex-direction: column; gap: var(--space-2); }
+.dash-op { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface); }
+.dash-op .op-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.dash-op .op-head strong { font-size: 13px; font-weight: 600; color: var(--text); }
+.dash-op .op-head a { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600; color: var(--blue); text-decoration: none; }
+.dash-op .op-head a:hover { text-decoration: underline; }
+.dash-op .op-total { display: block; font-family: var(--font-num); font-size: 25px; font-weight: 800; line-height: 1.2; color: var(--text); }
+.dash-op .op-split { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: 11.5px; color: var(--text-muted); }
+.dash-op .op-split b { font-family: var(--font-num); color: var(--text); }
+.dash-op-err { font-size: 12px; color: var(--note-warn-fg); }
+.dash-ops-empty { padding: var(--space-2) 0; }
+
+/* ---------- Activity ---------- */
+.dash-activity { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.dash-activity li {
+  display: grid; grid-template-columns: 74px minmax(0, 1fr) auto;
+  align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-field);
+}
+.dash-activity li:nth-child(odd) { background: var(--surface-2); }
+.dash-activity .ac-time { font-size: 11.5px; color: var(--text-subtle); }
+.dash-activity .ac-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.dash-activity .ac-body strong { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.dash-activity .ac-body small { font-size: 11px; color: var(--text-subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Error ต่อการ์ด ---------- */
+.dash-error {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--note-warn-accent) 40%, var(--border));
+  border-radius: var(--radius-field);
+  background: color-mix(in srgb, var(--note-warn-accent) 8%, var(--surface));
+  color: var(--note-warn-fg); font-size: 13px; font-weight: 600;
+}
+.dash-error svg { width: 17px; height: 17px; flex: none; }
+.dash-error .btn { margin-left: auto; }
+
+/* ============================================================
+   RESPONSIVE — 1366 / 1024 / 760 / 430
+   ============================================================ */
+@media (max-width: 1366px) {
+  /* จอโน้ตบุ๊กทั่วไป: ยุบเป็นสองคอลัมน์เท่า ๆ กัน อ่านง่ายกว่า 8/4 ที่แคบเกิน */
+  .dash-span-4, .dash-span-5, .dash-span-6, .dash-span-7, .dash-span-8 { grid-column: span 6; }
+}
+@media (max-width: 1024px) {
+  /* stack แล้วการ์ดคนละแถวกัน จึงไม่ต้องยืดให้สูงเท่ากันอีก */
+  .dashboard-page .dash-grid > .s2-card { height: auto; }
+  .dashboard-page .dash-scroll { overflow-y: visible; max-height: none; }
+  /* ลิงก์ในหัวการ์ดปฏิบัติการเป็นข้อความ inline สูง 18px ต้องขยายให้แตะได้ */
+  .dash-op .op-head a { min-height: var(--control-h); display: inline-flex; align-items: center; padding-inline: var(--space-2); }
+  .dash-grid { grid-template-columns: 1fr; }
+  .dash-span-4, .dash-span-5, .dash-span-6, .dash-span-7, .dash-span-8 { grid-column: 1 / -1; }
+  /* เกณฑ์สัมผัส 44px ครอบคลุมแท็บเล็ต */
+  .dash-alerts li, .dash-list li, .dash-activity li { min-height: var(--control-h); }
+  /* ลิงก์ในรายการเป็นข้อความ inline — ขยายให้แตะได้บนจอสัมผัส */
+  .dash-list .dl-open { min-height: var(--control-h); padding-inline: var(--space-2); }
+}
+@media (max-width: 760px) {
+  .dash-alerts li {
+    grid-template-columns: 34px minmax(0, 1fr);
+    row-gap: var(--space-2);
+  }
+  .dash-alerts .al-sev { grid-column: 2; justify-self: start; }
+  .dash-alerts .btn { grid-column: 1 / -1; justify-content: center; }
+  .dash-list li {
+    grid-auto-flow: row; grid-template-columns: minmax(0, 1fr) auto;
+    grid-auto-columns: auto; justify-content: stretch; row-gap: var(--space-1);
+  }
+  .dash-list .dl-main { grid-column: 1 / -1; }
+  .dash-list .dl-num { align-items: flex-start; }
+  .dash-list .badge { justify-self: end; }
+  .dash-activity li { grid-template-columns: minmax(0, 1fr) auto; }
+  .dash-activity .ac-time { grid-column: 1 / -1; }
+}
+@media (max-width: 430px) {
+  /* คงไว้ 2 คอลัมน์ตาม spec ตัวอักษรยาวให้ตัดท้ายแทนการดันจนล้น */
+  /* จอเล็กไม่มีพื้นที่เหลือให้ยืด กลับไปเป็นแถวเดียวแบบกระชับ */
+  .dash-quick { flex: none; grid-auto-rows: auto; }
+  .dash-quick-btn { flex-direction: row; align-items: center; padding: 0 var(--space-2); font-size: 12.5px; overflow: hidden; }
+  .dash-quick-btn span { width: 22px; height: 22px; }
+  .dash-statrow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

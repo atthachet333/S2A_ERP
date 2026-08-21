@@ -1,0 +1,72 @@
+/* ============================================================
+   S2A ERP — OPERATIONS (Phase 6)
+   รับของเข้า / เบิกครัวกลาง / คลังสินค้า / ปรับปรุงสต็อก / ประวัติการเคลื่อนไหว
+   โหลดหลัง index.css / workspace.css จึงชนะกฎเดิมได้โดยไม่ต้องใช้ !important
+   ============================================================ */
+
+/* ---------- ตารางเอกสารปฏิบัติการ ---------- */
+.ops-table .num { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.ops-doc-link { font-family: var(--font-num); font-weight: 700; color: var(--blue); text-decoration: none; }
+.ops-doc-link:hover { text-decoration: underline; }
+.ops-doc-link:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.ops-two-line { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ops-two-line b { font-weight: 600; color: var(--text); }
+.ops-two-line small { font-size: 11.5px; color: var(--text-subtle); }
+
+/* ---------- ประเภทการเคลื่อนไหว: ไอคอน + ข้อความ ไม่สื่อด้วยสีอย่างเดียว ---------- */
+.mv-type { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.mv-type svg { flex: none; }
+.mv-in { color: var(--success); }
+.mv-out { color: var(--danger); }
+.mv-reversal { color: var(--note-warn-fg); }
+
+/* ---------- กล่องยืนยันที่บอกผลกระทบต่อสต็อก ---------- */
+.op-confirm dl { display: flex; flex-direction: column; gap: var(--space-1); margin: 0 0 var(--space-3); }
+.op-confirm dl > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); font-size: 13px; }
+.op-confirm dt { color: var(--text-muted); }
+.op-confirm dd { margin: 0; font-weight: 600; color: var(--text); text-align: right; }
+.op-confirm-impact {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  margin: 0; padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--note-warn-accent) 40%, var(--border));
+  border-radius: var(--radius-field);
+  background: color-mix(in srgb, var(--note-warn-accent) 8%, var(--surface));
+  color: var(--note-warn-fg);
+  font-size: 12.5px; line-height: 1.6;
+}
+.op-confirm-impact svg { flex: none; margin-top: 2px; }
+.op-confirm-impact b { color: var(--text); }
+
+/* ============================================================
+   RESPONSIVE — 1024 / 760 / 430 (ชุดเดียวกับทั้งระบบ)
+   ============================================================ */
+@media (max-width: 1024px) {
+  /* เกณฑ์สัมผัส 44px ครอบคลุมแท็บเล็ต */
+  .ops-table td .btn, .ops-doc-link { min-height: var(--control-h); display: inline-flex; align-items: center; }
+}
+@media (max-width: 760px) {
+  /* ตารางเอกสารกลายเป็นการ์ดที่มีป้ายกำกับ */
+  .ops-table { display: block; min-width: 0; width: 100%; }
+  .ops-table thead { display: none; }
+  .ops-table tbody { display: flex; flex-direction: column; gap: var(--space-2); }
+  .ops-table tr {
+    display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface);
+  }
+  .ops-table td {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    border: 0; padding: 2px 0;
+  }
+  .ops-table td::before { content: attr(data-label); font-size: 11.5px; font-weight: 600; color: var(--text-subtle); }
+  .ops-table td:first-child { grid-column: 1 / -1; }
+  .ops-table td:first-child::before { content: none; }
+  .ops-table td:first-child .ops-doc-link { font-size: 15px; }
+}
+
+/* Phase 6D — ปุ่มเปิดแผงรายละเอียดในตารางคลัง ต้องแตะได้บนจอเล็ก */
+@media (max-width: 1024px) {
+  .inv-open { display: inline-flex; align-items: center; min-height: var(--control-h); }
+  /* ลิงก์เลขเอกสารในตารางการเคลื่อนไหวเป็นเป้าสัมผัสจริง ไม่ใช่แค่ข้อความ */
+  .mv-table .inline-link { display: inline-flex; align-items: center; min-height: var(--control-h); }
+}

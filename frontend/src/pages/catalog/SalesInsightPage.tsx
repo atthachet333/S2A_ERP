@@ -63,7 +63,7 @@ export default function SalesInsightPage() {
                 <span className="ic"><AlertTriangle aria-hidden /></span>
                 <div style={{ flex: 1 }}>
                   <strong>{m.name}</strong>
-                  <span>ต้นทุน {m.totalCost != null ? formatMoney(m.totalCost, 2) : '—'} · ราคาขาย {m.sellingPrice != null ? formatMoney(m.sellingPrice, 2) : '—'} · margin {m.margin?.toFixed(1)}%</span>
+                  <span>ต้นทุน/หน่วย {m.unitCost != null ? formatMoney(m.unitCost, 2) : '—'} · ราคาขาย {m.sellingPrice != null ? formatMoney(m.sellingPrice, 2) : '—'} · margin {m.margin?.toFixed(1)}%</span>
                 </div>
                 <Link to="/pricing" className="btn" style={{ height: 34 }}>ปรับราคา</Link>
               </div>
@@ -129,7 +129,7 @@ function RankPanel({ title, icon: Icon, tone, rows, maxMargin, loading, emptyTex
               <span className="n">{i + 1}</span>
               <div className="nm">
                 <strong>{m.name}</strong>
-                <span>ต้นทุน {m.totalCost != null ? formatMoney(m.totalCost, 2) : '—'} · ขาย {m.sellingPrice != null ? formatMoney(m.sellingPrice, 2) : '—'}</span>
+                <span>ต้นทุน/หน่วย {m.unitCost != null ? formatMoney(m.unitCost, 2) : '—'} · ขาย {m.sellingPrice != null ? formatMoney(m.sellingPrice, 2) : '—'}</span>
               </div>
               <span className="track"><i style={{ width: `${Math.max(6, ((m.margin ?? 0) / (maxMargin || 1)) * 100)}%` }} /></span>
               <span className="v" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>

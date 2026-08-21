@@ -28,13 +28,24 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: 'ภาพรวม' })).toBeInTheDocument();
   });
 
-  it('ผู้ใช้ที่ไม่ใช่ SUPER_ADMIN ไม่เห็นเมนูเฉพาะผู้ดูแล', () => {
-    store.user = makeUser({ roles: ['ADMIN'] });
+  it('ผู้ใช้ที่ไม่มีสิทธิ์ผู้ดูแล ไม่เห็นเมนูฝั่งผู้ดูแลเลย', () => {
+    store.user = makeUser({ roles: ['OPERATIONS'], permissions: ['DASHBOARD_VIEW'] });
     renderWithProviders(<Sidebar collapsed={false} onNavigate={() => {}} onLogout={() => {}} />);
     expect(screen.queryByText('ผู้ใช้งาน')).not.toBeInTheDocument();
+    expect(screen.queryByText('บทบาทและสิทธิ์')).not.toBeInTheDocument();
     expect(screen.queryByText('ประวัติการใช้งาน')).not.toBeInTheDocument();
     expect(screen.getByText('วัตถุดิบ')).toBeInTheDocument();
     expect(screen.getByText('บรรจุภัณฑ์')).toBeInTheDocument();
+  });
+
+  it('PHASE 9 — ผู้ที่มี USER_MANAGE เห็นเมนูผู้ใช้ได้ แต่ประวัติการใช้งานยังเป็นของ SUPER_ADMIN', () => {
+    // เมนูถูกปรับให้ตรงกับสิทธิ์ที่ backend ยอมให้เข้าจริง (GET /users รับ USER_VIEW|USER_MANAGE)
+    store.user = makeUser({ roles: ['ADMIN'], permissions: ['DASHBOARD_VIEW', 'USER_MANAGE'] });
+    renderWithProviders(<Sidebar collapsed={false} onNavigate={() => {}} onLogout={() => {}} />);
+    expect(screen.getByText('ผู้ใช้งาน')).toBeInTheDocument();
+    expect(screen.getByText('คำขอสมัครใช้งาน')).toBeInTheDocument();
+    // /activity ยังเป็น SUPER_ADMIN เท่านั้นตาม activity.route.ts
+    expect(screen.queryByText('ประวัติการใช้งาน')).not.toBeInTheDocument();
   });
 
   it('มีปุ่มออกจากระบบและเรียก callback เมื่อคลิก', () => {

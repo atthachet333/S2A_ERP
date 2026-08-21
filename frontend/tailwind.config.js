@@ -1,38 +1,44 @@
 /** @type {import('tailwindcss').Config} */
+// สี/รัศมีทั้งหมดอ้าง design token จาก src/styles/tokens.css (source เดียว)
+// หมายเหตุ: เดิม map เป็น hsl(var(--x)) ซึ่งใช้ไม่ได้เพราะ token เก็บเป็น HEX
+// ทำให้ utility อย่าง bg-primary / border-border ถูกทิ้งเงียบ ๆ
 export default {
   darkMode: ['class'],
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
+        border: 'var(--border)',
+        input: 'var(--input-border)',
+        ring: 'var(--input-focus)',
+        background: 'var(--bg)',
+        foreground: 'var(--text)',
         primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
+          DEFAULT: 'var(--blue)',
+          foreground: 'var(--text-inverse)',
         },
         muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))',
+          DEFAULT: 'var(--surface-2)',
+          foreground: 'var(--text-muted)',
         },
         card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))',
+          DEFAULT: 'var(--surface)',
+          foreground: 'var(--text)',
         },
-        success: 'hsl(142 71% 45%)',
-        warning: 'hsl(38 92% 50%)',
-        danger: 'hsl(0 84% 60%)',
+        success: 'var(--success)',
+        warning: 'var(--warning)',
+        danger: 'var(--danger)',
       },
       borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-field)',
+        lg: 'var(--radius-card)',
+      },
+      spacing: {
+        'control': 'var(--control-h)',
       },
       fontFamily: {
-        sans: ['IBM Plex Sans Thai', 'system-ui', 'sans-serif'],
+        sans: ['Noto Sans Thai', 'system-ui', 'sans-serif'],
       },
     },
   },

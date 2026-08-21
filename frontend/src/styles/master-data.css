@@ -1,0 +1,281 @@
+/* ============================================================
+   S2A ERP — MASTER DATA (Phase 7)
+   หน้าข้อมูลตั้งต้นทั้งชุดใช้ภาษาภาพเดียวกัน และเน้นเรื่องเดียว:
+   ผู้ใช้ต้องเห็นความหมายของหน่วย/ราคา/การแปลง ก่อนกดบันทึก
+   ============================================================ */
+
+/* ---------- ราคาในตาราง: ซื้อ / ฐาน / อัตราแปลง อยู่ด้วยกัน ---------- */
+.md-price { display: flex; flex-direction: column; gap: 1px; align-items: flex-end; text-align: right; }
+.md-price b {
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 13.5px; font-weight: 800; color: var(--text); white-space: nowrap;
+}
+.md-price small { font-size: 11px; color: var(--text-subtle); white-space: nowrap; }
+.md-price .md-none { font-size: 12px; font-weight: 600; color: var(--text-subtle); }
+
+/* อัตราแปลง — ตัวเชื่อมที่ทำให้ 47/L กับ 0.047/ML เข้าใจตรงกัน */
+.md-conv {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: 2px var(--space-2); border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--text-muted);
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 11.5px; font-weight: 700; white-space: nowrap;
+}
+.md-conv.same { background: transparent; color: var(--text-subtle); font-weight: 600; }
+.md-conv.missing {
+  background: color-mix(in srgb, var(--note-warn-accent) 14%, transparent);
+  color: var(--note-warn-fg);
+}
+.md-conv svg { width: 13px; height: 13px; flex: none; }
+
+/* ---------- แถวสองบรรทัด (ชื่อ + รหัส) ---------- */
+.md-two-line { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.md-two-line b { font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+/* อีเมล/เลขภาษีอาจยาวมาก ต้องตัดบรรทัดได้ ไม่ล้นออกนอกช่อง */
+.md-two-line small { min-width: 0; font-family: var(--font-num); font-size: 11.5px; color: var(--text-subtle); overflow-wrap: anywhere; }
+
+/* หน่วย: ตัวย่อเด่น ชื่อเต็มรอง */
+.md-unit { display: flex; flex-direction: column; gap: 1px; }
+.md-unit b { font-family: var(--font-num); font-size: 13px; font-weight: 800; color: var(--text); }
+.md-unit small { font-size: 11px; color: var(--text-subtle); }
+
+/* ---------- ปุ่มในแถว ---------- */
+.md-row-actions { display: inline-flex; gap: var(--space-1); flex-wrap: wrap; }
+
+/* ---------- ฟอร์มแบบแบ่งหัวข้อ ---------- */
+.md-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 340px); gap: var(--space-5); align-items: start; }
+.md-form-main { display: flex; flex-direction: column; gap: var(--space-4); }
+.md-form-side { display: flex; flex-direction: column; gap: var(--space-4); position: sticky; top: calc(var(--header-h) + var(--space-4)); }
+
+/* หัวข้อในฟอร์มมีลำดับตัวอักษร A–E เพื่อให้พูดถึงกันได้ตรงจุด */
+.md-section-badge {
+  display: inline-grid; place-items: center; flex: none;
+  width: 24px; height: 24px; margin-right: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--blue-soft); color: var(--blue);
+  font-family: var(--font-num); font-size: 12px; font-weight: 800;
+}
+
+.md-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.md-fields > label,
+.md-fields > .md-field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.md-fields > .full { grid-column: 1 / -1; }
+.md-fields input,
+.md-fields select,
+.md-fields textarea {
+  width: 100%; min-width: 0; min-height: var(--control-h); padding: 0 var(--space-3);
+  border: 1px solid var(--input-border); border-radius: var(--radius-field);
+  background: var(--input-bg); color: var(--text); font: inherit; font-size: 14px; font-weight: 500;
+}
+.md-fields textarea { min-height: 78px; padding: var(--space-2) var(--space-3); resize: vertical; }
+.md-fields input:focus,
+.md-fields select:focus,
+.md-fields textarea:focus { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
+.md-fields input[aria-invalid='true'] { border-color: var(--danger); }
+.md-hint { font-size: 11.5px; font-weight: 500; color: var(--text-subtle); }
+.md-error { display: flex; align-items: center; gap: var(--space-1); font-size: 12px; font-weight: 600; color: var(--danger); }
+.md-error svg { width: 14px; height: 14px; flex: none; }
+
+/* switch แบบแถวเดียว ไม่ใช่ label ซ้อน label */
+.md-switches { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.md-switches label {
+  display: inline-flex; flex-direction: row; align-items: center; gap: var(--space-2);
+  min-height: var(--control-h); padding: 0 var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface);
+  font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer;
+}
+.md-switches input { width: 17px; height: 17px; min-height: 0; flex: none; accent-color: var(--blue); }
+
+/* ---------- สมการหน่วย: [1] [KG] = [1000] [G] ---------- */
+.md-equation {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  padding: var(--space-3); border: 1px dashed var(--border-strong); border-radius: var(--radius-field);
+  background: var(--surface-2);
+}
+.md-equation .eq-const,
+.md-equation .eq-op {
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 18px; font-weight: 800; color: var(--text);
+}
+.md-equation .eq-unit {
+  padding: 0 var(--space-3); min-height: 34px; display: inline-flex; align-items: center;
+  border-radius: var(--radius-pill); background: var(--blue-soft); color: var(--blue);
+  font-family: var(--font-num); font-size: 13px; font-weight: 800;
+}
+.md-equation input {
+  width: 130px; min-height: var(--control-h); padding: 0 var(--space-3);
+  border: 1px solid var(--input-border); border-radius: var(--radius-field);
+  background: var(--input-bg); color: var(--text);
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 17px; font-weight: 700; text-align: right;
+}
+.md-equation input:focus { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
+
+/* ---------- แผงสรุปราคา: จุดสำคัญที่สุดของฟอร์ม ---------- */
+.md-preview {
+  padding: var(--card-pad);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--border));
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
+}
+.md-preview h3 { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); font-size: 14px; font-weight: 700; color: var(--text); }
+.md-preview h3 svg { width: 17px; height: 17px; }
+.md-preview-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; }
+.md-preview-row + .md-preview-row { border-top: 1px dashed var(--divider); }
+.md-preview-row > span { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.md-preview-row > strong { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 800; color: var(--text); white-space: nowrap; }
+/* บรรทัดที่ระบบจะเอาไปใช้จริง ต้องเด่นกว่าบรรทัดอื่นชัดเจน */
+.md-preview-row.lead > strong { font-size: 26px; line-height: 1.15; }
+.md-preview-row.lead > span { font-weight: 700; color: var(--text); }
+.md-preview-formula {
+  margin: var(--space-3) 0 0; padding-top: var(--space-3);
+  border-top: 1px dashed var(--divider);
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 13.5px; font-weight: 700; color: var(--text-muted); text-align: center;
+}
+.md-preview-note { margin: var(--space-2) 0 0; font-size: 11.5px; color: var(--text-subtle); }
+.md-preview .rb-callout { margin-top: var(--space-3); }
+
+/* ---------- แถบปุ่มบันทึกติดล่าง ---------- */
+.md-form-actions {
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+  padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface);
+}
+.md-form-actions .btn { flex: 1 1 130px; justify-content: center; min-height: var(--control-h); }
+
+/* ---------- Modal กลางของ master data ---------- */
+.md-modal {
+  /* ความกว้างมาตรฐาน — modal ที่ต้องการฟอร์มกว้างกว่านี้ override ผ่าน prop width */
+  --md-modal-w: 560px;
+  display: flex; flex-direction: column;
+  width: min(100vw - var(--space-4) * 2, var(--md-modal-w));
+  max-height: min(88dvh, 760px);
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--surface-elevated); box-shadow: var(--shadow-pop);
+}
+.md-modal-head {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--card-pad) var(--card-pad) var(--space-3);
+  border-bottom: 1px solid var(--divider);
+}
+.md-modal-head > div { flex: 1; min-width: 0; }
+.md-modal-head h2 { margin: 0; font-size: 17px; font-weight: 800; color: var(--text); }
+.md-modal-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--text-muted); }
+.md-modal-head .icon-btn { flex: none; min-width: var(--control-h); min-height: var(--control-h); }
+.md-modal-body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--card-pad); }
+.md-modal-foot {
+  display: flex; justify-content: flex-end; gap: var(--space-2);
+  padding: var(--space-3) var(--card-pad);
+  border-top: 1px solid var(--divider); background: var(--surface);
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
+}
+.md-modal-foot .btn { min-height: var(--control-h); }
+
+/* ---------- สรุปยอดเล็ก ๆ ใต้หัวหน้า ---------- */
+.md-note {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin: 0; font-size: 12.5px; color: var(--text-muted);
+}
+.md-note svg { width: 15px; height: 15px; flex: none; color: var(--note-warn-fg); }
+
+/* ---------- pagination ---------- */
+.md-pagination {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  flex-wrap: wrap; padding: var(--space-3) var(--card-pad);
+  border-top: 1px solid var(--divider);
+}
+.md-pagination span { font-size: 12.5px; color: var(--text-muted); }
+.md-pagination div { display: flex; gap: var(--space-2); }
+.md-pagination .btn { min-height: var(--control-h); }
+
+/* ============================================================
+   RESPONSIVE — 1024 / 760 / 430
+   ============================================================ */
+@media (max-width: 1024px) {
+  .md-form { grid-template-columns: minmax(0, 1fr); }
+  .md-form-side { position: static; }
+  .md-row-actions .icon-btn,
+  .md-row-actions .btn,
+  .order-page .md-table .icon-btn,
+  .admin-page .md-table .icon-btn { min-width: var(--control-h); min-height: var(--control-h); }
+  /* ปุ่มสลับมุมมองสูง 30px ตามสไตล์เดิม ต่ำกว่าเกณฑ์สัมผัส */
+  .master-page .view-toggle button { min-width: var(--control-h); min-height: var(--control-h); }
+}
+@media (max-width: 760px) {
+  /* ตารางกลายเป็นการ์ด — ไม่ให้ตารางกว้าง 1,180px ไปเบียดในกรอบ 350px
+     .data-table มี min-width ติดมาด้วย จึงต้องล้างทั้งสองอย่าง
+
+     PHASE 12 — บล็อกนี้เคยเขียน selector ผิดทุกกฎ:
+       .master-page .md-table,
+       .order-page .md-table,
+       .admin-page .md-table thead { display: none; }
+     ตัวต่อท้าย (thead/tbody/tr/td) ติดอยู่กับ selector ตัวสุดท้ายตัวเดียว
+     ทำให้ .master-page .md-table และ .order-page .md-table รับทุก declaration
+     ที่ตั้งใจให้ thead/tbody/tr/td — กฎสุดท้ายคือ display:none จึงชนะ
+     ผลคือ "ตารางข้อมูลหลักและตารางออเดอร์หายทั้งตารางบนมือถือ"
+     (.admin-page เขียนถูกอยู่แล้วจึงไม่โดน) */
+  .master-page .md-table,
+  .order-page .md-table,
+  .admin-page .md-table { display: block; min-width: 0; width: 100%; }
+  .master-page .md-table thead,
+  .order-page .md-table thead,
+  .admin-page .md-table thead { display: none; }
+  .master-page .md-table tbody,
+  .order-page .md-table tbody,
+  .admin-page .md-table tbody { display: flex; flex-direction: column; gap: var(--space-2); }
+  .master-page .md-table tr,
+  .order-page .md-table tr,
+  .admin-page .md-table tr {
+    display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface);
+  }
+  .master-page .md-table td,
+  .order-page .md-table td,
+  .admin-page .md-table td {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    border: 0; padding: 2px 0; min-width: 0;
+  }
+  /* ฝั่งค่าต้องหดได้ ไม่งั้นข้อความยาว (อีเมล/ที่อยู่) ดันจนล้นการ์ด */
+  .master-page .md-table td > *,
+  .order-page .md-table td > *,
+  .admin-page .md-table td > * { min-width: 0; }
+  .master-page .md-table td .md-two-line,
+  .order-page .md-table td .md-two-line,
+  .admin-page .md-table td .md-two-line { align-items: flex-end; text-align: right; }
+  .master-page .md-table td::before,
+  .order-page .md-table td::before,
+  .admin-page .md-table td::before { content: attr(data-label); font-size: 11.5px; font-weight: 600; color: var(--text-subtle); flex: none; }
+  /* ชื่อรายการเป็นหัวการ์ด จึงกินเต็มแถวและไม่ต้องมี label ซ้ำ */
+  .master-page .md-table td:nth-child(2),
+  .order-page .md-table td:nth-child(2),
+  .admin-page .md-table td:nth-child(2),
+  .master-page .md-table td.md-card-title,
+  .order-page .md-table td.md-card-title,
+  .admin-page .md-table td.md-card-title { grid-column: 1 / -1; }
+  /* ช่องรูปเปลืองที่บนการ์ด และข้อมูลสำคัญอยู่ครบในบรรทัดอื่นแล้ว */
+  .master-page .md-table td[data-label="รูป"],
+  .order-page .md-table td[data-label="รูป"],
+  .admin-page .md-table td[data-label="รูป"] { display: none; }
+  .md-price { align-items: flex-end; text-align: right; }
+
+  .md-fields { grid-template-columns: minmax(0, 1fr); }
+  .md-fields > .full { grid-column: auto; }
+  .md-price { align-items: flex-start; text-align: left; }
+  .md-form-actions .btn { flex: 1 1 100%; }
+  .md-modal { width: 100%; max-width: 100%; max-height: 92dvh; border-radius: var(--radius-card) var(--radius-card) 0 0; }
+  .md-equation { justify-content: space-between; }
+  .md-equation input { width: 100%; }
+}
+@media (max-width: 430px) {
+  .md-preview-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .md-preview-row.lead > strong { font-size: 24px; }
+}
+
+/* ---------- ที่ที่หน่วยถูกใช้งาน ---------- */
+.md-usage { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); }
+
+/* ---------- แถวประวัติราคา (แทน inline style เดิม) ---------- */
+.ph-row .ph-src { font-size: 12px; color: var(--text-subtle); }
+.ph-row .num small { color: var(--text-subtle); }
+.add-price-row .apr-qty { max-width: 92px; }

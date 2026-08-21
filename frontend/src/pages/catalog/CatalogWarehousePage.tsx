@@ -114,7 +114,7 @@ export default function CatalogWarehousePage() {
                       <td><span className="num">{m.code}</span></td>
                       <td><Link to={`/menus/${m.id}`}><strong>{m.name}</strong></Link></td>
                       <td>{m.hasRecipe ? <Badge variant="info">มีสูตร</Badge> : <Badge variant="muted">ยังไม่มีสูตร</Badge>}</td>
-                      <td className="num">{m.totalCost != null ? formatMoney(m.totalCost, 2) : '—'}</td>
+                      <td className="num">{m.unitCost != null ? formatMoney(m.unitCost, 2) : '—'}</td>
                       <td className="num">{m.sellingPrice != null ? formatMoney(m.sellingPrice, 2) : '—'}</td>
                       <td className="num">{m.margin != null ? `${m.margin.toFixed(1)}%` : '—'}</td>
                       <td>{m.isActive ? <Badge variant="success" dot>ขายอยู่</Badge> : <Badge variant="muted" dot>ปิด</Badge>}</td>

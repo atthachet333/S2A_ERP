@@ -14,14 +14,22 @@ import NotFoundPage from '@/pages/NotFoundPage';
 import ItemsPage from '@/pages/catalog/ItemsPage';
 import ItemFormPage from '@/pages/catalog/ItemFormPage';
 import CatalogMastersPage from '@/pages/catalog/CatalogMastersPage';
+const UnitConversionsPage = lazy(() => import('@/pages/catalog/UnitConversionsPage'));
+const InventoryPage = lazy(() => import('@/pages/InventoryPages').then((m) => ({ default: m.InventoryPage })));
+const MovementHistoryPage = lazy(() => import('@/pages/InventoryPages').then((m) => ({ default: m.MovementHistoryPage })));
+const StockAdjustmentPage = lazy(() => import('@/pages/InventoryPages').then((m) => ({ default: m.StockAdjustmentPage })));
+const ReceivingDetailPage = lazy(() => import('@/pages/OperationDetailPages').then((m) => ({ default: m.ReceivingDetailPage })));
+const StockIssueDetailPage = lazy(() => import('@/pages/OperationDetailPages').then((m) => ({ default: m.StockIssueDetailPage })));
 import FoodCostingPage from '@/pages/catalog/FoodCostingPage';
 import MenuPage from '@/pages/catalog/MenuPage';
 const RecipeBuilderPage = lazy(() => import('@/pages/catalog/RecipeBuilderPage'));
+const RecipeListPage = lazy(() => import('@/pages/catalog/RecipeListPage'));
 import IngredientsPage from '@/pages/catalog/IngredientsPage';
 import PackagingPage from '@/pages/catalog/PackagingPage';
 import IngredientFormPage from '@/pages/catalog/IngredientFormPage';
 import PackagingFormPage from '@/pages/catalog/PackagingFormPage';
 import CatalogWarehousePage from '@/pages/catalog/CatalogWarehousePage';
+import PartnerMastersPage from '@/pages/catalog/PartnerMastersPage';
 import SalesInsightPage from '@/pages/catalog/SalesInsightPage';
 import CostingWorkspacePage from '@/pages/catalog/CostingWorkspacePage';
 import PricingWorkspacePage from '@/pages/catalog/PricingWorkspacePage';
@@ -30,7 +38,10 @@ const ForgotPasswordPage = lazy(() => import('@/pages/PasswordRecoveryPages').th
 const ResetPasswordPage = lazy(() => import('@/pages/PasswordRecoveryPages').then((module) => ({ default: module.ResetPasswordPage })));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
 import RoleDashboardPage from '@/pages/RoleDashboardPage';
-import OrdersPage, { CustomersPage } from '@/pages/OrdersPage';
+import OrdersListPage from '@/pages/orders/OrdersListPage';
+import OrderWorkspacePage from '@/pages/orders/OrderWorkspacePage';
+import OrderDetailPage from '@/pages/orders/OrderDetailPage';
+import CustomersPage, { CustomerProfilePage } from '@/pages/orders/CustomersPage';
 const AdminPermissionsPage = lazy(() => import('@/pages/AdminPermissionsPage'));
 const RegistrationsPage = lazy(() => import('@/pages/RegistrationsPage'));
 import { ReceivingPage, StockIssuePage } from '@/pages/OperationsPages';
@@ -39,7 +50,7 @@ import { useI18n } from '@/i18n/i18n';
 
 /** เมนูที่ยังไม่มีระบบจริง — เปิด Placeholder page ที่ออกแบบไว้ */
 const PLACEHOLDER_PATHS = [
-  '/production', '/inventory', '/transfers', '/stock-count',
+  '/production', '/transfers', '/stock-count',
   '/reports',
 ];
 
@@ -61,15 +72,23 @@ export default function App() {
           <Route path="/admin" element={<RoleDashboardPage />} />
           <Route path="/management" element={<RoleDashboardPage />} />
           <Route path="/operations" element={<RoleDashboardPage />} />
-          <Route path="/orders" element={<OrdersPage />} />
-          <Route path="/orders/new" element={<OrdersPage />} />
+          <Route path="/orders" element={<OrdersListPage />} />
+          <Route path="/orders/new" element={<OrderWorkspacePage />} />
+          <Route path="/orders/:id" element={<OrderDetailPage />} />
+          <Route path="/orders/:id/edit" element={<OrderWorkspacePage />} />
           <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/customers/:id" element={<CustomerProfilePage />} />
           <Route path="/receiving" element={<ReceivingPage />} />
           <Route path="/receiving/new" element={<ReceivingPage />} />
-          <Route path="/receiving/:id" element={<ReceivingPage />} />
+          <Route path="/receiving/:id/edit" element={<ReceivingPage />} />
+          <Route path="/receiving/:id" element={<ReceivingDetailPage />} />
           <Route path="/stock-issues" element={<StockIssuePage />} />
           <Route path="/stock-issues/new" element={<StockIssuePage />} />
-          <Route path="/stock-issues/:id" element={<StockIssuePage />} />
+          <Route path="/stock-issues/:id/edit" element={<StockIssuePage />} />
+          <Route path="/stock-issues/:id" element={<StockIssueDetailPage />} />
+          <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/inventory/movements" element={<MovementHistoryPage />} />
+          <Route path="/inventory/adjustments" element={<StockAdjustmentPage />} />
           <Route path="/settings" element={<CompanySettingsPage />} />
           <Route path="/settings/company" element={<CompanySettingsPage />} />
           <Route path="/chef" element={<RoleDashboardPage />} />
@@ -97,12 +116,16 @@ export default function App() {
           <Route path="/items/new" element={<ItemFormPage />} />
           <Route path="/items/:id" element={<ItemFormPage />} />
           <Route path="/units" element={<CatalogMastersPage section="units" />} />
+          <Route path="/units/conversions" element={<UnitConversionsPage />} />
           <Route path="/categories" element={<CatalogMastersPage section="categories" />} />
+          {/* ข้อมูลตั้งต้นคู่ค้า/คลัง (Phase 7) */}
+          <Route path="/suppliers" element={<PartnerMastersPage section="suppliers" />} />
+          <Route path="/warehouses" element={<PartnerMastersPage section="warehouses" />} />
           <Route path="/menus" element={<FoodCostingPage section="menus" />} />
           <Route path="/menus/new" element={<MenuPage mode="form" />} />
           <Route path="/menus/:id" element={<MenuPage mode="detail" />} />
           <Route path="/menus/:id/edit" element={<MenuPage mode="form" />} />
-          <Route path="/recipes" element={<FoodCostingPage section="recipes" />} />
+          <Route path="/recipes" element={<RecipeListPage />} />
           <Route path="/recipes/new" element={<RecipeBuilderPage />} />
           <Route path="/recipes/:id" element={<RecipeBuilderPage />} />
           <Route path="/menus/:menuId/recipes/new" element={<RecipeBuilderPage />} />

@@ -1,0 +1,198 @@
+/* ============================================================
+   S2A ERP — GLOBAL PAGE PATTERN (Phase 2+3)
+   โครงหน้ามาตรฐาน: container / header / KPI / filter / card / sticky
+   ระยะทั้งหมดมาจาก token เท่านั้น ห้าม hardcode px ใหม่ในไฟล์หน้าเพจ
+   ============================================================ */
+
+/* ---------- PageContainer ----------
+   .app-content ให้ระยะขอบแนวนอนอยู่แล้ว ที่นี่คุมเฉพาะความกว้างสูงสุด
+   เพื่อไม่ให้เกิด gutter ซ้อนกันสองชั้นเหมือนโครงเดิม */
+.s2-page { width: 100%; margin-inline: auto; display: flex; flex-direction: column; gap: var(--space-5); }
+.s2-page--wide { max-width: var(--page-wide); }
+.s2-page--default { max-width: var(--page-default); }
+.s2-page--narrow { max-width: var(--page-narrow); }
+
+/* ---------- PageHeader ---------- */
+.s2-page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-4) var(--space-6); flex-wrap: wrap;
+}
+.s2-page-header-main { min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.s2-page-breadcrumb {
+  display: flex; align-items: center; gap: var(--space-1);
+  font-size: 12.5px; font-weight: 600; color: var(--text-subtle);
+}
+.s2-page-breadcrumb svg { width: 13px; height: 13px; }
+.s2-page-title-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.s2-page-title-row h1 {
+  margin: 0; font-size: clamp(20px, 1.5vw, 25px); line-height: 1.25;
+  font-weight: 700; color: var(--heading); letter-spacing: -.01em;
+}
+.s2-page-desc { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--text-muted); max-width: 70ch; }
+.s2-page-meta { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-1); font-size: 12.5px; color: var(--text-subtle); }
+.s2-page-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; flex: none; }
+
+/* ---------- KPI ---------- */
+.s2-kpi-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(206px, 1fr)); }
+.s2-kpi-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.s2-kpi-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.s2-kpi-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.s2-kpi-grid--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+.s2-kpi {
+  position: relative; display: flex; flex-direction: column; gap: 2px;
+  padding: var(--card-pad-sm) var(--space-5);
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--surface); box-shadow: var(--shadow-flat);
+  text-align: left; font: inherit; color: inherit;
+}
+button.s2-kpi { cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
+button.s2-kpi:hover { border-color: var(--border-strong); box-shadow: var(--shadow-card); }
+button.s2-kpi:focus-visible { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
+.s2-kpi.is-active { border-color: var(--blue); background: var(--blue-soft); }
+.s2-kpi-icon { position: absolute; top: var(--space-4); right: var(--space-4); display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-subtle); }
+.s2-kpi-icon svg { width: 16px; height: 16px; }
+.s2-kpi-label { font-size: 12.5px; font-weight: 600; color: var(--text-muted); padding-right: 34px; }
+.s2-kpi-value { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 25px; font-weight: 800; line-height: 1.2; color: var(--text); }
+.s2-kpi-hint { font-size: 12px; color: var(--text-subtle); }
+.s2-kpi--success .s2-kpi-value { color: var(--success); }
+.s2-kpi--warning .s2-kpi-value { color: var(--warning); }
+.s2-kpi--danger  .s2-kpi-value { color: var(--danger); }
+.s2-kpi--info    .s2-kpi-value { color: var(--info); }
+
+/* ---------- FilterBar ---------- */
+.s2-filterbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--surface); box-shadow: var(--shadow-flat);
+}
+.s2-filterbar-fields { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+.s2-filterbar-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+.s2-filterbar input, .s2-filterbar select {
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--input-border); border-radius: var(--radius-field);
+  background: var(--input-bg); color: var(--text); font: inherit;
+}
+.s2-filterbar input:focus, .s2-filterbar select:focus { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
+.s2-filterbar input::placeholder { color: var(--input-placeholder); }
+.s2-filterbar .s2-search { flex: 1 1 220px; min-width: 0; max-width: 380px; }
+
+/* ---------- ContentCard ---------- */
+.s2-card {
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--surface); box-shadow: var(--shadow-flat);
+  overflow: hidden;
+}
+.s2-card-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4);
+  padding: var(--card-pad-sm) var(--card-pad);
+  border-bottom: 1px solid var(--divider);
+}
+.s2-card-head h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--heading); }
+.s2-card-head p { margin: 3px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--text-muted); }
+.s2-card-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+.s2-card-body { padding: var(--card-pad); }
+.s2-card-body.is-flush { padding: 0; }
+.s2-card-foot {
+  padding: var(--space-3) var(--card-pad);
+  border-top: 1px solid var(--divider); background: var(--surface-2);
+}
+
+/* ---------- Sticky summary / actions ---------- */
+.s2-sticky-summary { position: sticky; top: calc(var(--header-h) + var(--space-4)); z-index: var(--z-sticky); align-self: start; }
+.s2-sticky-actions {
+  position: sticky; bottom: 0; z-index: var(--z-sticky);
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2);
+  padding: var(--space-3) 0;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--divider);
+}
+
+/* ---------- Skeletons ---------- */
+.s2-skeleton-card {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--card-pad);
+  border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface);
+}
+.s2-skeleton-card .skeleton, .s2-kpi .skeleton { display: block; border-radius: var(--radius-sm); }
+
+/* ============================================================
+   RESPONSIVE — breakpoint เดิมของโปรเจกต์: 1024 / 760 / 640
+   ============================================================ */
+@media (max-width: 1024px) {
+  .s2-kpi-grid--4, .s2-kpi-grid--5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .s2-kpi-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* แผงสรุปเลิก sticky บนแท็บเล็ต ให้ไหลตามเนื้อหาปกติ */
+  .s2-sticky-summary { position: static; }
+}
+@media (max-width: 760px) {
+  .s2-page { gap: var(--space-4); }
+  .s2-page-header { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+  .s2-page-actions { width: 100%; }
+  .s2-page-actions > * { flex: 1 1 auto; justify-content: center; }
+  .s2-kpi-grid, .s2-kpi-grid--2, .s2-kpi-grid--3, .s2-kpi-grid--4, .s2-kpi-grid--5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .s2-filterbar { align-items: stretch; }
+  .s2-filterbar-fields { flex-direction: column; align-items: stretch; }
+  .s2-filterbar .s2-search { max-width: none; }
+  .s2-filterbar-actions > * { flex: 1 1 auto; justify-content: center; }
+  .s2-card-head { flex-direction: column; gap: var(--space-3); }
+  .s2-card-actions { width: 100%; }
+  .s2-card-body { padding: var(--card-pad-sm); }
+}
+@media (max-width: 430px) {
+  .s2-kpi-grid, .s2-kpi-grid--2, .s2-kpi-grid--3, .s2-kpi-grid--4, .s2-kpi-grid--5 { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   NORMALIZE — page wrapper เดิมที่กำหนดความกว้าง/ระยะขอบเอง
+   root cause ของ "ความกว้างไม่คงที่" และ "gutter ซ้อนสองชั้น":
+   .app-content ใส่ระยะขอบให้แล้ว แต่ละหน้ายังใส่ padding ทับอีกชั้น
+   และตั้ง max-width คนละค่า (1180/1280/1480/1500) ทำให้สลับเมนูแล้วขอบขยับ
+   ============================================================ */
+.rb2,
+.recipe-list-v2,
+.inventory-page,
+.reconcile,
+.units-page,
+.doc-detail {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: 0;   /* ระยะขอบแนวนอนเป็นหน้าที่ของ .app-content เท่านั้น */
+}
+.rb2, .recipe-list-v2, .inventory-page, .reconcile, .units-page { max-width: var(--page-default); }
+.doc-detail { max-width: var(--page-doc); }
+
+/* ============================================================
+   TOUCH TARGETS — PART 13
+   ปุ่มในหัวเว็บสูง 38–41px ซึ่งพอสำหรับเมาส์ แต่ต่ำกว่าเกณฑ์สัมผัส 44px
+   จึงขยายเฉพาะช่วงจอสัมผัส ไม่ให้หัวเว็บเดสก์ท็อปอึดอัด
+   ============================================================ */
+@media (max-width: 1024px) {
+  .app-header .icon-btn,
+  .app-header .user-trigger,
+  .app-header .header-search,
+  .app-header .header-company-context {
+    min-height: var(--control-h);
+    min-width: var(--control-h);
+  }
+  .app-sidebar .nav-item,
+  .app-sidebar .sidebar-logout,
+  .sidebar-close { min-height: var(--control-h); }
+}
+
+/* ============================================================
+   MOBILE DRAWER FIX — PART 2
+   บั๊กเดิม: --sbw ถูกใช้สองหน้าที่พร้อมกัน
+     1) ระยะเยื้องของเนื้อหา (.app-main margin-left, .app-header left)
+     2) ความกว้างของ sidebar เอง (.app-sidebar width)
+   พอจอ <=760px ตั้ง --sbw:0px เพื่อให้เนื้อหาเต็มจอ ความกว้าง sidebar
+   จึงกลายเป็น 0 ไปด้วย => drawer เปิดมาแล้วกว้าง 1px กดอะไรไม่ได้เลย
+   แก้โดยแยกความกว้าง drawer ออกจากตัวแปรระยะเยื้อง
+   ============================================================ */
+@media (max-width: 760px) {
+  .app-sidebar { width: min(86vw, var(--sidebar-w)); }
+}

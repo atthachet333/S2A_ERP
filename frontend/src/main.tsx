@@ -17,8 +17,21 @@ import '@fontsource/noto-sans-thai/700.css';
 import '@fontsource/manrope/500.css';
 import '@fontsource/manrope/600.css';
 import '@fontsource/manrope/700.css';
+import './styles/tokens.css';
 import './index.css';
 import './styles/workspace.css';
+import './styles/page-pattern.css';
+import './styles/recipe-builder.css';
+import './styles/costing-pricing.css';
+import './styles/dashboard.css';
+import './styles/operations.css';
+import './styles/operations-workspace.css';
+import './styles/adjustment.css';
+import './styles/inventory-inspector.css';
+import './styles/master-data.css';
+import './styles/orders.css';
+import './styles/admin.css';
+import './styles/consistency.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

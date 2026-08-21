@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
-  Plus, Search, CheckCircle2, AlertTriangle, Clock, Pencil, Power, ImageOff,
+  Plus, CheckCircle2, AlertTriangle, Pencil, Power, ImageOff, Ruler,
   LayoutGrid, List, type LucideIcon,
 } from 'lucide-react';
 import { catalogApi, type Item, type ItemType } from '@/lib/catalog';
-import { formatMoney, formatThaiDate } from '@/lib/utils';
+import { formatThaiDate } from '@/lib/utils';
+import { itemPriceDisplay, needsConversion } from '@/lib/item-unit-price';
 import Badge from '@/components/ui/Badge';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { PageContainer, PageHeader, FilterBar, ContentCard, KPIGrid, KPICard } from '@/components/layout/page';
 import EmptyState from '@/components/ui/EmptyState';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
@@ -37,7 +40,9 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
   const [view, setView] = useState<'table' | 'cards'>('table');
+  const [toggling, setToggling] = useState<Item | null>(null);
   const Icon = variant.icon;
+  const noun = variant.kind === 'packaging' ? 'บรรจุภัณฑ์' : 'วัตถุดิบ';
 
   const list = useQuery({
     queryKey: ['items', variant.type, { search, status, page }],
@@ -45,112 +50,164 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
     placeholderData: keepPreviousData,
   });
 
+  /**
+   * KPI ต้องนับจากทั้งชุด ไม่ใช่เฉพาะหน้าที่เปิดอยู่
+   * /items/summary มีจริงแต่ไม่แยกตามชนิด (นับวัตถุดิบ+บรรจุภัณฑ์รวมกัน) จึงใช้ไม่ได้ที่นี่
+   * selectableItems(type) คืนรายการ active ทั้งหมดของชนิดนี้ — เป็น scope ที่ตรงกับคำถามพอดี
+   * เพราะ KPI ทั้งสามตัวถามถึงของที่กำลังจะถูกใช้ในสูตรจริง
+   */
+  const activeAll = useQuery({
+    queryKey: ['selectable-items', variant.type],
+    queryFn: () => catalogApi.selectableItems(variant.type),
+  });
+
+  const kpi = useMemo(() => {
+    const rows = activeAll.data;
+    if (!rows) return null;
+    return {
+      active: rows.length,
+      noPrice: rows.filter((r) => r.lastCost <= 0).length,
+      noFactor: rows.filter((r) => needsConversion(r)).length,
+    };
+  }, [activeAll.data]);
+
   const toggle = useMutation({
     mutationFn: (item: Item) => (item.isActive ? catalogApi.deactivateItem(item.id) : catalogApi.activateItem(item.id)),
-    onSuccess: (_d, item) => { toast(item.isActive ? 'ปิดการใช้งานแล้ว' : 'เปิดการใช้งานแล้ว'); void qc.invalidateQueries({ queryKey: ['items'] }); },
+    onSuccess: (_d, item) => {
+      toast(item.isActive ? 'ปิดการใช้งานแล้ว' : 'เปิดการใช้งานแล้ว');
+      void qc.invalidateQueries({ queryKey: ['items'] });
+      void qc.invalidateQueries({ queryKey: ['selectable-items'] });
+    },
     onError: (e) => toast(e instanceof Error ? e.message : 'ทำรายการไม่สำเร็จ', 'error'),
   });
 
   const rows = list.data?.items ?? [];
   const total = list.data?.total ?? 0;
   const totalPages = list.data?.totalPages ?? 1;
-  const active = rows.filter((r) => r.isActive).length;
-  const noPrice = rows.filter((r) => r.lastCost <= 0).length;
   const resetPage = () => setPage(1);
+  const hasFilter = Boolean(search || status);
 
   return (
-    <div className="item-list-workspace">
-      <div className="fcx-hero">
-        <div className="fcx-hero-row">
-          <div>
-            <p className="eyebrow">{variant.eyebrow}</p>
-            <h1>{variant.title}</h1>
-            <p>{variant.subtitle}</p>
-          </div>
-          <div className="fcx-hero-actions">
-            <Link to={variant.newPath} className="qa-btn gold"><Plus aria-hidden />{variant.addLabel}</Link>
-          </div>
-        </div>
-      </div>
+    <PageContainer size="wide" className="master-page item-list-workspace">
+      <PageHeader
+        breadcrumb={variant.eyebrow}
+        title={variant.title}
+        description={variant.subtitle}
+        actions={<>
+          <Link to="/units/conversions" className="btn"><Ruler aria-hidden width={16} />สูตรแปลงหน่วย</Link>
+          <Link to={variant.newPath} className="btn primary"><Plus aria-hidden width={16} />{variant.addLabel}</Link>
+        </>}
+      />
 
-      <div className="fcx-tiles">
-        <Tile icon={Icon} tone="info" label={variant.totalLabel} value={String(total)} />
-        <Tile icon={CheckCircle2} tone="green" label="ใช้งานอยู่" value={String(active)} sub="ในหน้านี้" />
-        <Tile icon={AlertTriangle} tone="amber" label="ยังไม่มีราคาซื้อ" value={String(noPrice)} sub="ในหน้านี้" />
-        <Tile icon={Clock} tone="slate" label="อัปเดตล่าสุด" value={rows[0] ? formatThaiDate(rows[0].updatedAt) : '—'} small />
-      </div>
+      <KPIGrid columns={4}>
+        <KPICard label={variant.totalLabel} value={total} icon={<Icon />} hint={hasFilter ? 'ตามตัวกรองปัจจุบัน' : 'ทุกสถานะ'} />
+        <KPICard label="ใช้งานอยู่" value={kpi ? kpi.active : '—'} icon={<CheckCircle2 />} hint="เลือกใช้ในสูตรได้" />
+        <KPICard label="ยังไม่มีราคาซื้อ" value={kpi ? kpi.noPrice : '—'} icon={<AlertTriangle />}
+          tone={kpi && kpi.noPrice > 0 ? 'warning' : 'default'} hint="คิดต้นทุนไม่ได้จนกว่าจะใส่ราคา" />
+        <KPICard label="ยังไม่ตั้งอัตราแปลง" value={kpi ? kpi.noFactor : '—'} icon={<Ruler />}
+          tone={kpi && kpi.noFactor > 0 ? 'warning' : 'default'} hint="มีหน่วยซื้อแยก แต่ยังไม่ระบุอัตรา" />
+      </KPIGrid>
 
-      <div className="toolbar" style={{ marginTop: 20 }}>
-        <div className="search-box">
-          <Search aria-hidden />
-          <input placeholder={variant.searchPlaceholder} value={search} onChange={(e) => { setSearch(e.target.value); resetPage(); }} aria-label="ค้นหา" />
+      <FilterBar actions={<>
+        {hasFilter && <button type="button" className="btn" onClick={() => { setSearch(''); setStatus(''); resetPage(); }}>ล้างตัวกรอง</button>}
+        <div className="view-toggle" role="group" aria-label="รูปแบบการแสดงผล">
+          <button type="button" className={view === 'table' ? 'active' : ''} onClick={() => setView('table')}
+            aria-pressed={view === 'table'} aria-label="มุมมองตาราง"><List aria-hidden /></button>
+          <button type="button" className={view === 'cards' ? 'active' : ''} onClick={() => setView('cards')}
+            aria-pressed={view === 'cards'} aria-label="มุมมองการ์ด"><LayoutGrid aria-hidden /></button>
         </div>
+      </>}>
+        <input className="s2-search" placeholder={variant.searchPlaceholder} value={search}
+          onChange={(e) => { setSearch(e.target.value); resetPage(); }} aria-label={`ค้นหา${noun}`} />
         <select value={status} onChange={(e) => { setStatus(e.target.value); resetPage(); }} aria-label="สถานะ">
           <option value="">ทุกสถานะ</option>
           <option value="active">ใช้งาน</option>
           <option value="inactive">ปิดใช้งาน</option>
         </select>
-        <span className="count-pill">{total} รายการ</span>
-        <div className="spacer" />
-        <div className="view-toggle" aria-label="รูปแบบการแสดงผล">
-          <button className={view === 'table' ? 'active' : ''} onClick={() => setView('table')} aria-label="มุมมองตาราง"><List /></button>
-          <button className={view === 'cards' ? 'active' : ''} onClick={() => setView('cards')} aria-label="มุมมองการ์ด"><LayoutGrid /></button>
-        </div>
-        <Link to={variant.newPath} className="btn primary"><Plus aria-hidden />{variant.addLabel}</Link>
-      </div>
+      </FilterBar>
 
-      <section className={`card items-surface ${view}`}>
-        {view === 'cards' && !list.isLoading && (
+      <ContentCard padded={false}>
+        {view === 'cards' && !list.isLoading && rows.length > 0 && (
           <div className="item-card-grid">
-            {rows.map((item) => (
-              <article className="item-visual-card" key={item.id}>
-                <Thumb url={item.imageUrl} />
-                <div>
-                  <div className="item-card-head">
-                    <span className="unit-tag">{item.baseUnit?.code ?? '—'}</span>
-                    {item.isActive ? <Badge variant="success" dot>ใช้งาน</Badge> : <Badge variant="muted">ปิดใช้งาน</Badge>}
+            {rows.map((item) => {
+              const p = itemPriceDisplay({
+                lastCost: item.lastCost, purchaseToBaseFactor: item.purchaseToBaseFactor,
+                purchaseUnitCode: item.purchaseUnit?.code, baseUnitCode: item.baseUnit?.code,
+              });
+              return (
+                <article className="item-visual-card" key={item.id}>
+                  <Thumb url={item.imageUrl} />
+                  <div>
+                    <div className="item-card-head">
+                      <span className="unit-tag">{item.baseUnit?.code ?? '—'}</span>
+                      {item.isActive ? <Badge variant="success" dot>ใช้งาน</Badge> : <Badge variant="muted">ปิดใช้งาน</Badge>}
+                    </div>
+                    <small>{item.code}</small>
+                    <h3>{item.name}</h3>
+                    <p>{item.category?.name ?? variant.title}</p>
+                    <span className="md-price">
+                      {p.base ? <><b>{p.base}</b>{p.purchase && <small>ซื้อ {p.purchase}</small>}</> : <span className="md-none">ยังไม่มีราคาซื้อ</span>}
+                    </span>
+                    <Link className="btn" to={variant.itemPath(item.id)}>ดูรายละเอียด</Link>
                   </div>
-                  <small>{item.code}</small>
-                  <h3>{item.name}</h3>
-                  <p>{item.category?.name ?? variant.title}</p>
-                  <strong className="item-price">{item.lastCost > 0 ? `${formatMoney(item.lastCost, 4)} / ${item.baseUnit?.code}` : 'ยังไม่มีราคาซื้อ'}</strong>
-                  <Link className="btn" to={variant.itemPath(item.id)}>ดูรายละเอียด</Link>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
+
         {view === 'table' && (
           <div className="table-wrap">
-            <table className="data-table">
+            <table className="data-table md-table">
               <thead>
                 <tr>
-                  <th>รูป</th><th>รหัส</th><th className="item-name-col">ชื่อ{variant.kind === 'packaging' ? 'บรรจุภัณฑ์' : 'วัตถุดิบ'}</th><th>หมวดหมู่</th>
-                  <th>หน่วยซื้อ</th><th>หน่วยใช้งาน{variant.kind === 'ingredient' ? 'ในสูตร' : ''}</th><th className="num">{variant.costLabel}</th><th className="num">ราคาซื้อล่าสุด</th><th>สถานะ</th><th>อัปเดตล่าสุด</th><th>จัดการ</th>
+                  <th>รูป</th><th>รหัส</th>
+                  <th className="item-name-col">ชื่อ{noun}</th>
+                  <th>หมวด</th>
+                  <th>หน่วยซื้อ</th><th>หน่วยฐาน</th><th>อัตราแปลง</th>
+                  <th className="num">ราคาซื้อล่าสุด</th>
+                  <th className="num">{variant.costLabel}</th>
+                  <th>สถานะ</th><th>อัปเดตล่าสุด</th><th>จัดการ</th>
                 </tr>
               </thead>
-              {list.isLoading ? <SkeletonRows rows={8} cols={11} /> : (
+              {list.isLoading ? <SkeletonRows rows={8} cols={12} /> : (
                 <tbody>
-                  {rows.map((item) => (
-                    <tr key={item.id}>
-                      <td><Thumb url={item.imageUrl} /></td>
-                      <td><span className="num">{item.code}</span></td>
-                      <td><strong>{item.name}</strong>{item.barcode && <span style={{ display: 'block', fontSize: 12, color: 'var(--text-subtle)' }}>{item.barcode}</span>}</td>
-                      <td>{item.category?.name ?? '—'}</td>
-                      <td>{item.purchaseUnit?.code ?? item.baseUnit?.code ?? '—'}</td>
-                      <td>{item.baseUnit?.code ?? '—'}</td>
-                      <td className="num">{item.lastCost > 0 ? formatMoney(item.lastCost, 4) : <span style={{ color: 'var(--text-subtle)' }}>ยังไม่มีราคา</span>}</td>
-                      <td className="num">—</td>
-                      <td>{item.isActive ? <Badge variant="success" dot>ใช้งาน</Badge> : <Badge variant="muted" dot>ปิดใช้งาน</Badge>}</td>
-                      <td>{formatThaiDate(item.updatedAt)}</td>
-                      <td>
-                        <div className="row-actions">
-                          <Link className="icon-btn" to={variant.itemPath(item.id)} title="แก้ไข / อัปเดตราคา"><Pencil aria-hidden width={16} /></Link>
-                          <button className="icon-btn" title={item.isActive ? 'ปิดใช้งาน' : 'เปิดใช้งาน'} onClick={() => toggle.mutate(item)} disabled={toggle.isPending}><Power aria-hidden width={16} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {rows.map((item) => {
+                    const p = itemPriceDisplay({
+                      lastCost: item.lastCost, purchaseToBaseFactor: item.purchaseToBaseFactor,
+                      purchaseUnitCode: item.purchaseUnit?.code, baseUnitCode: item.baseUnit?.code,
+                    });
+                    return (
+                      <tr key={item.id}>
+                        <td data-label="รูป"><Thumb url={item.imageUrl} /></td>
+                        <td data-label="รหัส"><span className="num">{item.code}</span></td>
+                        <td data-label={`ชื่อ${noun}`}>
+                          <span className="md-two-line"><b>{item.name}</b>{item.barcode && <small>{item.barcode}</small>}</span>
+                        </td>
+                        <td data-label="หมวด">{item.category?.name ?? '—'}</td>
+                        <td data-label="หน่วยซื้อ">{item.purchaseUnit?.code ?? item.baseUnit?.code ?? '—'}</td>
+                        <td data-label="หน่วยฐาน">{item.baseUnit?.code ?? '—'}</td>
+                        {/* อัตราแปลงคือตัวเชื่อมที่ทำให้เข้าใจว่า 47/L กับ 0.047/ML คือราคาเดียวกัน */}
+                        <td data-label="อัตราแปลง"><ConversionCell display={p} /></td>
+                        <td className="num" data-label="ราคาซื้อล่าสุด">
+                          {p.purchase ?? <span className="md-none">—</span>}
+                        </td>
+                        <td className="num" data-label={variant.costLabel}>
+                          {p.base ? <b>{p.base}</b> : <span className="md-none">ยังไม่มีราคา</span>}
+                        </td>
+                        <td data-label="สถานะ">{item.isActive ? <Badge variant="success" dot>ใช้งาน</Badge> : <Badge variant="muted" dot>ปิดใช้งาน</Badge>}</td>
+                        <td data-label="อัปเดตล่าสุด">{formatThaiDate(item.updatedAt)}</td>
+                        <td data-label="จัดการ">
+                          <div className="md-row-actions">
+                            <Link className="icon-btn" to={variant.itemPath(item.id)} aria-label={`แก้ไข ${item.name}`} title="แก้ไข / อัปเดตราคา"><Pencil aria-hidden width={16} /></Link>
+                            <button type="button" className="icon-btn" onClick={() => setToggling(item)} disabled={toggle.isPending}
+                              aria-label={`${item.isActive ? 'ปิดใช้งาน' : 'เปิดใช้งาน'} ${item.name}`}
+                              title={item.isActive ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}><Power aria-hidden width={16} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               )}
             </table>
@@ -161,34 +218,55 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
           <EmptyState variant="error" icon={AlertTriangle} title="โหลดข้อมูลไม่สำเร็จ" description={list.error instanceof Error ? list.error.message : 'ลองใหม่อีกครั้ง'} />
         )}
         {!list.isLoading && !list.isError && rows.length === 0 && (
-          <EmptyState icon={Icon} title={variant.emptyTitle} description={variant.emptyDesc}
-            action={<Link to={variant.newPath} className="btn primary"><Plus aria-hidden />{variant.addLabel}</Link>} />
+          hasFilter
+            ? <EmptyState icon={Icon} title="ไม่พบรายการที่ค้นหา" description="ลองเปลี่ยนคำค้นหรือล้างตัวกรอง"
+                action={<button type="button" className="btn" onClick={() => { setSearch(''); setStatus(''); resetPage(); }}>ล้างตัวกรอง</button>} />
+            : <EmptyState icon={Icon} title={variant.emptyTitle} description={variant.emptyDesc}
+                action={<Link to={variant.newPath} className="btn primary"><Plus aria-hidden />{variant.addLabel}</Link>} />
         )}
         {!list.isLoading && rows.length > 0 && totalPages > 1 && (
-          <div className="pagination">
-            <span className="pg-info">หน้า {page} จาก {totalPages}</span>
-            <div className="pg-controls">
-              <button className="pg-btn" onClick={() => setPage(page - 1)} disabled={page <= 1}>ก่อนหน้า</button>
-              <button className="pg-btn" onClick={() => setPage(page + 1)} disabled={page >= totalPages}>ถัดไป</button>
+          <div className="md-pagination">
+            <span>หน้า {page} จาก {totalPages} · ทั้งหมด {total} รายการ</span>
+            <div>
+              <button type="button" className="btn" onClick={() => setPage(page - 1)} disabled={page <= 1}>ก่อนหน้า</button>
+              <button type="button" className="btn" onClick={() => setPage(page + 1)} disabled={page >= totalPages}>ถัดไป</button>
             </div>
           </div>
         )}
-      </section>
-    </div>
+      </ContentCard>
+
+      <ConfirmDialog
+        open={toggling !== null}
+        title={toggling?.isActive ? `ปิดใช้งาน ${noun}` : `เปิดใช้งาน ${noun}`}
+        tone={toggling?.isActive ? 'danger' : 'primary'}
+        confirmLabel={toggling?.isActive ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}
+        onClose={() => setToggling(null)}
+        onConfirm={toggling ? () => toggle.mutate(toggling) : undefined}
+        description={toggling ? <div className="op-confirm">
+          <dl>
+            <div><dt>รายการ</dt><dd>{toggling.name}</dd></div>
+            <div><dt>รหัส</dt><dd>{toggling.code}</dd></div>
+          </dl>
+          <p className="op-confirm-impact">
+            {toggling.isActive
+              ? 'เมื่อปิดใช้งาน รายการนี้จะไม่ปรากฏให้เลือกในสูตรและเอกสารใหม่ แต่ข้อมูลเดิมและสูตรที่ใช้อยู่ยังคงเดิมทั้งหมด'
+              : 'เมื่อเปิดใช้งาน รายการนี้จะกลับมาเลือกได้ในสูตรและเอกสารใหม่'}
+          </p>
+        </div> : ''}
+      />
+    </PageContainer>
   );
 }
 
-function Tile({ icon: Icon, label, value, tone, small, sub }: { icon: LucideIcon; label: string; value: string; tone: string; small?: boolean; sub?: string }) {
-  return (
-    <article className="card fcx-tile lift">
-      <div className="top">
-        <span className="lbl">{label}</span>
-        <span className={`icon-chip ${tone}`} style={{ width: 34, height: 34 }}><Icon aria-hidden style={{ width: 17, height: 17 }} /></span>
-      </div>
-      <span className="val" style={small ? { fontSize: 16 } : undefined}>{value}</span>
-      {sub && <span className="sub">{sub}</span>}
-    </article>
-  );
+/** ช่องอัตราแปลงในตาราง — สามสถานะ: หน่วยเดียวกัน / มีอัตรา / ยังไม่ตั้ง */
+function ConversionCell({ display }: { display: ReturnType<typeof itemPriceDisplay> }) {
+  if (display.factorState === 'missing') {
+    return <span className="md-conv missing"><AlertTriangle aria-hidden />ยังไม่ตั้ง</span>;
+  }
+  if (display.factorState === 'same' || !display.conversion) {
+    return <span className="md-conv same">หน่วยเดียวกัน</span>;
+  }
+  return <span className="md-conv">{display.conversion}</span>;
 }
 
 function Thumb({ url }: { url: string | null }) {

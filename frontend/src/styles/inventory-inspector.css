@@ -1,0 +1,105 @@
+/* ============================================================
+   S2A ERP — INVENTORY INSPECTOR (Phase 6D)
+   drawer เดิมเป็น modal กลางจอกว้าง 760px ซึ่งอ่านยากและไม่บอกลำดับความสำคัญ
+   รอบนี้เป็นแผงด้านขวา 600px บนเดสก์ท็อป และ bottom sheet บนมือถือ
+   ============================================================ */
+
+.inv-inspector-scrim {
+  position: fixed; inset: 0; z-index: var(--z-drawer);
+  display: flex; justify-content: flex-end;
+  background: var(--overlay);
+}
+
+.inv-inspector {
+  display: flex; flex-direction: column;
+  width: clamp(560px, 42vw, 620px); max-width: 100vw; height: 100dvh;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+.inv-inspector:focus { outline: none; }
+
+/* ---------- หัวแผง: ติดอยู่กับที่ ---------- */
+.inv-inspector-head {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-4) var(--card-pad);
+  border-bottom: 1px solid var(--divider);
+  background: var(--surface);
+}
+.inv-inspector-head > div:first-child { flex: 1; min-width: 0; }
+.inv-inspector-head h2 { margin: 0 0 2px; font-size: 19px; font-weight: 800; color: var(--text); overflow-wrap: anywhere; }
+.inv-inspector-code {
+  display: inline-block; margin: 0 0 var(--space-1);
+  font-family: var(--font-num); font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
+  color: var(--text-subtle);
+}
+.inv-inspector-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; font-size: 12.5px; color: var(--text-muted); }
+.inv-inspector-facts .dot { color: var(--text-subtle); }
+.inv-inspector-close { flex: none; min-width: var(--control-h); min-height: var(--control-h); }
+
+/* ---------- เนื้อหาเลื่อนได้ ---------- */
+.inv-inspector-body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--card-pad); display: flex; flex-direction: column; gap: var(--space-5); }
+.inv-inspector-body h3 { margin: 0 0 var(--space-2); font-size: 14px; font-weight: 700; color: var(--text); }
+
+/* ---------- ตัวเลขหลัก: พร้อมใช้ เด่นที่สุด ---------- */
+.inv-metric-lead {
+  padding: var(--space-4) var(--card-pad);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--border));
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
+}
+.inv-metric-lead > span { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.inv-metric-lead > strong {
+  display: block; margin-top: 2px;
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 34px; font-weight: 800; line-height: 1.1; color: var(--text);
+}
+.inv-metric-lead .inv-equation {
+  margin: var(--space-3) 0 0; padding-top: var(--space-3);
+  border-top: 1px dashed var(--divider);
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 14px; font-weight: 700; color: var(--text-muted);
+}
+.inv-metric-lead .inv-equation-note { margin: var(--space-1) 0 0; font-family: inherit; font-size: 12px; font-weight: 500; color: var(--text-subtle); border: 0; padding: 0; }
+
+.inv-metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-2); margin-top: var(--space-3); }
+.inv-metric-grid > div {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-2);
+}
+.inv-metric-grid span { font-size: 11.5px; font-weight: 600; color: var(--text-muted); }
+.inv-metric-grid b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 800; color: var(--text); }
+
+/* ---------- การจัดการ ---------- */
+.inv-inspector-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.inv-inspector-actions .btn { flex: 1 1 200px; justify-content: center; min-height: var(--control-h); }
+.inv-inspector-hint { margin: var(--space-2) 0 0; font-size: 12px; color: var(--text-subtle); }
+
+/* ---------- ประวัติย่อ ---------- */
+.inv-inspector-movements .mv-table { min-width: 0; }
+.inv-inspector-more { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 12.5px; font-weight: 700; }
+
+/* ============================================================
+   RESPONSIVE — 1024 / 760 / 430
+   ============================================================ */
+@media (max-width: 1024px) {
+  .inv-inspector { width: clamp(420px, 62vw, 620px); }
+}
+@media (max-width: 760px) {
+  /* มือถือ: bottom sheet เต็มความกว้าง สูงเกือบเต็มจอ */
+  .inv-inspector-scrim { align-items: flex-end; justify-content: center; }
+  .inv-inspector {
+    width: 100%; height: auto; max-height: 92dvh;
+    border-left: 0; border-top: 1px solid var(--border);
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+  }
+  .inv-inspector-actions .btn { flex: 1 1 100%; }
+  .inv-metric-lead > strong { font-size: 30px; }
+}
+@media (max-width: 430px) {
+  .inv-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media print { .inv-inspector-scrim { display: none !important; } }

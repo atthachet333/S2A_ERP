@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, ChevronDown, Plus, Check, Loader2 } from 'lucide-react';
 
 /**
@@ -16,6 +17,7 @@ const initials = (label: string) => label.trim().slice(0, 2).toUpperCase() || '�
 export default function CreatableCombobox({
   value, onChange, options, placeholder = 'เลือก…', searchPlaceholder = 'ค้นหา…',
   emptyText = 'ไม่พบรายการ', createLabel, onCreate, disabled = false, loading = false, ariaLabel,
+  resolveExisting, reuseLabel = 'ใช้รายการนี้',
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -28,14 +30,56 @@ export default function CreatableCombobox({
   disabled?: boolean;
   loading?: boolean;
   ariaLabel?: string;
+  /**
+   * ตรวจว่าคำค้นตรงกับรายการที่ "มีอยู่แล้ว" หรือไม่ (เช่น หน่วย ML ที่มีในระบบ แต่ไม่อยู่ในตัวเลือกที่ใช้ได้)
+   * ถ้าคืนค่ามา จะแสดงปุ่ม "ใช้รายการนี้" แทน "+ เพิ่มใหม่" เพื่อกันการสร้างซ้ำ
+   */
+  resolveExisting?: (query: string) => { label: string; hint?: string; onUse: () => void } | null;
+  reuseLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [highlight, setHighlight] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // ตำแหน่ง panel แบบ fixed — เรนเดอร์ผ่าน portal จึงไม่ถูก overflow ของการ์ดแม่ตัด
+  // และไม่ต้องแข่ง z-index กับ stacking context ของ section อื่น
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; maxHeight: number; drop: 'down' | 'up' } | null>(null);
+
+  const place = useCallback(() => {
+    const trigger = rootRef.current?.getBoundingClientRect();
+    if (!trigger) return;
+    const margin = 12, gap = 6;
+    const width = Math.min(Math.max(trigger.width, 320), Math.max(window.innerWidth - margin * 2, 200));
+    const below = window.innerHeight - trigger.bottom - gap - margin;
+    const above = trigger.top - gap - margin;
+    // เปิดลงถ้าพื้นที่ด้านล่างพอ ไม่พอให้พลิกขึ้น (เลือกด้านที่กว้างกว่า)
+    const drop: 'down' | 'up' = below >= 240 || below >= above ? 'down' : 'up';
+    const maxHeight = Math.max(Math.min(360, drop === 'down' ? below : above), 160);
+    let left = trigger.left;
+    if (left + width > window.innerWidth - margin) left = window.innerWidth - margin - width;
+    if (left < margin) left = margin;
+    const top = drop === 'down' ? trigger.bottom + gap : Math.max(margin, trigger.top - gap - maxHeight);
+    setPos({ top, left, width, maxHeight, drop });
+  }, []);
+
+  useLayoutEffect(() => { if (open) place(); }, [open, place]);
+  useEffect(() => {
+    if (!open) return;
+    const onScrollOrResize = () => place();
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+    return () => { window.removeEventListener('scroll', onScrollOrResize, true); window.removeEventListener('resize', onScrollOrResize); };
+  }, [open, place]);
 
   const selected = options.find((o) => o.value === value) ?? null;
+  // คำค้นตรงกับรายการที่มีอยู่แล้วในระบบหรือไม่ (คำนวณเฉพาะตอนพิมพ์)
+  const existing = useMemo(() => {
+    const term = q.trim();
+    if (!term || !resolveExisting) return null;
+    return resolveExisting(term);
+  }, [q, resolveExisting]);
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return options;
@@ -44,7 +88,12 @@ export default function CreatableCombobox({
 
   useEffect(() => {
     if (!open) return;
-    const onDocMouseDown = (e: MouseEvent) => { if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false); };
+    const onDocMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      // panel อยู่ใน portal จึงไม่ได้อยู่ใต้ rootRef — ต้องเช็คทั้งสองที่
+      if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, [open]);
@@ -68,8 +117,9 @@ export default function CreatableCombobox({
         <ChevronDown className="chev" width={16} aria-hidden />
       </button>
 
-      {open && (
-        <div className="s2a-combo-panel" role="listbox" aria-label={ariaLabel}>
+      {open && createPortal(
+        <div ref={panelRef} className={`s2a-combo-panel is-portal drop-${pos?.drop ?? 'down'}`} role="listbox" aria-label={ariaLabel}
+          style={pos ? { top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight } : { visibility: 'hidden' }}>
           <div className="search-box s2a-combo-search">
             <Search aria-hidden />
             <input ref={inputRef} value={q} onChange={(e) => { setQ(e.target.value); setHighlight(0); }} onKeyDown={onKeyDown} placeholder={searchPlaceholder} aria-label={searchPlaceholder} />
@@ -89,12 +139,19 @@ export default function CreatableCombobox({
               </button>
             ))}
           </div>
-          {onCreate && createLabel && (
+          {/* มีอยู่แล้ว → เสนอให้ใช้ของเดิม ไม่พาไป flow สร้างใหม่ */}
+          {existing ? (
+            <button type="button" className="s2a-combo-add is-reuse" onClick={() => { existing.onUse(); setOpen(false); setQ(''); }}>
+              <Check className="co-check" aria-hidden width={16} />
+              <span>{reuseLabel}: <b>{existing.label}</b>{existing.hint && <em> · {existing.hint}</em>}</span>
+            </button>
+          ) : onCreate && createLabel ? (
             <button type="button" className="s2a-combo-add" onClick={() => { onCreate(q.trim()); setOpen(false); }}>
               <Plus className="plus-gold" aria-hidden width={16} />{createLabel}
             </button>
-          )}
-        </div>
+          ) : null}
+        </div>,
+        document.body,
       )}
     </div>
   );

@@ -45,15 +45,22 @@ export default async function menuRoutes(app: FastifyInstance) {
     return ok(menus.map((m) => {
       const recipe = m.recipes[0];
       const cost = recipe?.versions[0]?.costs[0];
-      const totalCost = cost ? num(cost.totalCost) : null;
+      /**
+       * PHASE 12 — เดิมส่ง cost.totalCost ซึ่งเป็นต้นทุน "ทั้งแบตช์"
+       * แต่หน้าจอเอาไปเทียบกับ "ราคาขายต่อหน่วย" ทำให้ margin ผิดมหาศาล
+       * (ตัวอย่างจริง: totalCost 1403.2133 ÷ yield 55 = unitCost 25.513
+       *  ถ้าตั้งราคา 30 บาท จะได้ margin −4577% และเตือนขาดทุนผิด ๆ)
+       * จึงส่งต้นทุน "ต่อหน่วย" ให้ตรงกับ GET /menus/:id ที่ใช้ unitCost อยู่แล้ว
+       */
+      const unitCost = cost ? num(cost.unitCost) : null;
       const sell = m.sellingPrices[0];
       const price = sell ? num(sell.price) : null;
-      const margin = price && totalCost !== null && price > 0 ? Math.round(((price - totalCost) / price) * 10000) / 100 : null;
+      const margin = price && unitCost !== null && price > 0 ? Math.round(((price - unitCost) / price) * 10000) / 100 : null;
       return {
         id: m.id, code: m.code, name: m.name, imageUrl: m.imageUrl,
         category: m.category, sellingUnit: m.baseUnit?.code ?? null, isActive: m.isActive,
         recipeId: recipe?.id ?? null, hasRecipe: Boolean(recipe),
-        totalCost, sellingPrice: price, margin,
+        unitCost, sellingPrice: price, margin,
       };
     }));
   });

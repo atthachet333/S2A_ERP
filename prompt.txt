@@ -1,0 +1,699 @@
+S2A ERP — RECIPE BUILDER 2.1 HOTFIX
+UNIT SELECTOR RECOVERY + EXISTING UNIT DISCOVERY + BIGGER UI
+
+Continue from the CURRENT live Recipe Builder 2.1 implementation.
+
+DO NOT redo Recipe Builder.
+DO NOT change the verified recipe-cost engine.
+DO NOT change financial formulas.
+DO NOT change database schema unless a real backend contract defect is proven.
+DO NOT create a migration unless absolutely necessary.
+DO NOT reset data.
+DO NOT commit/push.
+
+==================================================
+CURRENT LIVE BUGS
+==================================================
+
+Observed in production:
+
+1. SUB_RECIPE unit dropdown opens but shows:
+   "ไม่พบรายการ"
+
+even though units already exist in the system.
+
+2. User clicks:
+   "+ เพิ่มหน่วยใหม่"
+
+and tries to create:
+name = มิลลิลิตร
+code = ml
+
+Backend correctly replies:
+"มีหน่วยรหัส ml อยู่แล้ว"
+
+This proves the unit already exists,
+but the selector failed to surface/select it.
+
+3. The unit selector UI is too small.
+
+4. Recipe Builder controls overall feel too compact:
+   - row inputs too small
+   - dropdown too narrow
+   - search input tiny
+   - modal too small
+   - labels hard to scan
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Fix the unit UX so the normal flow becomes:
+
+open unit selector
+→ see compatible EXISTING units first
+→ search existing units
+→ select existing unit
+→ only use "+ เพิ่มหน่วยใหม่" when it truly doesn't exist
+
+Never force users to recreate an existing unit.
+
+==================================================
+PART 1 — TRACE THE ACTUAL UNIT DATA FLOW
+==================================================
+
+Before changing UI, inspect:
+
+- frontend unit query
+- API method used by RecipeBuilderPage
+- query key
+- active company scoping
+- units response shape
+- compatibleUnits helper
+- child recipe yield unit
+- unit conversion data
+- filtering logic
+- uppercase/lowercase handling
+- exact `ml` unit record in current API response
+
+Find WHY existing `ml` is not appearing.
+
+Do not guess.
+
+Determine whether root cause is:
+
+- units endpoint not called
+- units endpoint returns empty
+- wrong response property
+- company filtering
+- active filtering
+- incompatible-dimension filtering
+- missing conversion relationship
+- child yieldUnitId null
+- code case mismatch (`ML` vs `ml`)
+- filtering removes base/yield unit itself
+- stale React Query cache
+
+==================================================
+PART 2 — BASE/YIELD UNIT MUST ALWAYS BE SELECTABLE
+==================================================
+
+For a SUB_RECIPE:
+
+If child recipe yield unit is `ml`,
+then `ml` itself MUST always appear in the unit list.
+
+Even if there is no explicit UnitConversion row for:
+
+ml → ml
+
+identity conversion is valid:
+
+1 ml = 1 ml
+
+Same for:
+
+g → g
+kg → kg
+L → L
+piece → piece
+
+Do NOT require a conversion record for identity conversion.
+
+==================================================
+PART 3 — COMPATIBLE UNIT RULE
+==================================================
+
+Compatible units should include:
+
+A. the exact child yield unit
+B. units with a valid conversion to/from child yield unit
+C. universal safe conversions already supported by the project
+
+Examples:
+
+Child yield:
+ml
+
+Valid:
+ml
+L
+
+Child yield:
+g
+
+Valid:
+g
+kg
+ขีด
+
+Do not include:
+ml with kg
+unless explicit item/recipe-specific conversion exists.
+
+==================================================
+PART 4 — EXISTING UNITS FIRST
+==================================================
+
+Unit selector should display:
+
+หน่วยที่ใช้ได้
+
+มิลลิลิตร
+ml
+
+ลิตร
+L
+
+etc.
+
+Then at bottom:
+
++ เพิ่มหน่วยใหม่
+
+If search text matches an existing unit code/name,
+do NOT encourage duplicate creation.
+
+Example search:
+
+ml
+
+If `ml` exists:
+show it prominently.
+
+Do not show:
+"+ เพิ่ม ml ใหม่"
+
+as the primary outcome.
+
+==================================================
+PART 5 — DUPLICATE CREATE RECOVERY
+==================================================
+
+If user still tries to create an existing unit and backend returns duplicate:
+
+Do NOT leave them stuck with an error toast.
+
+Handle duplicate gracefully:
+
+1. parse duplicate response
+2. refetch unit list
+3. find existing unit by normalized code/name
+4. if compatible:
+   auto-select the existing unit
+5. close modal
+6. show informational toast:
+
+"มีหน่วยนี้อยู่แล้ว ระบบเลือกหน่วยเดิมให้แล้ว"
+
+If existing unit is incompatible with this sub-recipe:
+show:
+
+"มีหน่วยนี้อยู่แล้ว แต่ยังไม่มีอัตราแปลงที่ใช้กับสูตรนี้"
+
+and offer:
+"ตั้งค่าอัตราแปลง"
+
+==================================================
+PART 6 — NORMALIZE UNIT MATCHING
+==================================================
+
+Normalize for matching:
+
+trim
+case-insensitive code comparison
+
+Examples:
+
+ml
+ML
+Ml
+
+must resolve to the same existing unit if the backend treats code as unique case-insensitively.
+
+Do not create duplicates due only to casing.
+
+==================================================
+PART 7 — UNIT QUERY CACHE
+==================================================
+
+After creating or detecting an existing unit:
+
+invalidate/refetch the correct unit query only.
+
+Examples:
+
+['units']
+or existing project key
+
+Do not clear the whole app cache.
+
+After refetch:
+the selector must immediately show the record.
+
+No page reload.
+
+==================================================
+PART 8 — NO BLANK UNIT SELECTOR
+==================================================
+
+If the child recipe has:
+
+yieldUnitId
+
+then selector should default to that yield unit if no unit is selected.
+
+Example:
+
+ซอสผัดเชฟ
+Yield = 1500 ml
+
+When added to parent:
+
+default row:
+
+ปริมาณใช้ [ ]
+หน่วย [ ml ]
+
+The user should NOT have to manually choose `ml` first.
+
+==================================================
+PART 9 — CHILD RECIPE YIELD DISPLAY
+==================================================
+
+Display clearly:
+
+ซอสผัดเชฟ
+
+ผลผลิต:
+1,500 ml
+
+ต้นทุนต่อหน่วย:
+฿0.0517 / ml
+
+Then use the same unit as default in the row.
+
+==================================================
+PART 10 — HANDLE LEGACY CHILD RECIPES
+==================================================
+
+If a child recipe still has:
+yieldUnitId = null
+
+Do not show a broken empty selector.
+
+Show warning:
+
+"สูตรย่อยนี้ยังไม่ได้กำหนดหน่วยผลผลิต"
+
+Action:
+"แก้ไขสูตรย่อย"
+
+Do NOT guess `unit`.
+
+Do NOT calculate with generic `unit` if real unit is unknown.
+
+==================================================
+PART 11 — IMPORTANT MONEY SAFETY
+==================================================
+
+Current dangerous behavior must never return:
+
+800 unit × 77.6 = 62,080
+
+when the actual business meaning is:
+
+800 ml × 0.0517 ≈ 41.39
+
+If child yield unit is missing/unresolved:
+block sub-recipe cost calculation with a clear warning.
+
+Do NOT silently fall back to generic `unit`.
+
+==================================================
+PART 12 — BIGGER UNIT DROPDOWN
+==================================================
+
+Current dropdown is too narrow/small.
+
+Redesign:
+
+Desktop:
+min-width around 300–360px
+
+Search:
+height around 42–46px
+
+Unit row:
+minimum 44–48px
+
+Show:
+unit name
+code
+optional conversion hint
+
+Example:
+
+มิลลิลิตร
+ml
+1 ml = 1 ml
+
+ลิตร
+L
+1 L = 1,000 ml
+
+==================================================
+PART 13 — BIGGER RECIPE COMPONENT ROWS
+==================================================
+
+Increase Recipe Builder row usability.
+
+Current rows are too compressed.
+
+Increase:
+
+- row vertical padding
+- select height
+- input height
+- label readability
+- cost column width
+- delete button touch size
+
+Target desktop input height:
+42–46px
+
+Buttons:
+minimum ~40–44px
+
+==================================================
+PART 14 — COMPONENT ROW LAYOUT
+==================================================
+
+Desktop:
+
+NAME / INFO
+should take the most width.
+
+Then:
+
+QUANTITY
+UNIT
+WASTE %
+COST
+DELETE
+
+Example ratio:
+
+name      38%
+quantity  13%
+unit      16%
+waste     11%
+cost      15%
+action     7%
+
+Do not give every column equal width.
+
+==================================================
+PART 15 — UNIT HELPER VISUAL
+==================================================
+
+Make helper easier to see.
+
+Current "ดูการแปลงหน่วย" is too subtle.
+
+Use a small visible secondary button:
+
+[ ⇄ ดูหน่วยและการแปลง ]
+
+Expanded panel:
+
+ตัวช่วยหน่วย
+
+หน่วยหลัก:
+ml
+
+1 L = 1,000 ml
+1 ml = 1 ml
+
+ใช้ในสูตร:
+800 ml
+
+ต้นทุน:
+฿41.39
+
+==================================================
+PART 16 — QUICK CREATE MODAL SIZE
+==================================================
+
+Current Add Unit modal is too small.
+
+Increase to around:
+
+420–480px desktop
+
+Fields:
+height 44px+
+
+Clear hierarchy:
+
+UNIT MASTER
+เพิ่มหน่วยใหม่
+
+ชื่อหน่วย
+รหัส/สัญลักษณ์
+
+Buttons:
+ยกเลิก
++ เพิ่มหน่วย
+
+If duplicate is found:
+prefer selecting existing instead of keeping modal open with only error.
+
+==================================================
+PART 17 — EXISTING UNIT BROWSER
+==================================================
+
+When "+ เพิ่มหน่วยใหม่" is clicked,
+the modal may also show a compact existing-unit suggestion section before creation:
+
+"หน่วยที่มีอยู่แล้ว"
+
+Search results:
+
+ml — มิลลิลิตร
+L — ลิตร
+g — กรัม
+kg — กิโลกรัม
+
+If the user sees the unit they need:
+[ ใช้หน่วยนี้ ]
+
+This prevents duplicate attempts.
+
+==================================================
+PART 18 — ALL RECIPE MASTER DROPDOWNS
+==================================================
+
+Re-audit:
+
+- menu
+- yield unit
+- ingredient
+- ingredient unit
+- sub-recipe
+- sub-recipe unit
+- packaging
+- packaging unit
+
+Each reusable master dropdown must:
+
+1. load existing data
+2. allow search
+3. show selected state
+4. show add action only when allowed
+5. auto-select after create
+6. handle duplicate creation gracefully
+
+Static fields stay non-creatable.
+
+==================================================
+PART 19 — UI SIZE / TYPOGRAPHY
+==================================================
+
+Recipe Builder currently feels undersized.
+
+Increase visual scale slightly:
+
+Section titles:
+~16–18px
+
+Primary item names:
+~14–15px / semibold
+
+Labels:
+~12–13px readable
+
+Inputs:
+14px+
+
+Summary numbers:
+clear hierarchy
+
+Do not make everything huge.
+Aim for comfortable business desktop UI.
+
+==================================================
+PART 20 — COST SUMMARY SIZE
+==================================================
+
+Right-side summary is visually okay but can be more readable.
+
+Increase:
+- section spacing
+- total emphasis
+- cost labels
+- final total typography
+
+Keep width balanced.
+
+Do not let summary consume too much main-form width.
+
+==================================================
+PART 21 — PRINT DETAIL REGRESSION
+==================================================
+
+Do not remove prior print improvements.
+
+Ensure after this hotfix print still includes:
+
+- ingredients
+- sub-recipes
+- packaging
+- unit used
+- yield
+- conversion-related quantity where useful
+- overhead
+- total cost
+- pricing
+
+==================================================
+PART 22 — RESPONSIVE
+==================================================
+
+Desktop:
+larger horizontal controls.
+
+Tablet:
+2-row component layout if needed.
+
+Mobile:
+component card stack.
+
+Unit dropdown must remain within viewport.
+
+No tiny desktop-width dropdown on mobile.
+
+==================================================
+PART 23 — TESTS
+==================================================
+
+Add/update tests for:
+
+1. child yield unit appears even without identity conversion record
+2. `ml` existing unit is selectable
+3. compatible L appears for ml when conversion exists
+4. incompatible kg hidden from ml recipe
+5. add sub-recipe defaults unit to child yield unit
+6. duplicate create -> existing unit auto-selected
+7. duplicate create doesn't wipe recipe form
+8. unit query refetched
+9. legacy child with null yield unit shows warning
+10. unresolved yield unit blocks dangerous cost calculation
+11. search by unit code/name
+12. unit dropdown renders existing units before add CTA
+13. larger modal structure
+14. print still includes sub-recipe unit
+
+==================================================
+PART 24 — QUALITY GATE
+==================================================
+
+Run:
+
+npm.cmd --workspace frontend run typecheck
+npm.cmd --workspace frontend run lint
+npm.cmd --workspace frontend run test
+npm.cmd --workspace frontend run build
+
+If frontend-only:
+do not rebuild backend.
+
+==================================================
+PART 25 — DEPLOY
+==================================================
+
+If RAM requires stopping backend for build:
+
+stop ONLY:
+s2a-backend
+
+build frontend
+
+start backend again immediately
+
+verify:
+http://127.0.0.1:1415/api/health
+
+then:
+pm2 restart s2a-frontend
+pm2 save
+
+Do not touch unrelated PM2 apps.
+
+==================================================
+FINAL ACCEPTANCE
+==================================================
+
+Do NOT call this complete unless:
+
+- existing `ml` appears in the sub-recipe unit dropdown
+- user can select it
+- child yield unit is selected by default
+- duplicate unit create recovers by selecting existing unit
+- user is never forced to recreate existing unit
+- unit selector is visibly larger
+- add-unit modal is visibly larger
+- Recipe Builder rows are easier to read
+- no generic `unit` fallback causes incorrect money
+- 800 ml of 0.0517/ml produces ~41.39, not 62,080
+- print detail still works
+- form state survives quick-create
+- tests/typecheck/lint/build pass
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+1. exact root cause existing units were filtered out
+2. unit query fix
+3. identity conversion fix
+4. compatible-unit logic
+5. default child yield unit behavior
+6. duplicate-create recovery
+7. existing-unit browser
+8. unit selector size changes
+9. modal size changes
+10. recipe row size changes
+11. unit helper changes
+12. dangerous generic-unit fallback removal
+13. tests
+14. typecheck
+15. lint
+16. build
+17. PM2 restart
+18. live verification
+19. remaining limitations
+
+Proceed now.

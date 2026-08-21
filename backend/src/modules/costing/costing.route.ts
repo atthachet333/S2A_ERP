@@ -6,6 +6,8 @@ import { fail, ok } from '../../lib/response.js';
 import { requireCompany, requirePermission } from '../auth/auth.guard.js';
 import { writeAudit, num } from '../../lib/http.js';
 import { computeRecipeCost, analyzePrice, priceFromMarkup, priceFromMargin, type CostIngredientInput } from '../../lib/costing.js';
+import { RecipeCostError } from '../../lib/recipe-cost.js';
+import { computeSavedVersionCost } from '../recipes/recipe.route.js';
 
 // บันทึกราคาขาย = จัดการราคา/กำไร → ใช้สิทธิ์ PRICING_EDIT
 const MANAGE = requirePermission('PRICING_EDIT');
@@ -48,20 +50,29 @@ export default async function costingRoutes(app: FastifyInstance) {
     let expenses = { laborCost: body.laborCost, electricCost: body.electricCost, waterCost: body.waterCost, gasCost: body.gasCost, overheadCost: body.overheadCost, otherCost: body.otherCost };
 
     if (body.recipeVersionId) {
-      const version = await prisma.recipeVersion.findUnique({
-        where: { id: body.recipeVersionId, recipe: { companyId: req.user.companyId! } },
-        include: { ingredients: { include: { item: { select: { type: true, lastCost: true } } } } },
-      });
-      if (!version) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบสูตรเวอร์ชันนี้'));
-      ingredients = version.ingredients.map((ing) => ({
-        itemType: ing.item?.type ?? ItemType.RAW_MATERIAL,
-        quantityBase: num(ing.quantity),
-        unitCostPerBase: ing.item ? num(ing.item.lastCost) : 0,
-        wastePercent: num(ing.wastePercent),
-      }));
-      yieldQty = num(version.standardYieldQty);
-      yieldPercent = num(version.yieldPercent);
-      expenses = { laborCost: num(version.laborCost), electricCost: num(version.electricCost), waterCost: num(version.waterCost), gasCost: num(version.gasCost), overheadCost: num(version.overheadCost), otherCost: num(version.otherCost) };
+      // ใช้ engine เดียวกับ Recipe Builder เพื่อให้ตัวเลขตรงกันทุกหน้า
+      // (แปลงหน่วยตามอัตราจริง + รวมสูตรย่อย + overhead โหมดใหม่) และอ่านราคาวัตถุดิบล่าสุดทุกครั้ง
+      let saved;
+      try { saved = await computeSavedVersionCost(req.user.companyId!, body.recipeVersionId); }
+      catch (e) {
+        if (e instanceof RecipeCostError) return reply.status(e.code === 'CIRCULAR_SUBRECIPE' ? 409 : 400).send(fail(e.code, e.message));
+        throw e;
+      }
+      if (!saved) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบสูตรเวอร์ชันนี้'));
+      const c = saved.cost;
+      const breakdownV2 = {
+        materialCost: c.ingredientCost, packagingCost: c.packagingCost, laborCost: 0,
+        utilityCost: c.subRecipeCost, overheadCost: c.overheadCost, wasteCost: 0, otherCost: 0,
+        totalCost: c.totalCost, effectiveYield: c.effectiveYield, unitCost: c.costPerYieldUnit,
+        ingredientCost: c.ingredientCost, subRecipeCost: c.subRecipeCost,
+        costPerYieldUnit: c.costPerYieldUnit, portionCount: c.portionCount, costPerPortion: c.costPerPortion,
+      };
+      const unitBasis = c.costPerPortion ?? c.costPerYieldUnit;
+      const pricingV2 = body.sellingPrice !== undefined ? { sellingPrice: body.sellingPrice, ...analyzePrice(unitBasis, body.sellingPrice) }
+        : body.markupPercent !== undefined ? (() => { const sp = priceFromMarkup(unitBasis, body.markupPercent!); return { sellingPrice: sp, ...analyzePrice(unitBasis, sp) }; })()
+        : body.marginPercent !== undefined ? (() => { const sp = priceFromMargin(unitBasis, body.marginPercent!); return { sellingPrice: sp, ...analyzePrice(unitBasis, sp) }; })()
+        : null;
+      return ok({ breakdown: breakdownV2, pricing: pricingV2, versionNo: saved.versionNo, calculatedAt: new Date().toISOString() });
     } else if (body.ingredients && body.ingredients.length > 0) {
       const items = await prisma.item.findMany({ where: { id: { in: [...new Set(body.ingredients.map((i) => i.itemId))] }, companyId: req.user.companyId! }, select: { id: true, type: true, lastCost: true } });
       const map = new Map(items.map((i) => [i.id, i]));
@@ -90,6 +101,21 @@ export default async function costingRoutes(app: FastifyInstance) {
   });
 
   /** บันทึกราคาขายของเมนู (SellingPrice) */
+  /** ราคาขายทุกระดับของเมนูหนึ่งรายการ (ปลีก/ส่ง/คนรู้จัก) — อ่านอย่างเดียว */
+  app.get('/prices/:itemId', { preHandler: requireCompany }, async (req) => {
+    const { itemId } = req.params as { itemId: string };
+    const rows = await prisma.sellingPrice.findMany({
+      where: { itemId, companyId: req.user.companyId!, isActive: true },
+      select: { id: true, priceType: true, price: true, marginPercent: true, markupPercent: true, updatedAt: true },
+    });
+    return ok(rows.map((r) => ({
+      id: r.id, priceType: r.priceType, price: num(r.price),
+      marginPercent: r.marginPercent != null ? num(r.marginPercent) : null,
+      markupPercent: r.markupPercent != null ? num(r.markupPercent) : null,
+      updatedAt: r.updatedAt.toISOString(),
+    })));
+  });
+
   app.post('/price', { preHandler: MANAGE }, async (req, reply) => {
     const body = savePriceSchema.parse(req.body);
     const item = await prisma.item.findFirst({ where: { id: body.itemId, deletedAt: null, companyId: req.user.companyId! } });

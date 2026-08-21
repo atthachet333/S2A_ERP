@@ -70,7 +70,8 @@ describe('ItemFormWorkspace — category creatable', () => {
     fireEvent.click(screen.getByRole('button', { name: /เพิ่มหมวดหมู่/ }));
     fireEvent.change(await screen.findByPlaceholderText(CAT_PH), { target: { value: 'เนื้อสัตว์' } });
     fireEvent.click(screen.getByRole('button', { name: 'เพิ่มหมวดหมู่' }));
-    expect(await screen.findByText('มีหมวดหมู่นี้อยู่แล้ว')).toBeInTheDocument();
+    // Phase 7 — ข้อความบอกด้วยว่าชื่อไหนชน ไม่ใช่แค่ "ซ้ำ" ลอย ๆ
+    expect(await screen.findByText(/มีหมวดหมู่ เนื้อสัตว์ อยู่ในระบบแล้ว/)).toBeInTheDocument();
     expect((screen.getByPlaceholderText(/ข้าวหอมมะลิ/) as HTMLInputElement).value).toBe('พริกไทย');
   });
 });

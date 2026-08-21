@@ -31,13 +31,14 @@ describe('UsersPage', () => {
     expect(await screen.findByText('วิน ผู้ดูแล')).toBeInTheDocument();
     expect(screen.getByText('ปึ้ง แอดมิน')).toBeInTheDocument();
     expect(screen.getByText('2 รายการ')).toBeInTheDocument();
-    expect(screen.getAllByText('SUPER_ADMIN').length).toBeGreaterThan(0);
+    // Phase 9 — ตารางแสดงชื่อบทบาทเป็นภาษาไทย (โค้ดจริงยังเห็นได้ในหน้าจัดการสิทธิ์)
+    expect(screen.getAllByText('ผู้ดูแลระบบสูงสุด').length).toBeGreaterThan(0);
   });
 
   it('แสดง empty state เมื่อไม่มีผู้ใช้', async () => {
     store.user = makeUser({ roles: ['SUPER_ADMIN'] });
     apiGet.mockResolvedValue([]);
     renderWithProviders(<UsersPage />, { route: '/users' });
-    expect(await screen.findByText('ไม่พบผู้ใช้งาน')).toBeInTheDocument();
+    expect(await screen.findByText('ยังไม่มีผู้ใช้งาน')).toBeInTheDocument();
   });
 });

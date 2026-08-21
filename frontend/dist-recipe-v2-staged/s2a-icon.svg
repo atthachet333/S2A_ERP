@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="S2 Accounting Consultant">
+  <defs>
+    <radialGradient id="bg" cx="34%" cy="26%" r="90%">
+      <stop offset="0" stop-color="#12508f"/>
+      <stop offset="55%" stop-color="#0a3straight" stop-opacity="1"/>
+      <stop offset="55%" stop-color="#0a2f57"/>
+      <stop offset="100%" stop-color="#04121f"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="32" fill="url(#bg)"/>
+  <circle cx="32" cy="32" r="28.25" fill="none" stroke="#c6a15b" stroke-width="2.6"/>
+  <text x="32" y="41.5" text-anchor="middle" font-family="'Segoe UI',Manrope,Arial,sans-serif" font-size="28" font-weight="800" letter-spacing="-1.5" fill="#ffffff">S2</text>
+</svg>

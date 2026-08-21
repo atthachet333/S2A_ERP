@@ -1,0 +1,127 @@
+/* ============================================================
+   S2A ERP — ORDERS & CUSTOMERS (Phase 8)
+   flow หลัก: ลูกค้า → เลือกเมนู → เลือกระดับราคา → เห็นยอด → ยืนยัน
+   ============================================================ */
+
+/* ---------- ตัวเลือก (ลูกค้า / เมนู) ---------- */
+.ord-picker {
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--surface-2); overflow: hidden;
+}
+.ord-picker-list { max-height: 300px; overflow-y: auto; padding: var(--space-2); }
+.ord-picker-create {
+  display: flex; align-items: center; justify-content: center; gap: var(--space-2);
+  width: 100%; min-height: var(--control-h); margin-top: var(--space-1);
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-field);
+  background: transparent; color: var(--blue);
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.ord-picker-create:hover { background: var(--blue-soft); }
+.ord-picker-create:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ---------- การ์ดลูกค้าที่เลือกแล้ว ---------- */
+.ord-customer-card {
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-4);
+  padding: var(--card-pad);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--border));
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
+}
+.ord-customer-card > div:first-child { min-width: 0; flex: 1 1 260px; }
+.ord-customer-code { margin: 0 0 2px; font-family: var(--font-num); font-size: 11.5px; font-weight: 700; color: var(--text-subtle); }
+.ord-customer-card h3 { margin: 0 0 var(--space-1); font-size: 18px; font-weight: 800; color: var(--text); overflow-wrap: anywhere; }
+.ord-customer-meta { margin: 0; font-size: 12.5px; color: var(--text-muted); overflow-wrap: anywhere; }
+.ord-customer-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: none; }
+.ord-customer-actions .btn { min-height: var(--control-h); }
+
+/* ---------- ระดับราคา ---------- */
+.ord-tiers { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
+.ord-tier {
+  min-height: var(--control-h); padding: 0 var(--space-4);
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text-muted);
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.ord-tier:hover { border-color: var(--border-strong); color: var(--text); }
+.ord-tier:focus-visible { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
+.ord-tier.active { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+
+/* ---------- บรรทัดรายการ ---------- */
+.ord-lines .ord-num {
+  width: 100%; max-width: 120px; min-height: var(--control-h); padding: 0 var(--space-2);
+  border: 1px solid var(--input-border); border-radius: var(--radius-field);
+  background: var(--input-bg); color: var(--text);
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 14px; font-weight: 700; text-align: right;
+}
+.ord-lines .ord-num:focus { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
+.ord-override { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: var(--text-subtle); }
+.ord-override.warn { color: var(--note-warn-fg); }
+
+/* สมการของบรรทัด: จำนวน x ราคา = ยอด */
+.ord-line-eq {
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 12.5px; color: var(--text-muted);
+}
+.ord-line-eq strong { color: var(--text); font-weight: 800; }
+.ord-under {
+  display: inline-flex; align-items: center; gap: var(--space-1); margin-left: var(--space-3);
+  font-family: var(--font-thai); font-size: 12px; font-weight: 600; color: var(--note-warn-fg);
+}
+
+/* ---------- ยอดรวมในหน้ารายละเอียด ---------- */
+.ord-totals {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  margin-left: auto; max-width: 340px; padding: var(--card-pad);
+}
+.ord-totals > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); font-size: 13px; color: var(--text-muted); }
+.ord-totals b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 800; color: var(--text); }
+.ord-total-net {
+  margin-top: var(--space-2); padding-top: var(--space-2);
+  border-top: 1px solid var(--divider);
+}
+.ord-total-net span { font-size: 14px; font-weight: 700; color: var(--text); }
+.ord-total-net b { font-size: 22px; }
+
+/* ============================================================
+   RESPONSIVE — 1024 / 760 / 430
+   ============================================================ */
+@media (max-width: 1024px) {
+  .ord-picker-list { max-height: 260px; }
+}
+@media (max-width: 760px) {
+  .ord-customer-card { flex-direction: column; }
+  .ord-customer-actions .btn { flex: 1 1 140px; justify-content: center; }
+  .ord-tier { flex: 1 1 45%; }
+  .ord-totals { max-width: none; margin-left: 0; }
+  .ord-lines .ord-num { max-width: none; }
+  /* การ์ดของบรรทัดออเดอร์: คอลัมน์แรกคือ "รายการ" จึงเป็นหัวการ์ด
+     (กฎกลางของ .md-table ให้ td ตัวที่ 2 เป็นหัวการ์ด ซึ่งตรงกับตาราง master
+      แต่ของออเดอร์ตัวที่ 2 คือ "จำนวน" ต้องกลับมาเป็นแถวปกติ ไม่งั้นช่องอื่นถูกบีบจนกว้าง 0) */
+  .order-page .ord-lines td:first-child { grid-column: 1 / -1; }
+  .order-page .ord-lines td:first-child::before { content: none; }
+  .order-page .ord-lines td:nth-child(2) { grid-column: auto; }
+  /* ช่องที่มี input: ป้าย ช่องกรอก และหมายเหตุราคา ต้องเรียงลงมา ไม่เบียดกันในแถวเดียว */
+  .order-page .ord-lines td:has(.ord-num) {
+    flex-direction: column; align-items: stretch; justify-content: flex-start; gap: var(--space-1);
+  }
+  .order-page .ord-lines td:has(.ord-num)::before { text-align: left; }
+
+  /* สมการสรุปกินเต็มความกว้างของการ์ด */
+  .order-page .ord-lines td.ord-line-eq { grid-column: 1 / -1; justify-content: flex-start; flex-wrap: wrap; }
+  .order-page .ord-lines td.ord-line-eq::before { content: none; }
+}
+@media (max-width: 430px) {
+  .ord-tier { flex: 1 1 100%; }
+}
+
+/* ---------- ระดับราคาที่บันทึกไว้ในเอกสาร (metadata ไม่ใช่ตัวเลขการเงิน) ---------- */
+.ord-tier-note {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin: 0; padding: 0 var(--card-pad) var(--space-2);
+  font-size: 12.5px; color: var(--text-muted);
+}
+.ord-tier-note b { font-weight: 700; color: var(--text); }
+.ord-tier-note svg { flex: none; color: var(--text-subtle); }

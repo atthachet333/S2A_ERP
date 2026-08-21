@@ -3,12 +3,16 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, Loader2, Info, Boxes, ShoppingCart, Scale, SlidersHorizontal,
-  Calculator, History, Plus, X,
+  Calculator, History, Plus, AlertTriangle, StickyNote,
 } from 'lucide-react';
 import { catalogApi, type ItemType } from '@/lib/catalog';
 import { formatMoney, formatThaiDateTime } from '@/lib/utils';
+import { unitPricePreview } from '@/lib/item-unit-price';
+import { masterConflictMessage } from '@/lib/master-validation';
 import ImageUpload from '@/components/ui/ImageUpload';
 import Badge from '@/components/ui/Badge';
+import MasterModal from '@/components/ui/MasterModal';
+import { PageContainer, PageHeader, ContentCard } from '@/components/layout/page';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/auth/AuthContext';
 import { useI18n } from '@/i18n/i18n';
@@ -62,22 +66,24 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
   const [form, setForm] = useState<FormState>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [touched, setTouched] = useState(false);
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
 
-  // เพิ่มหน่วยกำหนดเอง (PART H/I) — ใช้ได้ทั้งหน่วยซื้อและหน่วยฐาน
+  // เพิ่มหน่วยกำหนดเอง — ใช้ได้ทั้งหน่วยซื้อและหน่วยฐาน
   const [unitTarget, setUnitTarget] = useState<'purchase' | 'recipe' | null>(null);
-  const [newUnit, setNewUnit] = useState({ name: '', code: '', category: 'COUNT' });
+  const [newUnit, setNewUnit] = useState({ name: '', code: '' });
   const [savingUnit, setSavingUnit] = useState(false);
+  const [unitError, setUnitError] = useState('');
   const addUnit = async () => {
-    if (!newUnit.name.trim() || !newUnit.code.trim()) { toast('กรอกชื่อหน่วยและตัวย่อ', 'error'); return; }
-    setSavingUnit(true);
+    if (!newUnit.name.trim() || !newUnit.code.trim()) { setUnitError('กรอกชื่อหน่วยและตัวย่อให้ครบ'); return; }
+    setSavingUnit(true); setUnitError('');
     try {
       const created = await catalogApi.createUnit({ code: newUnit.code.trim(), name: newUnit.name.trim() });
       await qc.invalidateQueries({ queryKey: ['units'] });
       set(unitTarget === 'purchase' ? { purchaseUnitId: created.id } : { baseUnitId: created.id });
       toast(`เพิ่มหน่วย “${created.name}” แล้ว`);
-      setNewUnit({ name: '', code: '', category: 'COUNT' }); setUnitTarget(null);
-    } catch (e) { toast(e instanceof Error ? e.message : 'เพิ่มหน่วยไม่สำเร็จ', 'error'); }
+      setNewUnit({ name: '', code: '' }); setUnitTarget(null);
+    } catch (e) { setUnitError(masterConflictMessage(e, 'unit', newUnit.code.trim())); }
     finally { setSavingUnit(false); }
   };
 
@@ -86,9 +92,10 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
   const [catOpen, setCatOpen] = useState(false);
   const [newCat, setNewCat] = useState('');
   const [savingCat, setSavingCat] = useState(false);
+  const [catError, setCatError] = useState('');
   const addCategory = async () => {
-    if (!newCat.trim()) { toast(t.categoryName, 'error'); return; }
-    setSavingCat(true);
+    if (!newCat.trim()) { setCatError('กรอกชื่อหมวดหมู่'); return; }
+    setSavingCat(true); setCatError('');
     try {
       const prefix = variant.type === 'PACKAGING' ? 'PKG' : 'RM';
       const created = await catalogApi.createCategory({ name: newCat.trim(), code: `CAT-${prefix}-${Date.now().toString().slice(-6)}`, type: variant.type });
@@ -98,9 +105,7 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
       setNewCat(''); setCatOpen(false);
     } catch (e) {
       // ล้มเหลว → คงค่าที่กรอกไว้และเปิด modal ต่อ (ไม่รีเซ็ตฟอร์มหลัก)
-      const err = e instanceof Error ? e : null;
-      const isDup = Boolean(err && (/DUPLICATE_CATEGORY|CONFLICT/i.test((err as { code?: string }).code ?? '') || err.message.includes('อยู่แล้ว')));
-      toast({ title: isDup ? t.categoryDup : (err?.message || t.createFailed), variant: 'error' });
+      setCatError(masterConflictMessage(e, 'category', newCat.trim()));
     } finally { setSavingCat(false); }
   };
 
@@ -126,24 +131,34 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
     }
   }, [units.data, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const factor = Number(form.purchaseToBaseFactor) || 1;
-  const price = Number(form.purchasePrice) || 0;
-  const qty = Number(form.purchaseQuantity) || 1;
-  const pricePerPurchaseUnit = qty > 0 ? price / qty : 0;
-  const baseCostPreview = pricePerPurchaseUnit / (factor > 0 ? factor : 1);
+  const factor = Number(form.purchaseToBaseFactor);
   const baseUnitCode = units.data?.find((u) => u.id === form.baseUnitId)?.code ?? 'หน่วยฐาน';
-  const purchaseUnitCode = units.data?.find((u) => u.id === form.purchaseUnitId)?.code ?? 'หน่วยซื้อ';
+  const purchaseUnitCode = units.data?.find((u) => u.id === form.purchaseUnitId)?.code ?? baseUnitCode;
+
+  // PART 5 — ผู้ใช้ต้องเห็นความหมายของราคา/หน่วย/การแปลงก่อนกดบันทึก
+  const preview = useMemo(() => unitPricePreview({
+    purchasePrice: form.purchasePrice,
+    purchaseQuantity: form.purchaseQuantity,
+    purchaseToBaseFactor: form.purchaseToBaseFactor,
+    purchaseUnitCode, baseUnitCode,
+  }), [form.purchasePrice, form.purchaseQuantity, form.purchaseToBaseFactor, purchaseUnitCode, baseUnitCode]);
+
+  const missingName = touched && !form.name.trim();
+  const missingCode = touched && !form.code.trim();
+  const badFactor = !Number.isFinite(factor) || factor <= 0;
 
   const submit = async (addAnother = false) => {
-    setError('');
+    setError(''); setTouched(true);
     if (!form.code.trim() || !form.name.trim() || !form.baseUnitId) { setError('กรอก ชื่อ รหัส และหน่วยฐานให้ครบ'); return; }
     setSaving(true);
     try {
+      const price = Number(form.purchasePrice) || 0;
+      const qty = Number(form.purchaseQuantity) || 1;
       const payload = {
         code: form.code.trim(), name: form.name.trim(), type: variant.type,
         barcode: form.barcode.trim() || null, categoryId: form.categoryId || null,
         baseUnitId: form.baseUnitId, purchaseUnitId: form.purchaseUnitId || null,
-        purchaseToBaseFactor: factor, reorderPoint: Number(form.reorderPoint) || 0, imageUrl: form.imageUrl,
+        purchaseToBaseFactor: badFactor ? 1 : factor, reorderPoint: Number(form.reorderPoint) || 0, imageUrl: form.imageUrl,
         isLotTracked: variant.showLotExpiry ? form.isLotTracked : false,
         isExpiryTracked: variant.showLotExpiry ? form.isExpiryTracked : false,
       };
@@ -152,176 +167,260 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
       toast('บันทึกสำเร็จ');
       void qc.invalidateQueries({ queryKey: ['items'] });
       void qc.invalidateQueries({ queryKey: ['item-summary'] });
-      if (addAnother && !isEdit) setForm({ ...EMPTY, baseUnitId: form.baseUnitId });
+      void qc.invalidateQueries({ queryKey: ['selectable-items'] });
+      if (addAnother && !isEdit) { setForm({ ...EMPTY, baseUnitId: form.baseUnitId }); setTouched(false); }
       else navigate(variant.listPath);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ');
+      setError(masterConflictMessage(err, variant.kind === 'packaging' ? 'packaging' : 'ingredient', form.code.trim()));
     } finally { setSaving(false); }
   };
 
   const noun = variant.kind === 'packaging' ? 'บรรจุภัณฑ์' : 'วัตถุดิบ';
 
   return (
-    <>
-      <Link to={variant.listPath} className="btn" style={{ marginBottom: 14 }}><ArrowLeft aria-hidden />กลับ</Link>
-      <div className="page-title-block">
-        <p className="eyebrow">{variant.eyebrow}</p>
-        <h1>{isEdit ? `แก้ไข${noun}` : `เพิ่ม${noun}`}</h1>
-        <p>กรอกข้อมูลเป็นขั้นตอน ระบบจะสรุปต้นทุนต่อหน่วยให้อัตโนมัติทางด้านขวา</p>
-      </div>
+    <PageContainer className="master-page item-form-workspace">
+      <PageHeader
+        breadcrumb={<><Link to={variant.listPath}>{noun}</Link><span> · </span><span>{isEdit ? 'แก้ไข' : 'เพิ่มใหม่'}</span></>}
+        title={isEdit ? `แก้ไข${noun}` : `เพิ่ม${noun}`}
+        description="กรอกทีละหัวข้อ ระบบจะสรุปต้นทุนต่อหน่วยฐานที่จะบันทึกจริงให้เห็นก่อนกดบันทึก"
+        actions={<Link to={variant.listPath} className="btn"><ArrowLeft aria-hidden width={16} />กลับหน้ารายการ</Link>}
+      />
 
-      {error && <div className="alert" style={{ marginTop: 14 }}>{error}</div>}
+      {error && <div className="rb-callout warn" role="alert"><AlertTriangle aria-hidden /><div><strong>{error}</strong></div></div>}
 
-      <div className="form-2col" style={{ marginTop: 16 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* 1 — ข้อมูลหลัก */}
-          <section className="card card-pad">
-            <h3 className="form-section-title"><span className="sec-no">1</span>ข้อมูลหลัก</h3>
-            <p className="form-section-sub">ชื่อและรหัสสำหรับอ้างอิง{noun}นี้ในสูตรและรายงาน</p>
+      <div className="md-form">
+        <div className="md-form-main">
+          {/* A — ข้อมูลพื้นฐาน */}
+          <ContentCard title={<><span className="md-section-badge">A</span>ข้อมูลพื้นฐาน</>}
+            description={`ชื่อและรหัสสำหรับอ้างอิง${noun}นี้ในสูตรและรายงาน`}>
             {variant.presets && (
               <div className="fcx-presets" role="group" aria-label="ประเภทบรรจุภัณฑ์ที่ใช้บ่อย">
                 {variant.presets.map((p) => (
                   <button type="button" key={p.label} className={form.name === p.label ? 'active' : ''}
+                    aria-pressed={form.name === p.label}
                     onClick={() => set({ name: form.name === p.label ? '' : p.label })}>
                     {p.label}
                   </button>
                 ))}
               </div>
             )}
-            <div className="field-grid">
-              <label className="full">{variant.nameLabel} *<input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder={variant.namePlaceholder} /></label>
-              <label>รหัส *<input value={form.code} onChange={(e) => set({ code: e.target.value })} placeholder={variant.codePlaceholder} /></label>
-              <label>บาร์โค้ด<input value={form.barcode} onChange={(e) => set({ barcode: e.target.value })} placeholder="(ไม่บังคับ)" /></label>
-              <label className="full">{variant.categoryLabel}
+            <div className="md-fields">
+              <label className="full">{variant.nameLabel} *
+                <input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder={variant.namePlaceholder}
+                  aria-invalid={missingName} aria-describedby={missingName ? 'err-name' : undefined} />
+                {missingName && <span className="md-error" id="err-name"><AlertTriangle aria-hidden />กรอกชื่อ{noun}</span>}
+              </label>
+              <label>รหัส *
+                <input value={form.code} onChange={(e) => set({ code: e.target.value })} placeholder={variant.codePlaceholder}
+                  aria-invalid={missingCode} aria-describedby={missingCode ? 'err-code' : undefined} />
+                {missingCode && <span className="md-error" id="err-code"><AlertTriangle aria-hidden />กรอกรหัส</span>}
+              </label>
+              <label>บาร์โค้ด
+                <input value={form.barcode} onChange={(e) => set({ barcode: e.target.value })} placeholder="(ไม่บังคับ)" />
+              </label>
+              <div className="md-field full">
+                <span id="lbl-category">{variant.categoryLabel}</span>
                 <CreatableCombobox value={form.categoryId} onChange={(v) => set({ categoryId: v })}
                   options={[{ value: '', label: t.none }, ...(categories.data ?? []).map((c) => ({ value: c.id, label: c.name }))]}
                   placeholder={t.selectCategory} searchPlaceholder={t.searchCategory} emptyText={t.noCategory}
                   createLabel={canCreateMaster ? t.addCategory : undefined}
-                  onCreate={canCreateMaster ? ((q) => { setNewCat(q); setCatOpen(true); }) : undefined}
+                  onCreate={canCreateMaster ? ((q) => { setNewCat(q); setCatError(''); setCatOpen(true); }) : undefined}
                   ariaLabel={variant.categoryLabel} />
-              </label>
+              </div>
             </div>
-          </section>
+          </ContentCard>
 
-          {/* 2 — ข้อมูลการซื้อ */}
-          <section className="card card-pad">
-            <h3 className="form-section-title"><ShoppingCart aria-hidden />ข้อมูลการซื้อ</h3>
-            <p className="form-section-sub">
-              {isEdit ? 'อัปเดตราคาซื้อได้ที่การ์ด “ประวัติราคาซื้อ” ด้านขวา' : 'กรอกราคารวมและจำนวนที่ซื้อ ระบบจะแปลงเป็นต้นทุนต่อหน่วยฐานให้ทันที'}
-            </p>
-            <div className="field-grid">
-              <label className="full">หน่วยที่ซื้อจากผู้ขาย
+          {/* B — หน่วย */}
+          <ContentCard title={<><span className="md-section-badge">B</span><Scale aria-hidden width={17} />หน่วย</>}
+            description={variant.baseUnitHint}>
+            <div className="md-fields">
+              <div className="md-field">
+                <span>หน่วยที่ซื้อจากผู้ขาย</span>
                 <CreatableCombobox value={form.purchaseUnitId} onChange={(v) => set({ purchaseUnitId: v })}
                   options={[{ value: '', label: t.sameAsBase }, ...(units.data ?? []).map((u) => ({ value: u.id, label: `${u.name} (${u.code})` }))]}
                   placeholder={t.sameAsBase} searchPlaceholder={t.searchUnit} emptyText={t.noUnit}
                   createLabel={canCreateMaster ? t.addUnit : undefined}
-                  onCreate={canCreateMaster ? ((q) => { setNewUnit((u) => ({ ...u, name: q })); setUnitTarget('purchase'); }) : undefined}
+                  onCreate={canCreateMaster ? ((q) => { setNewUnit({ name: q, code: '' }); setUnitError(''); setUnitTarget('purchase'); }) : undefined}
                   ariaLabel="หน่วยที่ซื้อจากผู้ขาย" />
-                <span className="field-hint">เช่น ซื้อไก่เป็นกิโลกรัม ซื้อกล่องอาหารเป็นแพ็ค</span>
-              </label>
-              {!isEdit && <>
-                <label>ราคาซื้อ (บาท) ต่อ {qty > 1 ? `${qty} ` : ''}{purchaseUnitCode}
-                  <input type="number" min="0" step="any" value={form.purchasePrice} onChange={(e) => set({ purchasePrice: e.target.value })} placeholder="350" />
-                </label>
-                <label className="full">{variant.purchaseQtyLabel}
-                  <input type="number" min="0.0001" step="any" value={form.purchaseQuantity} onChange={(e) => set({ purchaseQuantity: e.target.value })} />
-                  <span className="field-hint">ตัวอย่าง: ซื้อครั้งละกี่ {purchaseUnitCode} ในราคาด้านบน</span>
-                </label>
-              </>}
-            </div>
-          </section>
-
-          {/* 3 — หน่วยใช้งานในสูตร */}
-          <section className="card card-pad">
-            <h3 className="form-section-title"><Scale aria-hidden />หน่วยใช้งานในสูตร</h3>
-            <p className="form-section-sub">{variant.baseUnitHint}</p>
-            <div className="field-grid">
-              <label className="full">หน่วยที่ใช้ตอนทำสูตร * <small>(หน่วยฐานของรายการ)</small>
+                <span className="md-hint">เช่น ซื้อไก่เป็นกิโลกรัม ซื้อกล่องอาหารเป็นแพ็ค</span>
+              </div>
+              <div className="md-field">
+                <span>หน่วยฐาน (ใช้ตอนคีย์สูตร) *</span>
                 <CreatableCombobox value={form.baseUnitId} onChange={(v) => set({ baseUnitId: v })}
                   options={(units.data ?? []).map((u) => ({ value: u.id, label: `${u.name} (${u.code})` }))}
                   placeholder={t.selectUnit} searchPlaceholder={t.searchUnit} emptyText={t.noUnit}
                   createLabel={canCreateMaster ? t.addUnit : undefined}
-                  onCreate={canCreateMaster ? ((q) => { setNewUnit((u) => ({ ...u, name: q })); setUnitTarget('recipe'); }) : undefined}
-                  ariaLabel="หน่วยที่ใช้ตอนทำสูตร" />
-                <span className="field-hint">หน่วยนี้คือหน่วยที่ใช้ระบุปริมาณจริงในสูตรอาหาร</span>
-              </label>
-              <div className="conversion-sentence full"><span><b>1</b><em>{purchaseUnitCode}</em></span><strong>=</strong><label><input aria-label="จำนวนหน่วยที่ใช้ในสูตรต่อหน่วยซื้อ" type="number" min="0" step="any" value={form.purchaseToBaseFactor} onChange={(e) => set({ purchaseToBaseFactor: e.target.value })} /><em>{baseUnitCode}</em></label></div>
-              <span className="field-hint full">สำหรับหน่วยเฉพาะ เช่น กำ ลูก หรือชิ้น สามารถกำหนดค่าต่อ{noun}รายการนี้ได้ · {variant.factorHint}</span>
-            </div>
-          </section>
+                  onCreate={canCreateMaster ? ((q) => { setNewUnit({ name: q, code: '' }); setUnitError(''); setUnitTarget('recipe'); }) : undefined}
+                  ariaLabel="หน่วยฐาน" />
+                <span className="md-hint">หน่วยที่ใช้ระบุปริมาณจริงในสูตร · ต้นทุนทั้งระบบคิดต่อหน่วยนี้</span>
+              </div>
 
-          {/* 4 — การควบคุมต้นทุน / สต๊อก */}
-          <section className="card card-pad">
-            <h3 className="form-section-title"><SlidersHorizontal aria-hidden />การควบคุมต้นทุน</h3>
-            <div className="field-grid">
+              {/* สมการเดียวทั้งระบบ: [1] [หน่วยซื้อ] = [factor] [หน่วยฐาน] */}
+              <div className="md-field full">
+                <span id="lbl-factor">อัตราแปลงของรายการนี้</span>
+                <div className="md-equation">
+                  <span className="eq-const">1</span>
+                  <span className="eq-unit">{purchaseUnitCode}</span>
+                  <span className="eq-op">=</span>
+                  <input type="number" min="0" step="any" value={form.purchaseToBaseFactor}
+                    onChange={(e) => set({ purchaseToBaseFactor: e.target.value })}
+                    aria-labelledby="lbl-factor" aria-invalid={badFactor}
+                    aria-describedby={badFactor ? 'err-factor' : undefined} />
+                  <span className="eq-unit">{baseUnitCode}</span>
+                </div>
+                {badFactor
+                  ? <span className="md-error" id="err-factor"><AlertTriangle aria-hidden />จำนวนต้องมากกว่า 0</span>
+                  : <span className="md-hint">
+                      {factor === 1
+                        ? 'หน่วยซื้อและหน่วยฐานเหมือนกัน'
+                        : `ระบบคำนวณด้านกลับให้เอง: 1 ${baseUnitCode} = ${(1 / factor).toLocaleString('en-US', { maximumFractionDigits: 6 })} ${purchaseUnitCode}`}
+                    </span>}
+                <span className="md-hint">อัตรานี้ใช้เฉพาะ{noun}รายการนี้เท่านั้น · {variant.factorHint}</span>
+              </div>
+            </div>
+          </ContentCard>
+
+          {/* C — ราคา */}
+          <ContentCard title={<><span className="md-section-badge">C</span><ShoppingCart aria-hidden width={17} />ราคา</>}
+            description={isEdit ? 'อัปเดตราคาซื้อได้ที่การ์ด “ประวัติราคาซื้อ” ด้านขวา' : 'กรอกราคารวมและจำนวนที่ซื้อ ระบบจะแปลงเป็นต้นทุนต่อหน่วยฐานให้ทันที'}>
+            {isEdit ? (
+              <p className="md-hint">ราคาที่บันทึกไว้จะถูกเก็บเป็นประวัติทุกครั้ง เพื่อให้ย้อนดูได้ว่าต้นทุนเปลี่ยนเมื่อไหร่</p>
+            ) : (
+              <div className="md-fields">
+                <label>ราคาซื้อ (บาท)
+                  <input type="number" min="0" step="any" value={form.purchasePrice}
+                    onChange={(e) => set({ purchasePrice: e.target.value })} placeholder="350" />
+                  <span className="md-hint">ราคารวมที่จ่ายจริงในการซื้อครั้งนั้น</span>
+                </label>
+                <label>{variant.purchaseQtyLabel}
+                  <input type="number" min="0.0001" step="any" value={form.purchaseQuantity}
+                    onChange={(e) => set({ purchaseQuantity: e.target.value })} />
+                  <span className="md-hint">ได้ของกี่ {purchaseUnitCode} ในราคาด้านซ้าย</span>
+                </label>
+              </div>
+            )}
+          </ContentCard>
+
+          {/* D — การควบคุมสต็อก */}
+          <ContentCard title={<><span className="md-section-badge">D</span><SlidersHorizontal aria-hidden width={17} />การควบคุมสต็อก</>}
+            description="ใช้แจ้งเตือนเมื่อของใกล้หมด — ไม่กระทบการคิดต้นทุน">
+            <div className="md-fields">
               <label>จุดสั่งซื้อ ({baseUnitCode})
                 <input type="number" min="0" value={form.reorderPoint} onChange={(e) => set({ reorderPoint: e.target.value })} />
-                <span className="field-hint">แจ้งเตือนเมื่อของใกล้หมด (ไม่บังคับ)</span>
+                <span className="md-hint">แจ้งเตือนเมื่อคงเหลือถึงจำนวนนี้ (ไม่บังคับ)</span>
               </label>
-              {variant.showLotExpiry ? (
-                <div className="fcx-field" style={{ justifyContent: 'flex-end' }}>
-                  <span>การติดตาม</span>
-                  <div className="stock-switches">
-                    <label style={{ flexDirection: 'row' }}><input type="checkbox" checked={form.isLotTracked} onChange={(e) => set({ isLotTracked: e.target.checked })} /> ติดตาม Lot</label>
-                    <label style={{ flexDirection: 'row' }}><input type="checkbox" checked={form.isExpiryTracked} onChange={(e) => set({ isExpiryTracked: e.target.checked })} /> วันหมดอายุ</label>
+              <div className="md-field">
+                <span>การติดตาม</span>
+                {variant.showLotExpiry ? (
+                  <div className="md-switches">
+                    <label><input type="checkbox" checked={form.isLotTracked} onChange={(e) => set({ isLotTracked: e.target.checked })} />ติดตาม Lot</label>
+                    <label><input type="checkbox" checked={form.isExpiryTracked} onChange={(e) => set({ isExpiryTracked: e.target.checked })} />วันหมดอายุ</label>
                   </div>
-                </div>
-              ) : (
-                <div className="fcx-field" style={{ justifyContent: 'center' }}>
-                  <span className="field-hint">บรรจุภัณฑ์ไม่ต้องติดตาม Lot / วันหมดอายุ ระบบโฟกัสที่ต้นทุนต่อชิ้น</span>
-                </div>
-              )}
+                ) : (
+                  <span className="md-hint">บรรจุภัณฑ์ไม่ต้องติดตาม Lot / วันหมดอายุ ระบบโฟกัสที่ต้นทุนต่อชิ้น</span>
+                )}
+              </div>
             </div>
-          </section>
-        </div>
+          </ContentCard>
 
-        {/* ---------- Sidebar ---------- */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} className="fcx-sticky">
-          <section className="card card-pad">
-            <h3 className="form-section-title"><Boxes aria-hidden />รูปภาพและตัวอย่าง</h3>
+          {/* E — หมายเหตุ / รูป */}
+          <ContentCard title={<><span className="md-section-badge">E</span><Boxes aria-hidden width={17} />รูปภาพ</>}
+            description="ช่วยให้เลือกของถูกตัวตอนคีย์สูตรและรับของ">
             <ImageUpload kind="items" value={form.imageUrl} onChange={(url) => set({ imageUrl: url })} />
             <div className="item-live-preview">
               <Badge variant={variant.kind === 'packaging' ? 'gold' : 'info'}>{variant.kind === 'packaging' ? 'บรรจุภัณฑ์และวัสดุ' : 'วัตถุดิบอาหาร'}</Badge>
-              <h3 style={{ margin: '10px 0 2px' }}>{form.name || `ชื่อ${noun}`}</h3>
-              <p style={{ margin: 0, color: 'var(--text-subtle)', fontSize: 13 }}>{form.code || 'รหัส'} · {purchaseUnitCode} → {baseUnitCode}</p>
+              <h3>{form.name || `ชื่อ${noun}`}</h3>
+              <p>{form.code || 'รหัส'} · {purchaseUnitCode} → {baseUnitCode}</p>
             </div>
-          </section>
+          </ContentCard>
+        </div>
 
-          <section className="card card-pad cost-preview">
-            <h3 className="form-section-title"><Calculator aria-hidden />ต้นทุนที่คำนวณได้</h3>
-            <div className="cp-row"><span>ราคาต่อ 1 {purchaseUnitCode}</span><strong>{pricePerPurchaseUnit > 0 ? formatMoney(pricePerPurchaseUnit, 2) : '—'}</strong></div>
-            <div className="cp-row big"><span>{variant.costPerBaseLabel}</span><strong>{baseCostPreview > 0 ? formatMoney(baseCostPreview, 4) : '—'}</strong></div>
-            {pricePerPurchaseUnit > 0 && (
-              <div className="cp-formula">
-                <b>{formatMoney(pricePerPurchaseUnit, 2)}</b> ต่อ {purchaseUnitCode} ÷ <b>{factor}</b> {baseUnitCode}/{purchaseUnitCode} = <b>{formatMoney(baseCostPreview, 4)}</b> ต่อ {baseUnitCode}
-              </div>
-            )}
-            <p className="field-hint" style={{ marginTop: 10 }}>ต้นทุนต่อหน่วยฐานนี้จะถูกใช้คำนวณในทุกสูตรที่ใช้{noun}นี้</p>
+        {/* ---------- แผงสรุป ---------- */}
+        <div className="md-form-side">
+          <section className="md-preview">
+            <h3><Calculator aria-hidden />ต้นทุนที่ระบบจะใช้</h3>
+            <div className="md-preview-row">
+              <span>ราคาซื้อ</span>
+              <strong>{preview.pricePerPurchaseUnit != null ? `${formatMoney(preview.pricePerPurchaseUnit, 2)} / ${purchaseUnitCode}` : '—'}</strong>
+            </div>
+            <div className="md-preview-row">
+              <span>การแปลง</span>
+              <strong>{preview.conversionText ?? (preview.factorState === 'same' ? 'หน่วยซื้อและหน่วยฐานเหมือนกัน' : '—')}</strong>
+            </div>
+            <div className="md-preview-row lead">
+              <span>{variant.costPerBaseLabel}</span>
+              <strong>{preview.baseUnitCost != null ? `${formatMoney(preview.baseUnitCost, 4)} / ${baseUnitCode}` : '—'}</strong>
+            </div>
+            {preview.formula && <p className="md-preview-formula">{preview.formula}</p>}
+            {preview.warning && <div className="rb-callout warn" role="note">
+              <AlertTriangle aria-hidden /><div><strong>{preview.warning}</strong></div>
+            </div>}
+            <p className="md-preview-note">ต้นทุนต่อหน่วยฐานนี้จะถูกใช้คำนวณในทุกสูตรที่ใช้{noun}นี้</p>
           </section>
 
           {isEdit && detail.data && (
-            <section className="card card-pad">
-              <h3 className="form-section-title"><History aria-hidden />ประวัติราคาซื้อ</h3>
-              <PriceHistory itemId={id as string} />
-            </section>
+            <ContentCard title={<><History aria-hidden width={17} />ประวัติราคาซื้อ</>}>
+              <PriceHistory itemId={id as string} baseUnitCode={baseUnitCode} />
+            </ContentCard>
           )}
 
-          <div className="sticky-form-actions">
+          <div className="md-form-actions">
             <Link to={variant.listPath} className="btn">ยกเลิก</Link>
-            {!isEdit && <button className="btn" onClick={() => void submit(true)} disabled={saving}>บันทึกและเพิ่มใหม่</button>}
-            <button className="btn primary" onClick={() => void submit()} disabled={saving}>
+            {!isEdit && <button type="button" className="btn" onClick={() => void submit(true)} disabled={saving}>บันทึกและเพิ่มใหม่</button>}
+            <button type="button" className="btn primary" onClick={() => void submit()} disabled={saving}>
               {saving ? <Loader2 className="spin" aria-hidden /> : <Save aria-hidden />}{isEdit ? 'บันทึกการแก้ไข' : `สร้าง${noun}`}
             </button>
           </div>
         </div>
       </div>
-      {catOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setCatOpen(false)}><section className="unit-modal" role="dialog" aria-modal="true" aria-labelledby="add-cat-title" onMouseDown={(e) => e.stopPropagation()}><div className="add-unit-head"><div><p className="eyebrow">CATEGORY MASTER</p><h2 id="add-cat-title">{t.categoryTitle}</h2></div><button type="button" className="icon-btn" onClick={() => setCatOpen(false)} aria-label={messages.common.close}><X aria-hidden /></button></div><p className="field-hint">{t.categoryHint}</p><label>{t.categoryName}<input autoFocus placeholder={t.categoryPh} value={newCat} onChange={(e) => setNewCat(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addCategory(); } }} /></label><div className="modal-actions"><button type="button" className="btn" onClick={() => setCatOpen(false)}>{t.cancel}</button><button type="button" className="btn primary" onClick={() => void addCategory()} disabled={savingCat}>{savingCat ? <Loader2 className="spin" aria-hidden /> : <Plus aria-hidden />}{t.addCategory}</button></div></section></div>}
-      {unitTarget && <div className="modal-backdrop" role="presentation"><section className="unit-modal" role="dialog" aria-modal="true" aria-labelledby="add-unit-title"><div className="add-unit-head"><div><p className="eyebrow">UNIT MASTER</p><h2 id="add-unit-title">เพิ่มหน่วยใหม่</h2></div><button type="button" className="icon-btn" onClick={() => setUnitTarget(null)} aria-label="ปิด"><X aria-hidden /></button></div><p className="field-hint">เพิ่มแล้วระบบจะเลือกกลับเข้า “{unitTarget === 'purchase' ? 'หน่วยที่ซื้อจากผู้ขาย' : 'หน่วยที่ใช้ตอนทำสูตร'}” ทันที</p><label>ชื่อหน่วย<input autoFocus placeholder="เช่น กระสอบ" value={newUnit.name} onChange={(e) => setNewUnit((u) => ({ ...u, name: e.target.value }))} /></label><label>ตัวย่อ<input placeholder="เช่น SACK" value={newUnit.code} onChange={(e) => setNewUnit((u) => ({ ...u, code: e.target.value.toUpperCase() }))} /></label><label>ประเภท<select value={newUnit.category} onChange={(e) => setNewUnit((u) => ({ ...u, category: e.target.value }))}><option value="WEIGHT">น้ำหนัก</option><option value="VOLUME">ปริมาตร</option><option value="COUNT">จำนวน</option><option value="PACKAGING">บรรจุภัณฑ์</option><option value="CUSTOM">กำหนดเอง</option></select><span className="field-hint">ใช้ช่วยเลือกความหมายของหน่วยในหน้าจอนี้ โดย Unit Master เดิมเก็บชื่อและตัวย่อ</span></label><div className="modal-actions"><button type="button" className="btn" onClick={() => setUnitTarget(null)}>ยกเลิก</button><button type="button" className="btn primary" onClick={() => void addUnit()} disabled={savingUnit}>{savingUnit ? <Loader2 className="spin" aria-hidden /> : <Plus aria-hidden />}เพิ่มหน่วย</button></div></section></div>}
-    </>
+
+      <MasterModal
+        open={catOpen}
+        title={t.categoryTitle}
+        description={t.categoryHint}
+        error={catError}
+        busy={savingCat}
+        confirmLabel={t.addCategory}
+        confirmIcon={<Plus aria-hidden width={16} />}
+        onClose={() => setCatOpen(false)}
+        onConfirm={() => void addCategory()}
+      >
+        <div className="md-fields">
+          <label className="full">{t.categoryName}
+            <input autoFocus placeholder={t.categoryPh} value={newCat} onChange={(e) => setNewCat(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addCategory(); } }} />
+          </label>
+        </div>
+      </MasterModal>
+
+      <MasterModal
+        open={unitTarget !== null}
+        title="เพิ่มหน่วยใหม่"
+        description={`เพิ่มแล้วระบบจะเลือกกลับเข้า “${unitTarget === 'purchase' ? 'หน่วยที่ซื้อจากผู้ขาย' : 'หน่วยฐาน'}” ทันที`}
+        error={unitError}
+        busy={savingUnit}
+        confirmLabel="เพิ่มหน่วย"
+        confirmIcon={<Plus aria-hidden width={16} />}
+        onClose={() => setUnitTarget(null)}
+        onConfirm={() => void addUnit()}
+      >
+        <div className="md-fields">
+          <label>ชื่อหน่วย *
+            <input autoFocus placeholder="เช่น กระสอบ" value={newUnit.name} onChange={(e) => setNewUnit((u) => ({ ...u, name: e.target.value }))} />
+          </label>
+          <label>ตัวย่อ *
+            <input placeholder="เช่น SACK" value={newUnit.code} onChange={(e) => setNewUnit((u) => ({ ...u, code: e.target.value.toUpperCase() }))} />
+          </label>
+          <p className="md-hint full">
+            <StickyNote aria-hidden width={13} /> หน่วยเก็บเฉพาะชื่อและตัวย่อ · ความสัมพันธ์ระหว่างหน่วย เช่น 1 KG = 1000 G ตั้งได้ที่หน้าสูตรแปลงหน่วย
+          </p>
+        </div>
+      </MasterModal>
+    </PageContainer>
   );
 }
 
-function PriceHistory({ itemId }: { itemId: string }) {
+function PriceHistory({ itemId, baseUnitCode }: { itemId: string; baseUnitCode: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const detail = useQuery({ queryKey: ['item', itemId], queryFn: () => catalogApi.item(itemId) });
@@ -342,6 +441,7 @@ function PriceHistory({ itemId }: { itemId: string }) {
       toast('บันทึกราคาซื้อแล้ว'); setPrice('');
       void qc.invalidateQueries({ queryKey: ['item', itemId] });
       void qc.invalidateQueries({ queryKey: ['items'] });
+      void qc.invalidateQueries({ queryKey: ['selectable-items'] });
     } catch (e) { toast(e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ', 'error'); }
     finally { setBusy(false); }
   };
@@ -356,16 +456,16 @@ function PriceHistory({ itemId }: { itemId: string }) {
       {spark.length > 1 && <Sparkline values={spark} />}
       <div className="add-price-row">
         <input type="number" placeholder="ราคาซื้อ" value={price} onChange={(e) => setPrice(e.target.value)} aria-label="ราคาซื้อใหม่" />
-        <input type="number" placeholder="จำนวน" value={qty} onChange={(e) => setQty(e.target.value)} aria-label="จำนวนที่ซื้อ" style={{ maxWidth: 90 }} />
-        <button className="btn primary" onClick={() => void add()} disabled={busy}>อัปเดต</button>
+        <input type="number" className="apr-qty" placeholder="จำนวน" value={qty} onChange={(e) => setQty(e.target.value)} aria-label="จำนวนที่ซื้อ" />
+        <button type="button" className="btn primary" onClick={() => void add()} disabled={busy}>อัปเดต</button>
       </div>
       <div className="price-history-list">
-        {history.length === 0 && <p className="subtle" style={{ fontSize: 13, display: 'flex', gap: 6, alignItems: 'center' }}><Info width={15} aria-hidden />ยังไม่มีประวัติราคา</p>}
+        {history.length === 0 && <p className="md-hint"><Info width={15} aria-hidden />ยังไม่มีประวัติราคา</p>}
         {history.slice(0, 8).map((h) => (
           <div className="ph-row" key={h.id}>
-            <span className="num">{formatMoney(h.baseUnitCost, 4)}<small style={{ color: 'var(--text-subtle)' }}> /หน่วยฐาน</small></span>
-            <span className="subtle" style={{ fontSize: 12 }}>{h.purchasePrice ? `฿${formatMoney(h.purchasePrice, 2)}/${h.purchaseQuantity ?? 1}` : ''}</span>
-            <span className="subtle" style={{ fontSize: 12 }}>{formatThaiDateTime(h.createdAt)}</span>
+            <span className="num">{formatMoney(h.baseUnitCost, 4)}<small> /{baseUnitCode}</small></span>
+            <span className="ph-src">{h.purchasePrice ? `${formatMoney(h.purchasePrice, 2)}/${h.purchaseQuantity ?? 1}` : ''}</span>
+            <span className="ph-src">{formatThaiDateTime(h.createdAt)}</span>
           </div>
         ))}
       </div>

@@ -1,0 +1,289 @@
+/* ============================================================
+   S2A ERP — DESIGN TOKENS (single source of truth)
+   PHASE 1 ของ Frontend Redesign Master Pass
+
+   กติกา:
+   - ห้ามประกาศ custom property ของธีมที่ไฟล์อื่นอีก ให้แก้ที่นี่ที่เดียว
+   - ไฟล์นี้ต้องถูก import เป็นอันดับแรกใน main.tsx
+   - ลำดับ: primitives -> semantic (light) -> scales -> dark -> print
+
+   ค่าทั้งหมดในไฟล์นี้เท่ากับค่าที่ระบบ "คำนวณได้จริง" ก่อนการรวมไฟล์
+   (ตรวจสอบด้วยการ diff computed value ทั้ง light/dark)
+   ============================================================ */
+
+:root {
+  /* ---------- PRIMITIVES: brand palette ---------- */
+  --navy: #071D35;
+  --navy-deep: #04121f;
+  --navy-soft: #0A4F8A;
+  --blue: #1677C8;
+  --blue-600: #1263ad;
+  --blue-100: #EAF4FF;
+  --blue-soft: #eaf4ff;
+  --blue-light: #e4f1ff;
+  --gold: #C6A15B;
+  --gold-soft: #e0c88f;
+
+  /* ---------- SEMANTIC: surfaces (light) ----------
+     ชั้นความลึก: bg < surface < surface-2 < surface-3 < elevated < floating */
+  --bg: #F5F8FC;
+  --bg-tint: #E7EEF7;
+  --surface: #FFFFFF;
+  --surface-2: #F5F8FC;
+  --surface-3: #EEF3F9;
+  --surface-elevated: #FFFFFF;
+  --surface-floating: #FFFFFF;
+  --surface-muted: #eef3f8;
+  --surface-soft: var(--surface-2);
+  --surface-glass: rgba(255,255,255,.82);
+  --surface-hover: var(--surface-2);
+  --surface-selected: var(--blue-soft);
+  --overlay: rgba(5,18,36,.45);
+
+  /* ---------- SEMANTIC: borders ---------- */
+  --border: #d3dde9;
+  --border-strong: #bccbdd;
+  --divider: var(--border);
+
+  /* ---------- SEMANTIC: text ---------- */
+  --text: #122238;
+  --text-muted: #52607a;
+  /* PHASE 12B — เดิม #6d7b91 ให้คอนทราสต์ 4.03–4.29:1 ไม่ผ่าน WCAG AA (ต้อง 4.5:1)
+     กับข้อความรองขนาดเล็กทั้งระบบ (KPI hint, <small>, เวลากิจกรรม) รวม 18 จุดที่วัดได้
+     ค่าใหม่วัดแล้วผ่านทุกพื้นหลังของธีมสว่าง:
+       surface #FFFFFF 5.2:1 · surface-2 #F5F8FC 4.88:1 · surface-muted #eef3f8 4.66:1
+     ธีมมืดผ่านอยู่แล้ว (--text-subtle: #93A6BC = 6.67:1) จึงไม่แตะ */
+  --text-subtle: #5E6E84;
+  --text-inverse: #FFFFFF;
+  --heading: var(--navy);
+  --accent: var(--blue);
+
+  /* ---------- SEMANTIC: status ---------- */
+  --success: #16845B;
+  --success-bg: #E4F4EC;
+  --warning: #C47A15;
+  --warning-bg: #FBF0DC;
+  --danger: #C44251;
+  --danger-bg: #FBE7EA;
+  --info: #1677C8;
+  --info-bg: #EAF4FF;
+
+  /* ---------- SEMANTIC: badge / chip (เดิม hardcode ทำให้ dark อ่านไม่ออก) ---------- */
+  --success-fg: #157a3a;
+  --warning-fg: #9a5b09;
+  --danger-fg: #b91c1c;
+  --info-fg: #1d4ed8;
+  --neutral-bg: #eef2f8;
+  --neutral-fg: #5b6b83;
+  --gold-bg: #f7efd8;
+  --gold-fg: #806118;   /* AA: 5.02 บนพื้น --gold-bg */
+
+  /* note/callout สีเตือน (เดิมกระจาย hardcode 9 จุด + dark override อีก 9 กฎ) */
+  --note-warn-fg: #8a5a00;
+  --note-warn-accent: #c58a14;
+
+  /* ---------- SEMANTIC: interaction ---------- */
+  --hover: var(--blue-100);
+  --selected: var(--blue-soft);
+  --active: var(--blue-100);
+
+  /* ---------- SEMANTIC: form controls ---------- */
+  --input-bg: var(--surface);
+  --input-border: var(--border-strong);
+  --input-placeholder: var(--text-subtle);
+  --input-focus: var(--blue);
+  --focus-ring: 0 0 0 3px rgba(22,119,200,.24);
+  --focus-ring-danger: 0 0 0 3px rgba(196,66,81,.22);
+
+  /* ---------- SEMANTIC: app header ---------- */
+  --header-bg: rgba(255,255,255,.86);
+  --header-bg-scrolled: rgba(255,255,255,.95);
+  --header-fg: var(--navy);
+  --header-fg-muted: var(--text-muted);
+  --header-border: var(--border);
+  --header-border-scrolled: var(--border-strong);
+  --header-shadow: 0 4px 16px rgba(15,41,74,.06);
+  --header-control-bg: var(--surface);
+  --header-control-border: var(--border);
+  --header-search-bg: var(--surface-2);
+
+  /* ---------- Gradients (ใช้เท่าที่จำเป็น) ---------- */
+  --grad-brand: linear-gradient(120deg, var(--navy), var(--blue));
+  --grad-cyan: linear-gradient(120deg, var(--blue), #35b6d6);
+  --primary-btn: linear-gradient(110deg, var(--navy), var(--blue));
+
+  /* ---------- SCALE: spacing (4px base) ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ---------- SCALE: radius ---------- */
+  --radius-pill: 999px;
+  --radius-sm: 10px;
+  --radius-field: 12px;
+  --radius-card: 16px;
+
+  /* ---------- SCALE: control heights (spec: input 44–46px) ---------- */
+  --control-h-sm: 36px;
+  --control-h: 44px;
+  --control-h-lg: 46px;
+
+  /* ---------- SCALE: card padding (spec: 20–24px) ---------- */
+  --card-pad: 22px;
+  --card-pad-sm: 16px;
+
+  /* ---------- SCALE: elevation ---------- */
+  --shadow-flat: 0 1px 2px rgba(7,29,53,.035);
+  --shadow-sm: 0 1px 2px rgba(15, 41, 74, 0.05);
+  --shadow-card: 0 6px 20px rgba(15, 41, 74, 0.07);
+  --shadow-elevated: 0 12px 34px rgba(7,29,53,.09);
+  --shadow-interactive: 0 15px 35px rgba(7,29,53,.12);
+  --shadow-pop: 0 16px 44px rgba(13, 38, 70, 0.16);
+  --shadow-md: var(--shadow-card);
+  --shadow-lg: var(--shadow-pop);
+
+  /* ---------- SCALE: z-index (เลิกใช้เลขมั่ว) ---------- */
+  --z-sticky: 20;
+  --z-header: 40;
+  --z-dropdown: 60;
+  --z-drawer: 200;
+  --z-modal: 400;
+  --z-portal: 9000;
+  --z-toast: 9500;
+
+  /* ---------- LAYOUT ---------- */
+  /* ความกว้างหน้ามาตรฐาน — เดิมแต่ละหน้ากำหนดเอง 1180/1280/1480/1500 ทำให้ความกว้างกระโดดตอนสลับเมนู */
+  --page-wide: none;
+  --page-default: 1480px;
+  --page-doc: 1180px;
+  --page-narrow: 880px;
+  --sidebar-w: 264px;
+  --sidebar-w-collapsed: 76px;
+  --header-h: 64px;
+  --content-max: 1560px;
+
+  /* ---------- TYPOGRAPHY ---------- */
+  --font-thai: 'Noto Sans Thai', system-ui, sans-serif;
+  --font-num: 'Manrope', 'Noto Sans Thai', system-ui, sans-serif;
+  font-family: var(--font-thai);
+
+  /* ---------- ALIASES (คงไว้เพื่อไม่ให้ CSS เดิมพัง) ---------- */
+  --app-bg: var(--bg);
+  --primary: #0A4F8A;
+  --text-secondary: var(--text-muted);
+  --brand-navy: var(--navy);
+  --brand-blue: var(--blue);
+  --brand-blue-hover: var(--blue-600);
+  --brand-blue-soft: var(--blue-soft);
+  --brand-gold: var(--gold);
+  --brand-gold-soft: var(--gold-soft);
+  --success-soft: var(--success-bg);
+  --warning-soft: var(--warning-bg);
+  --danger-soft: var(--danger-bg);
+  --info-soft: var(--info-bg);
+}
+
+/* ============================================================
+   DARK — override เฉพาะ semantic ไม่แตะ scale
+   ชั้นความลึกต้องต่างกันจริง: bg #07121F < surface #101F31
+   < surface-2 #16283C < surface-3 #1C334C < elevated #223A57
+   ============================================================ */
+:root.dark {
+  /* surfaces */
+  --bg: #07121F;
+  --bg-tint: #10203300;
+  --surface: #101F31;
+  --surface-2: #16283C;
+  --surface-3: #1C334C;
+  --surface-elevated: #223A57;
+  --surface-floating: #274264;
+  --surface-muted: #0C1826;
+  --surface-glass: rgba(13,24,38,.82);
+  --surface-hover: rgba(130,170,220,.10);
+  --surface-selected: #1C3B5C;
+  --overlay: rgba(3,9,17,.66);
+
+  /* borders */
+  --border: #294863;
+  --border-strong: #375C7B;
+
+  /* text */
+  --text: #F3F7FB;
+  --text-muted: #C6D3E2;
+  --text-subtle: #93A6BC;
+  --heading: #F3F7FB;
+
+  /* blues / tints */
+  --blue-100: #16304d;
+  --blue-soft: #142a43;
+  --blue-light: #163049;
+
+  /* status backgrounds (foreground คงสีความหมายเดิม) */
+  --success-bg: #10352a;
+  --warning-bg: #3a2f16;
+  --danger-bg: #3a2029;
+  --info-bg: #16304d;
+
+  /* badge / chip — ต้องสว่างพอบนพื้นเข้ม */
+  --success-fg: #5fd39c;
+  --warning-fg: #f0c46a;
+  --danger-fg: #ff9aa6;
+  --info-fg: #8ec5ff;
+  --neutral-bg: #16283C;
+  --neutral-fg: #a9b8cc;
+  --gold-bg: #3a3016;
+  --gold-fg: #e0c88f;
+
+  --note-warn-fg: #f0c46a;
+
+  /* interaction */
+  --hover: rgba(130,170,220,.12);
+  --selected: #1C3B5C;
+  --active: var(--blue-100);
+
+  /* form controls */
+  --input-bg: #0E1E30;
+  --input-border: #33506E;
+  --focus-ring: 0 0 0 3px rgba(56,148,230,.32);
+
+  /* header */
+  --header-bg: rgba(9,20,33,.9);
+  --header-bg-scrolled: rgba(7,17,29,.96);
+  --header-fg: #f1f6fc;
+  --header-fg-muted: #9fb2c8;
+  --header-border: rgba(198,161,91,.26);
+  --header-border-scrolled: rgba(198,161,91,.44);
+  --header-shadow: 0 6px 22px rgba(0,0,0,.5);
+  --header-control-bg: rgba(255,255,255,.08);
+  --header-control-border: rgba(255,255,255,.14);
+  --header-search-bg: rgba(255,255,255,.06);
+
+  /* gradients + elevation ปรับให้อ่านออกบนพื้นเข้ม */
+  --grad-brand: linear-gradient(120deg, #0d2a49, #1263ad);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.5);
+  --shadow-card: 0 8px 24px rgba(0,0,0,.5);
+  --shadow-pop: 0 18px 48px rgba(0,0,0,.62);
+  --shadow-md: 0 8px 24px rgba(0,0,0,.55);
+  --shadow-lg: 0 20px 52px rgba(0,0,0,.66);
+}
+
+/* ============================================================
+   PRINT — บังคับขาว/ดำเสมอ ไม่ว่าธีมไหน
+   ============================================================ */
+@media print {
+  :root, :root.dark {
+    --app-bg: #fff; --bg: #fff; --surface: #fff; --surface-2: #fff;
+    --surface-3: #fff; --surface-elevated: #fff; --surface-floating: #fff;
+    --text: #000; --text-muted: #333; --text-subtle: #555; --heading: #000;
+    --border: #ccc; --border-strong: #999; --divider: #ccc;
+    --header-bg: #fff; --header-fg: #000; --overlay: transparent;
+    --neutral-bg: #fff; --neutral-fg: #333; --gold-bg: #fff; --gold-fg: #333;
+    --note-warn-fg: #333; --note-warn-accent: #999;
+  }
+}

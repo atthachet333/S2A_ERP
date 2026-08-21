@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Building2, CheckCheck, ChevronDown, ChevronRight, CircleAlert, KeyRound, LogOut, Menu, Monitor, Moon, PanelLeft, Search, Sun, UserRound, X } from 'lucide-react';
+import { Bell, Building2, CheckCheck, ChevronDown, ChevronRight, CircleAlert, KeyRound, LogOut, Menu, Monitor, Moon, PanelLeft,  Sun, UserRound, X } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import { useTheme } from '@/theme/ThemeContext';
 import { MODULES } from './nav-config';
@@ -49,6 +50,26 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
 
+  // ESC ปิดทั้งเมนูผู้ใช้และลิ้นชักแจ้งเตือน
+  useEffect(() => {
+    if (!menuOpen && !notificationsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setMenuOpen(false);
+      setNotificationsOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menuOpen, notificationsOpen]);
+
+  // ล็อกการเลื่อนพื้นหลังระหว่างเปิดลิ้นชัก
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [notificationsOpen]);
+
   useEffect(() => {
     const updateScrolled = () => setScrolled(window.scrollY > 20 || document.documentElement.scrollTop > 20);
     updateScrolled();
@@ -74,20 +95,19 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
         <button className="icon-btn only-mobile" onClick={onOpenDrawer} aria-label={nav.system}><Menu /></button>
         {PageIcon && <span className="header-page-icon"><PageIcon aria-hidden /></span>}
         <div className="header-title">
-          <h1>{title}</h1>
+          {/* breadcrumb แสดงเฉพาะกลุ่มต้นทาง ไม่ซ้ำกับ h1 ที่เป็นชื่อหน้าอยู่แล้ว */}
           <nav className="breadcrumb" aria-label="เส้นทาง">
             <span>{group}</span>
             <ChevronRight aria-hidden />
-            <span>{title}</span>
           </nav>
+          <h1>{title}</h1>
         </div>
       </div>
 
-      <button className="header-search" onClick={() => {}} type="button" aria-label={shell.search}>
-        <Search aria-hidden />
-        <span>{shell.search}</span>
-        <kbd>Ctrl K</kbd>
-      </button>
+      {/* เดิมมีปุ่มค้นหา + คีย์ลัด Ctrl K อยู่ตรงนี้ แต่ onClick เป็นฟังก์ชันว่าง
+          และระบบยังไม่มี global search ทั้งฝั่ง backend และ command palette
+          จึงถอดออกแทนที่จะปล่อยให้เป็นปุ่มที่กดแล้วไม่เกิดอะไร
+          ถ้าวันหลังทำ global search จริง ค่อยใส่กลับพร้อม handler */}
 
       <div className="header-right">
         <button className="header-company-context" onClick={() => navigate('/select-company')} title={shell.changeCompany}><Building2 /><span><small>{shell.currentCompany}</small><strong>{user?.activeCompany?.nameTh}</strong></span><ChevronDown /></button>
@@ -95,7 +115,7 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
         <div className="header-date">
           <strong>{formatDate(new Date(), locale)}</strong>
         </div>
-        <button className="icon-btn notification-trigger" aria-label={shell.notifications} onClick={() => setNotificationsOpen(true)}><Bell />{unread > 0 && <span>{unread > 9 ? '9+' : unread}</span>}</button>
+        <button className="icon-btn notification-trigger" aria-label={shell.notifications} aria-haspopup="dialog" aria-expanded={notificationsOpen} aria-controls="s2a-notification-drawer" onClick={() => setNotificationsOpen(true)}><Bell />{unread > 0 && <span>{unread > 9 ? '9+' : unread}</span>}</button>
         <button className="icon-btn theme-toggle-btn" aria-label={shell.theme} title={`${shell.theme} · ${resolved === 'dark' ? shell.dark : shell.light}`} onClick={toggle}>{resolved === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}</button>
 
         <div className="user-menu" ref={menuRef}>
@@ -145,9 +165,12 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
           )}
         </div>
       </div>
-      {notificationsOpen && <>
+      {/* ลิ้นชักแจ้งเตือนต้อง portal ออกไปที่ body:
+          ถ้าอยู่ใน <header> (fixed + z-index) จะติดอยู่ใน stacking context ของหัวเว็บ
+          ทำให้ z-index ของตัวมันเองไม่มีผลเทียบกับ modal/dropdown ที่อยู่ระดับ root */}
+      {notificationsOpen && createPortal(<>
         <button className="notification-scrim" aria-label={shell.notifications} onClick={() => setNotificationsOpen(false)} />
-        <aside className="notification-drawer" aria-label={shell.notifications}>
+        <aside id="s2a-notification-drawer" className="notification-drawer" role="dialog" aria-modal="true" aria-label={shell.notifications}>
           <header><div><small>NOTIFICATION CENTER</small><h2>{shell.notifications}</h2><p>{unread ? `${unread} ${shell.unread}` : shell.newAppear}</p></div><button className="icon-btn" onClick={() => setNotificationsOpen(false)}><X /></button></header>
           <nav>{([['all',shell.all],['unread',shell.unread],['action',shell.action]] as const).map(([key,label]) => <button key={key} className={notificationTab === key ? 'active' : ''} onClick={() => setNotificationTab(key)}>{label}</button>)}</nav>
           <div className="notification-list">{visibleNotifications.length ? visibleNotifications.map((item) => <article key={item.id} className={!item.readAt ? 'unread' : ''}>
@@ -155,7 +178,7 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
           </article>) : <div className="notification-empty"><Bell/><strong>{shell.noNotifications}</strong><span>{shell.newAppear}</span></div>}</div>
           <footer><button onClick={() => void readAll()} disabled={!unread}><CheckCheck /> {shell.markAll}</button></footer>
         </aside>
-      </>}
+      </>, document.body)}
     </header>
   );
 }

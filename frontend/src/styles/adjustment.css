@@ -1,0 +1,101 @@
+/* ============================================================
+   S2A ERP — STOCK ADJUSTMENT (Phase 6C)
+   หน้าที่ "ดูเป็นงานที่มีความเสี่ยง" — ก่อน / เปลี่ยน / หลัง ต้องเห็นชัดที่สุด
+   ============================================================ */
+
+.adj-notice { margin: 0; }
+
+/* ---------- จำนวนปัจจุบัน ---------- */
+.adj-current { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-2); }
+.adj-current > div {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-2);
+}
+.adj-current span { font-size: 11.5px; font-weight: 600; color: var(--text-muted); }
+.adj-current b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 800; color: var(--text); }
+
+/* ---------- โหมด / เหตุผล ---------- */
+.adj-modes { margin-bottom: var(--space-4); }
+.adj-amount { display: flex; flex-direction: column; gap: var(--space-1); max-width: 320px; font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.adj-amount > span { display: flex; align-items: center; gap: var(--space-2); }
+.adj-amount input {
+  flex: 1; min-width: 0; min-height: var(--control-h); padding: 0 var(--space-3);
+  border: 1px solid var(--input-border); border-radius: var(--radius-field);
+  background: var(--input-bg); color: var(--text);
+  font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 17px; font-weight: 700; text-align: right;
+}
+.adj-amount input:focus { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
+.adj-amount b { font-size: 13px; font-weight: 700; color: var(--text-subtle); }
+
+.adj-reasons { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
+.adj-reason {
+  min-height: var(--control-h); padding: 0 var(--space-4);
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text-muted);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.adj-reason:hover { border-color: var(--border-strong); color: var(--text); }
+.adj-reason:focus-visible { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
+.adj-reason.active { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+
+/* ---------- Preview: จุดเด่นของหน้า ---------- */
+.adj-preview {
+  margin-top: var(--space-4); padding: var(--card-pad);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--border));
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
+}
+.adj-set-note {
+  display: flex; flex-wrap: wrap; gap: var(--space-4);
+  margin-bottom: var(--space-3); padding-bottom: var(--space-3);
+  border-bottom: 1px dashed var(--divider);
+  font-size: 12.5px; color: var(--text-muted);
+}
+.adj-set-note b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--text); }
+.adj-steps { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.adj-steps > div:not(.adj-arrow) { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.adj-steps span { font-size: 11.5px; font-weight: 600; color: var(--text-muted); }
+.adj-steps strong { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 25px; font-weight: 800; color: var(--text); line-height: 1.15; }
+.adj-arrow { font-size: 20px; color: var(--text-subtle); flex: none; }
+.adj-steps .is-up { color: var(--success); }
+.adj-steps .is-down { color: var(--danger); }
+.adj-equation {
+  margin: var(--space-3) 0 0; padding-top: var(--space-3);
+  border-top: 1px dashed var(--divider);
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 14px; font-weight: 700; color: var(--text-muted); text-align: center;
+}
+.adj-neutral { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0 0; font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.adj-preview .rb-callout { margin-top: var(--space-3); }
+
+/* ---------- ประวัติ ---------- */
+.adj-row-actions { display: inline-flex; gap: var(--space-2); flex-wrap: wrap; }
+.ops-table .is-up { color: var(--success); font-weight: 700; }
+.ops-table .is-down { color: var(--danger); font-weight: 700; }
+
+/* ============================================================
+   RESPONSIVE — 1024 / 760 / 430
+   ============================================================ */
+@media (max-width: 1024px) {
+  .adj-reason { min-height: var(--control-h); }
+  /* ปุ่มโหมดสืบทอด .rb2-tabs ซึ่งสูง 40px ต่ำกว่าเกณฑ์สัมผัส */
+  .adj-modes button { min-height: var(--control-h); }
+}
+@media (max-width: 760px) {
+  .adj-steps { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+  .adj-arrow { transform: rotate(90deg); align-self: center; }
+  .adj-steps strong { font-size: 22px; }
+  .adj-amount { max-width: none; }
+}
+@media (max-width: 430px) {
+  .adj-current { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- พิมพ์: ซ่อนส่วนที่ไม่ใช่เอกสาร ---------- */
+@media print {
+  .adjustment-workspace .ops-workspace,
+  .adjustment-workspace .adj-notice,
+  .adjustment-workspace .s2-page-header { display: none !important; }
+}

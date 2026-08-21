@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Boxes, UtensilsCrossed, Calculator, CircleDollarSign,
   Truck, Factory, Warehouse, ArrowLeftRight, ClipboardCheck,
   BarChart3, UsersRound, History, Settings, Sprout, Package,
-  Database, ChartColumnBig, ShieldCheck, UserRoundPlus, type LucideIcon,
+  Database, ChartColumnBig, ShieldCheck, UserRoundPlus, Scale, type LucideIcon,
 } from 'lucide-react';
 
 export type ModuleStatus = 'ready' | 'in-progress' | 'planned';
@@ -14,6 +14,8 @@ export interface NavItem {
   /** ถ้ากำหนด ต้องมี role นี้จึงจะเห็นเมนู (ตาม permission เดิม) */
   requiredRole?: string;
   requiredPermission?: string;
+  /** เห็นเมนูได้ถ้ามีสิทธิ์ "ข้อใดข้อหนึ่ง" (SUPER_ADMIN ผ่านเสมอ) */
+  requiredAnyPermission?: string[];
 }
 
 export interface NavGroup {
@@ -59,6 +61,10 @@ export const MODULES: Record<string, ModuleMeta> = {
   '/recipes': {
     label: 'สูตรเมนูอาหาร', description: 'สร้างสูตรเมนูจากวัตถุดิบและบรรจุภัณฑ์ พร้อมต้นทุนต่อจาน',
     icon: UtensilsCrossed, status: 'ready', group: 'จัดการเมนูและต้นทุน',
+  },
+  '/units/conversions': {
+    label: 'สูตรแปลงหน่วย', description: 'ตั้งค่าว่า 1 หน่วยหนึ่งเท่ากับกี่หน่วยอีกแบบ เพื่อให้คิดต้นทุนได้ถูกต้อง',
+    icon: Scale, status: 'ready', group: 'จัดการเมนูและต้นทุน',
   },
   '/costing': {
     label: 'คำนวณต้นทุน', description: 'คำนวณต้นทุนต่อเมนูจากสูตรและราคาวัตถุดิบล่าสุด',
@@ -119,8 +125,20 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/ingredients', label: 'วัตถุดิบ', icon: Sprout },
       { path: '/packaging', label: 'บรรจุภัณฑ์', icon: Package },
       { path: '/recipes', label: 'สูตรเมนูอาหาร', icon: UtensilsCrossed },
+      // สิทธิ์เดียวกับการจัดการหน่วย/อัตราแปลงที่ backend ใช้ (MANAGE ใน unit.route.ts)
+      { path: '/units/conversions', label: 'สูตรแปลงหน่วย', icon: Scale, requiredAnyPermission: ['INGREDIENT_CREATE', 'INGREDIENT_EDIT', 'PACKAGING_CREATE', 'PACKAGING_EDIT'] },
       { path: '/costing', label: 'คำนวณต้นทุน', icon: Calculator },
       { path: '/pricing', label: 'ราคาขายและกำไร', icon: CircleDollarSign },
+    ],
+  },
+  {
+    // Phase 7 — ข้อมูลตั้งต้นที่ต้องมีก่อนเริ่มคีย์สูตร/รับของ
+    label: 'ข้อมูลตั้งต้น',
+    items: [
+      { path: '/units', label: 'หน่วย', icon: Scale, requiredAnyPermission: ['INGREDIENT_CREATE', 'INGREDIENT_EDIT', 'PACKAGING_CREATE', 'PACKAGING_EDIT'] },
+      // สิทธิ์ตรงกับที่ GET /business/operations/lookups ยอมให้เข้า เพื่อไม่ให้กดแล้วเจอ 403
+      { path: '/suppliers', label: 'ผู้จำหน่าย', icon: Truck, requiredAnyPermission: ['RECEIVING_CREATE', 'STOCK_ISSUE_CREATE', 'ORDER_VIEW'] },
+      { path: '/warehouses', label: 'คลัง', icon: Warehouse, requiredAnyPermission: ['RECEIVING_CREATE', 'STOCK_ISSUE_CREATE', 'ORDER_VIEW'] },
     ],
   },
   {
@@ -137,14 +155,31 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/customers', label: 'ลูกค้า', icon: UsersRound, requiredPermission: 'CUSTOMER_VIEW' },
       { path: '/receiving', label: 'รับของเข้า', icon: Truck, requiredPermission: 'RECEIVING_VIEW' },
       { path: '/stock-issues', label: 'เบิกให้ครัวกลาง', icon: Boxes, requiredPermission: 'STOCK_ISSUE_VIEW' },
+      { path: '/inventory', label: 'สต็อกคงเหลือ', icon: Warehouse, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
+      { path: '/inventory/movements', label: 'ประวัติสต็อก', icon: History, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
+      { path: '/inventory/adjustments', label: 'ปรับปรุงสต็อก', icon: ArrowLeftRight, requiredPermission: 'INVENTORY_ADJUST' },
     ],
   },
   {
-    label: 'ระบบ',
+    // Phase 9 — แยกงานดูแลผู้ใช้ออกจากงานความปลอดภัย/ตรวจสอบ ให้หาเจอง่ายขึ้น
+    label: 'การจัดการผู้ใช้',
     items: [
-      { path: '/users', label: 'ผู้ใช้งาน', icon: UsersRound, requiredRole: 'SUPER_ADMIN' },
-      { path: '/admin/registrations', label: 'คำขอสมัครใช้งาน', icon: UserRoundPlus, requiredPermission: 'USER_MANAGE' },
-      { path: '/admin/permissions', label: 'จัดการสิทธิ์และบทบาท', icon: ShieldCheck, requiredRole: 'SUPER_ADMIN' },
+      // สิทธิ์ตรงกับที่ GET /users ยอมให้เข้า จึงไม่กดแล้วเจอ 403
+      { path: '/users', label: 'ผู้ใช้งาน', icon: UsersRound, requiredAnyPermission: ['USER_VIEW', 'USER_MANAGE'] },
+      { path: '/admin/registrations', label: 'คำขอลงทะเบียน', icon: UserRoundPlus, requiredPermission: 'USER_MANAGE' },
+    ],
+  },
+  {
+    label: 'สิทธิ์และความปลอดภัย',
+    items: [
+      // matrix ยอมให้ ROLE_MANAGE | PERMISSION_MANAGE | USER_MANAGE เข้าได้
+      { path: '/admin/permissions', label: 'บทบาทและสิทธิ์', icon: ShieldCheck, requiredAnyPermission: ['ROLE_MANAGE', 'PERMISSION_MANAGE', 'USER_MANAGE'] },
+    ],
+  },
+  {
+    label: 'การตรวจสอบระบบ',
+    items: [
+      // /activity เป็น SUPER_ADMIN เท่านั้นตาม backend
       { path: '/activity', label: 'ประวัติการใช้งาน', icon: History, requiredRole: 'SUPER_ADMIN' },
       { path: '/settings', label: 'ตั้งค่าระบบ', icon: Settings, requiredRole: 'SUPER_ADMIN' },
     ],

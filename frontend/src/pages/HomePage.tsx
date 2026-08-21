@@ -4,7 +4,7 @@ import {
   Sprout, UtensilsCrossed, Calculator, Tags, TrendingUp, ArrowRight, LogIn,
   PlayCircle, Package, ChartPie, Boxes, PackageOpen, ChartColumnBig, ShieldCheck,
   Target, Gauge, Sparkles, Lightbulb, ScrollText, Coins, Layers, CheckCircle2,
-  Crown, Flame, ArrowDownWideNarrow, type LucideIcon,
+  Crown, Flame, ArrowDownWideNarrow, Menu, X, type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import './home.css';
@@ -68,6 +68,25 @@ export default function HomePage() {
   const rootRef = useReveal();
   const [scrolled, setScrolled] = useState(false);
   const [activeId, setActiveId] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // เมนูมือถือ: ปิดด้วย ESC + ล็อกการเลื่อนพื้นหลังระหว่างเปิด
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [menuOpen]);
+
+  // กลับมาจอใหญ่แล้วต้องไม่ค้างสถานะเมนูมือถือ
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 721px)');
+    const onChange = () => { if (mq.matches) setMenuOpen(false); };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -111,8 +130,42 @@ export default function HomePage() {
             ))}
           </nav>
           <LanguageSwitcher compact /><Link to={loginTo} className="hp-login-btn"><LogIn aria-hidden />{loginLabel}</Link>
+          <button
+            type="button"
+            className="hp-burger"
+            aria-label={menuOpen ? messages.navigation.closeMenu : messages.navigation.openMenu}
+            aria-expanded={menuOpen}
+            aria-controls="hp-mobile-nav"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            {menuOpen ? <X aria-hidden /> : <Menu aria-hidden />}
+          </button>
         </div>
       </header>
+
+      {/* ============ MOBILE NAV (<=720px) ============ */}
+      <div
+        className={`hp-mobile-scrim${menuOpen ? ' open' : ''}`}
+        onClick={() => setMenuOpen(false)}
+        aria-hidden
+      />
+      <nav
+        id="hp-mobile-nav"
+        className={`hp-mobile-nav${menuOpen ? ' open' : ''}`}
+        aria-label={navLabels[0]}
+      >
+        {NAV.map((n) => (
+          <a
+            key={n.id}
+            href={`#${n.id}`}
+            className={activeId === n.id ? 'active' : ''}
+            onClick={() => setMenuOpen(false)}
+          >
+            {navLabels[NAV.indexOf(n)]}
+          </a>
+        ))}
+        <div className="hp-mobile-lang"><LanguageSwitcher /></div>
+      </nav>
 
       {/* ============ HERO ============ */}
       <section className="hp-hero" id="top">

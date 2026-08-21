@@ -70,6 +70,7 @@ enum DocumentStatus {
   DRAFT
   CONFIRMED
   CANCELLED
+  REVERSED
 }
 
 enum SalesOrderStatus {
@@ -87,6 +88,7 @@ enum StockIssueStatus {
   DRAFT
   ISSUED
   CANCELLED
+  REVERSED
 }
 
 enum NotificationSeverity {
@@ -546,6 +548,11 @@ model StockLedger {
 
   qtyIn        Decimal @default(0) @db.Decimal(18, 4)
   qtyOut       Decimal @default(0) @db.Decimal(18, 4)
+  // ledger fields เพิ่มเติม (additive, nullable เพื่อไม่กระทบแถวเดิม)
+  companyId    String?
+  beforeQty    Decimal? @db.Decimal(18, 4)
+  unit         String?
+  reason       String?
   balanceAfter Decimal @db.Decimal(18, 4)
   unitCost     Decimal @default(0) @db.Decimal(18, 4)
   totalValue   Decimal @default(0) @db.Decimal(18, 4)
@@ -606,6 +613,9 @@ model RecipeVersion {
   otherCost    Decimal @default(0) @db.Decimal(18, 4)
 
   // Recipe Builder 2.0 — yield unit + portion + flexible overhead (all additive/nullable)
+  // yieldMode: ACTUAL = รู้ผลผลิตจริง (ต้องมี yieldUnitId) · BATCH = ยังไม่ทราบผลผลิต คิดเป็น 1 Batch
+  // null = สูตรเก่าที่ยังไม่ได้เลือกโหมด — ระบบจะให้ผู้ใช้เลือกก่อนใช้เป็นสูตรย่อย (ไม่เดาหน่วยให้)
+  yieldMode       String?
   yieldUnitId     String?
   yieldUnit       Unit?    @relation("YieldUnit", fields: [yieldUnitId], references: [id])
   portionQty      Decimal? @db.Decimal(18, 4)
@@ -792,6 +802,10 @@ model GoodsReceipt {
   status      DocumentStatus @default(DRAFT)
   receiptDate DateTime       @default(now())
   note        String?
+  // additive/nullable — เอกสารฝั่งผู้ขายและเวลาเปลี่ยนสถานะ
+  supplierDocNo String?
+  confirmedAt   DateTime?
+  reversedAt    DateTime?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -950,6 +964,12 @@ model SalesOrder {
   discount           Decimal          @default(0) @db.Decimal(18, 4)
   tax                Decimal          @default(0) @db.Decimal(18, 4)
   totalAmount        Decimal          @default(0) @db.Decimal(18, 4)
+  // ระดับราคาที่ใช้ "ตั้งต้น" ราคาของออเดอร์นี้ (RETAIL | WHOLESALE | AGENT | SPECIAL)
+  // เก็บเป็น String ให้ตรงกับวิธีเก็บของ SellingPrice.priceType ที่มีอยู่แล้ว ไม่สร้าง enum ซ้อน
+  // nullable เพราะออเดอร์เก่าไม่มีข้อมูลนี้ — ห้าม backfill เดา
+  // หมายเหตุสำคัญ: ความจริงทางการเงินของออเดอร์คือ SalesOrderItem.unitPrice / lineTotal
+  // priceTier เป็นเพียง metadata ว่าราคาเริ่มมาจากระดับไหน
+  priceTier          String?
   note               String?
   createdByUserId    String
   createdBy          User             @relation("SalesOrderCreator", fields: [createdByUserId], references: [id])
@@ -1061,4 +1081,25 @@ model NotificationPreference {
 
   @@unique([companyId, userId, channel, eventType])
   @@map("notification_preferences")
+}
+
+// ============================================================
+// INVENTORY LEDGER + DOCUMENT NUMBERING (additive)
+// ============================================================
+
+
+/// บัญชีการเคลื่อนไหวสต็อก — ทุกการเปลี่ยน onHand ต้องมีแถวที่นี่เสมอ (ตรวจย้อนหลังได้)
+/// ห้ามลบแถวเดิม การยกเลิกทำด้วย REVERSAL ที่อ้าง sourceId เดิม
+
+/// ตัวนับเลขเอกสารต่อบริษัท/ชนิด/ช่วงเวลา — backend เท่านั้นที่ออกเลข
+model DocumentCounter {
+  id        String   @id @default(cuid())
+  companyId String
+  docType   String // STOCK_ISSUE | GOODS_RECEIPT | STOCK_ADJUSTMENT
+  periodKey String // YYYYMMDD
+  lastSeq   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, docType, periodKey])
+  @@map("document_counters")
 }

@@ -3,12 +3,25 @@
    ทุก selector ขึ้นต้นด้วย .hp- เพื่อไม่ให้กระทบดีไซน์เดิมของแอป
    ============================================================ */
 .hp-root {
+  /* ---- PHASE 5: ตรวจ token ของหน้า public ----
+     หน้านี้ตั้งใจให้เป็นธีมสว่างเสมอ ไม่เปลี่ยนตาม dark mode ของผู้ใช้
+     token จึงแยกได้เป็นสองกลุ่ม
+
+     (ก) สีแบรนด์ที่ค่าตรงกับ token กลางเป๊ะ และ token กลางนั้นไม่ถูก override ใน :root.dark
+         map ไป tokens.css ได้ปลอดภัย หน้าตาไม่เปลี่ยน */
+  --hp-navy-2: var(--navy);      /* #071D35 ตรงกันเป๊ะ */
+  --hp-blue: var(--blue);        /* #1677C8 ตรงกันเป๊ะ */
+  --hp-gold: var(--gold);        /* #C6A15B ตรงกันเป๊ะ */
+
+  /* (ข) ที่เหลือคงเป็น scoped token ต่อ เหตุผล:
+         - surface / bg / ink / line / muted มี token กลางที่ความหมายตรงกัน
+           แต่ token กลุ่มนั้น "เปลี่ยนค่าใน dark" ถ้า map ไปหน้า public จะกลายเป็นธีมมืด
+           ตามผู้ใช้ ซึ่งไม่ใช่เจตนาเดิมของหน้านี้
+         - navy / gold-soft / blue-bright / cyan เป็นเฉดเฉพาะของหน้านี้
+           ไม่มีคู่ที่ค่าตรงกันใน tokens.css จึงไม่ควรบังคับให้ตรง */
   --hp-navy: #05152a;
-  --hp-navy-2: #071d35;
-  --hp-blue: #1677c8;
   --hp-blue-bright: #3aa0e6;
   --hp-cyan: #35b6d6;
-  --hp-gold: #c6a15b;
   --hp-gold-soft: #e6c987;
   --hp-ink: #0f2440;
   --hp-muted: #5a6b83;
@@ -101,7 +114,6 @@
   background: linear-gradient(90deg, #071d35, #0b3154 55%, #0d4775); backdrop-filter: blur(16px) saturate(1.4);
   box-shadow: 0 8px 30px rgba(7,29,53,.25); border-bottom: 1px solid rgba(198,161,91,.46);
 }
-.hp-burger { display: none; }
 
 /* ============================================================
    HERO
@@ -417,7 +429,6 @@
 }
 @media (max-width: 720px) {
   .hp-nav { display: none; }
-  .hp-burger { display: inline-grid; }
   .hp-feature-grid { grid-template-columns: 1fr; }
   .hp-kpi-body { grid-template-columns: 1fr 1fr; }
   .hp-kpi-lists { grid-template-columns: 1fr; }
@@ -432,4 +443,89 @@
   .hp-kpi-body { grid-template-columns: 1fr; }
   .hp-waterfall { gap: 7px; }
   .hp-wf-lbl { font-size: 11px; }
+}
+
+/* ============================================================
+   PHASE 14 — Responsive fix: หัวเว็บหน้าสาธารณะที่ 375–430px
+   เดิมปุ่ม "เข้าสู่ระบบ" ถูก .hp-root{overflow:hidden} ตัดทิ้งไป 42%
+   เพราะ brand + language switcher + ปุ่ม กว้างรวมเกิน viewport
+   ============================================================ */
+@media (max-width: 720px) {
+  .hp-container { padding: 0 16px; }
+  .hp-header-inner { gap: 10px; }
+  /* แบรนด์ยอมย่อได้ ปุ่มเข้าสู่ระบบห้ามหด */
+  .hp-brand { min-width: 0; flex: 1 1 auto; gap: 9px; }
+  .hp-brand-text { min-width: 0; }
+  .hp-brand-text strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hp-login-btn { flex: none; padding: 10px 15px; }
+}
+@media (max-width: 430px) {
+  .hp-container { padding: 0 12px; }
+  .hp-brand-text span { display: none; }   /* ซ่อนบรรทัดรอง เหลือชื่อหลัก */
+  .hp-brand-logo { width: 34px; height: 34px; }
+  .hp-login-btn { padding: 10px 13px; font-size: 13px; }
+}
+
+/* ============================================================
+   PHASE 2 — Public mobile navigation (burger + panel)
+   เดิมมี .hp-burger ใน CSS แต่ไม่มี markup จอ <720px จึงไม่มีเมนูเลย
+   ใช้ token จาก tokens.css: --z-*, --control-h, --radius-*, --space-*
+   ============================================================ */
+.hp-burger {
+  display: none;              /* เปิดใช้เฉพาะ <=720px (กฎด้านล่าง) */
+  place-items: center;
+  flex: none;
+  width: var(--control-h); height: var(--control-h);
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,.10);
+  color: #fff; cursor: pointer;
+  transition: background .16s ease, border-color .16s ease;
+}
+.hp-burger:hover { background: rgba(255,255,255,.18); }
+.hp-burger:focus-visible { outline: 2px solid var(--hp-gold-soft); outline-offset: 2px; }
+.hp-burger svg { width: 21px; height: 21px; }
+
+.hp-mobile-scrim {
+  position: fixed; inset: 0;
+  z-index: calc(var(--z-drawer) - 1);
+  background: rgba(5,18,36,.55);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .2s ease, visibility .2s ease;
+}
+.hp-mobile-scrim.open { opacity: 1; visibility: visible; pointer-events: auto; }
+
+.hp-mobile-nav {
+  position: fixed; top: 72px; left: 0; right: 0;
+  z-index: var(--z-drawer);
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-3);
+  background: linear-gradient(180deg, #071d35, #0b3154);
+  border-bottom: 1px solid rgba(198,161,91,.34);
+  box-shadow: var(--shadow-pop);
+  /* ปิดอยู่: ซ่อนจริง เพื่อให้หลุดจากลำดับ tab โดยไม่ต้องใช้ inert */
+  opacity: 0; visibility: hidden; transform: translateY(-10px);
+  transition: opacity .2s ease, transform .2s ease, visibility .2s ease;
+}
+.hp-mobile-nav.open { opacity: 1; visibility: visible; transform: none; }
+.hp-mobile-nav a {
+  display: flex; align-items: center;
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: rgba(233,242,252,.92); font-size: 15px; font-weight: 600; text-decoration: none;
+}
+.hp-mobile-nav a:hover { background: rgba(255,255,255,.10); color: #fff; }
+.hp-mobile-nav a:focus-visible { outline: 2px solid var(--hp-gold-soft); outline-offset: -2px; }
+.hp-mobile-nav a.active { background: rgba(255,255,255,.14); color: #fff; }
+.hp-mobile-lang { margin-top: var(--space-2); padding-top: var(--space-3); border-top: 1px solid rgba(255,255,255,.14); }
+.hp-mobile-lang .language-switcher { justify-content: flex-start; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-mobile-nav, .hp-mobile-scrim { transition: none; }
+}
+@media (max-width: 720px) {
+  .hp-burger { display: inline-grid; }
+  /* สลับภาษาย้ายเข้าไปในเมนู เพื่อให้ปุ่มเข้าสู่ระบบยังกดได้ใน 1 แตะ */
+  .hp-header .language-switcher { display: none; }
 }

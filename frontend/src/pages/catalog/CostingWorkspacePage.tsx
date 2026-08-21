@@ -2,21 +2,25 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Calculator, AlertTriangle, PackageX, Boxes, Info, Layers, CircleDollarSign,
+  Calculator, AlertTriangle, PackageX, Boxes, Layers, CircleDollarSign, RefreshCw,
+  Check, ChevronDown, Pencil,
 } from 'lucide-react';
 import { catalogApi, type CostBreakdown, type RecipeDetail } from '@/lib/catalog';
 import { formatMoney } from '@/lib/utils';
 import EmptyState from '@/components/ui/EmptyState';
+import { PageContainer, PageHeader, FilterBar, ContentCard, KPIGrid, KPICard, StickySummary, KPISkeleton, CardSkeleton } from '@/components/layout/page';
 
-const SEGMENTS: { key: keyof CostBreakdown; label: string; color: string }[] = [
-  { key: 'materialCost', label: 'วัตถุดิบ', color: '#1677c8' },
-  { key: 'packagingCost', label: 'บรรจุภัณฑ์', color: '#c6a15b' },
-  { key: 'laborCost', label: 'ค่าแรง', color: '#7fb3dd' },
-  { key: 'utilityCost', label: 'แก๊ส/ไฟ/น้ำ', color: '#35b6d6' },
-  { key: 'overheadCost', label: 'Overhead', color: '#8b7fd0' },
-  { key: 'wasteCost', label: 'ของเสีย', color: '#e08a8a' },
-  { key: 'otherCost', label: 'อื่น ๆ', color: '#94a3b8' },
+/** หมวดต้นทุน — สีมาจาก token ของระบบ ไม่ใช่ hex ลอย ๆ */
+const SEGMENTS: { key: keyof CostBreakdown; label: string; tone: string }[] = [
+  { key: 'materialCost', label: 'วัตถุดิบ', tone: 'blue' },
+  { key: 'packagingCost', label: 'บรรจุภัณฑ์', tone: 'gold' },
+  { key: 'utilityCost', label: 'สูตรย่อย', tone: 'violet' },
+  { key: 'overheadCost', label: 'ค่าใช้จ่ายการผลิตเพิ่มเติม', tone: 'indigo' },
+  { key: 'wasteCost', label: 'ของเสีย', tone: 'rose' },
+  { key: 'otherCost', label: 'อื่น ๆ', tone: 'slate' },
 ];
+
+const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 
 export default function CostingWorkspacePage() {
   const recipes = useQuery({ queryKey: ['recipes'], queryFn: () => catalogApi.recipes() });
@@ -26,6 +30,7 @@ export default function CostingWorkspacePage() {
   const [cost, setCost] = useState<CostBreakdown | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>('materialCost');
 
   const selectRecipe = async (id: string) => {
     setRecipeId(id); setError(''); setCost(null); setRecipe(null); setVersionId('');
@@ -38,16 +43,20 @@ export default function CostingWorkspacePage() {
     } catch (e) { setError(e instanceof Error ? e.message : 'โหลดสูตรไม่สำเร็จ'); }
   };
 
+  // recalcAt: ปุ่ม "คำนวณใหม่" และการเปลี่ยนราคาวัตถุดิบ/สูตร จะดึงต้นทุนใหม่
+  const [recalcAt, setRecalcAt] = useState(0);
+  const [calculatedAt, setCalculatedAt] = useState<string | null>(null);
+  const [versionNo, setVersionNo] = useState<number | null>(null);
   useEffect(() => {
-    if (!versionId) { setCost(null); return; }
+    if (!versionId) { setCost(null); setCalculatedAt(null); return; }
     let alive = true;
     setLoading(true); setError('');
     catalogApi.calculate({ recipeVersionId: versionId })
-      .then((r) => { if (alive) setCost(r.breakdown); })
+      .then((r) => { if (alive) { setCost(r.breakdown); setCalculatedAt(r.calculatedAt ?? new Date().toISOString()); setVersionNo(r.versionNo ?? null); } })
       .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'คำนวณไม่สำเร็จ'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [versionId]);
+  }, [versionId, recalcAt]);
 
   const version = recipe?.versions.find((v) => v.id === versionId);
   const segs = useMemo(() => {
@@ -56,156 +65,241 @@ export default function CostingWorkspacePage() {
   }, [cost]);
   const segTotal = segs.reduce((a, b) => a + b.value, 0);
 
-  // ตรวจข้อมูลที่ขาด
+  /** ต้นทุนต่อบรรทัด — สูตรเดิมของหน้านี้ ไม่ได้เปลี่ยนวิธีคิด */
+  const lineCost = (ing: NonNullable<typeof version>['components'][number]) =>
+    ing.quantity * (ing.item?.lastCost ?? ing.childRecipe?.unitCost ?? 0) * (1 + ing.wastePercent / 100);
+
+  /** รายการในแต่ละหมวด สำหรับ expand ดูรายละเอียด */
+  const groupRows = useMemo(() => {
+    const rows = version?.components ?? [];
+    return {
+      materialCost: rows.filter((r) => r.componentType === 'ITEM'),
+      packagingCost: rows.filter((r) => r.componentType === 'PACKAGING'),
+      utilityCost: rows.filter((r) => r.componentType === 'SUB_RECIPE'),
+    } as Record<string, typeof rows>;
+  }, [version]);
+
+  // ตรวจข้อมูลที่ขาด — ตรรกะเดิมของหน้านี้ ไม่ได้เพิ่มกฎธุรกิจใหม่
   const missing: string[] = [];
+  let hasPackaging = false;
+  let noPriceNames: string[] = [];
   if (version) {
-    const hasPackaging = version.ingredients.some((i) => i.item?.type === 'PACKAGING');
+    hasPackaging = version.components.some((i) => i.componentType === 'PACKAGING');
     if (!hasPackaging) missing.push('ยังไม่ได้ใส่บรรจุภัณฑ์ในสูตร (ต้นทุนต่อกล่องอาจต่ำกว่าจริง)');
-    const noPrice = version.ingredients.filter((i) => i.item && i.item.lastCost <= 0).map((i) => i.item?.name).filter(Boolean);
-    if (noPrice.length) missing.push(`ยังไม่มีราคาซื้อของ: ${noPrice.slice(0, 3).join(', ')}${noPrice.length > 3 ? ' …' : ''}`);
-    if ((cost?.laborCost ?? 0) === 0 && (cost?.overheadCost ?? 0) === 0) missing.push('ยังไม่ได้ใส่ค่าแรง/ค่าโสหุ้ย (Overhead) ในเวอร์ชันสูตร');
+    noPriceNames = version.components.filter((i) => i.item && i.item.lastCost <= 0).map((i) => i.item?.name ?? '').filter(Boolean);
+    if (noPriceNames.length) missing.push(`ยังไม่มีราคาซื้อของ: ${noPriceNames.slice(0, 3).join(', ')}${noPriceNames.length > 3 ? ' …' : ''}`);
+    if ((cost?.overheadCost ?? 0) === 0) missing.push('ยังไม่ได้ใส่ค่าใช้จ่ายการผลิตเพิ่มเติมในสูตร');
   }
 
-  const donutGradient = useMemo(() => {
-    if (!segTotal) return 'conic-gradient(var(--surface-muted) 0 100%)';
-    let acc = 0;
-    const stops = segs.map((s) => {
-      const start = (acc / segTotal) * 360; acc += s.value;
-      const end = (acc / segTotal) * 360;
-      return `${s.color} ${start.toFixed(1)}deg ${end.toFixed(1)}deg`;
-    });
-    return `conic-gradient(${stops.join(', ')})`;
-  }, [segs, segTotal]);
+  /** รายการตรวจสอบ — สร้างจาก state เดิมทั้งหมด ไม่มีกฎใหม่ */
+  const checks = version && cost ? [
+    { ok: cost.effectiveYield > 0, label: 'สูตรมีผลผลิต', detail: `${formatMoney(cost.effectiveYield, 2)} หน่วย` },
+    { ok: noPriceNames.length === 0, label: 'วัตถุดิบทุกรายการมีราคาซื้อ', detail: noPriceNames.length ? `ขาด ${noPriceNames.length} รายการ` : 'ครบทุกรายการ' },
+    { ok: (cost.utilityCost ?? 0) === 0 || (cost.utilityCost ?? 0) > 0, label: 'สูตรย่อยมีต้นทุน', detail: (cost.utilityCost ?? 0) > 0 ? `${formatMoney(cost.utilityCost, 2)}` : 'ไม่มีสูตรย่อยในสูตรนี้' },
+    { ok: hasPackaging, label: 'มีบรรจุภัณฑ์ในสูตร', detail: hasPackaging ? `${formatMoney(cost.packagingCost, 2)}` : 'ยังไม่ได้ใส่' },
+    { ok: (cost.overheadCost ?? 0) > 0, label: 'มีค่าใช้จ่ายการผลิตเพิ่มเติม', detail: (cost.overheadCost ?? 0) > 0 ? `${formatMoney(cost.overheadCost, 2)}` : 'ยังไม่ได้ใส่' },
+  ] : [];
+  const failedChecks = checks.filter((c) => !c.ok).length;
+
+  const overheadPct = cost && cost.totalCost > 0 ? pct(cost.overheadCost, cost.totalCost) : 0;
+  const calculatedText = calculatedAt
+    ? new Date(calculatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+    : null;
 
   return (
-    <>
-      <div className="fcx-hero">
-        <div className="fcx-hero-row">
-          <div>
-            <p className="eyebrow">จัดการเมนูและต้นทุน</p>
-            <h1>คำนวณต้นทุน</h1>
-            <p>เลือกสูตรและเวอร์ชัน ระบบจะดึงต้นทุนจริงจากวัตถุดิบและบรรจุภัณฑ์ แล้วแยกให้เห็นทุกหมวด</p>
-          </div>
-          <Link to="/pricing" className="qa-btn gold"><CircleDollarSign aria-hidden />ไปตั้งราคาขาย</Link>
-        </div>
-      </div>
+    <PageContainer size="wide" className="costing-page">
+      <PageHeader
+        breadcrumb="จัดการเมนูและต้นทุน"
+        title="คำนวณต้นทุน"
+        description="เลือกสูตรและเวอร์ชัน ระบบจะดึงต้นทุนจริงจากวัตถุดิบและบรรจุภัณฑ์ล่าสุด"
+        badge={versionNo != null ? <span className="badge info">เวอร์ชัน {versionNo}</span> : undefined}
+        meta={<>
+          {recipe && <span>{recipe.name}</span>}
+          {calculatedText && <span>คำนวณล่าสุด: {calculatedText}</span>}
+        </>}
+        actions={<>
+          {recipeId && <Link to={`/recipes/${recipeId}`} className="btn"><Pencil aria-hidden width={16} />แก้สูตร</Link>}
+          <button type="button" className="btn" disabled={loading || !versionId} onClick={() => setRecalcAt(Date.now())}>
+            <RefreshCw aria-hidden width={16} />คำนวณใหม่
+          </button>
+          <Link to="/pricing" className="btn primary"><CircleDollarSign aria-hidden width={16} />ดูราคาขายและกำไร</Link>
+        </>}
+      />
 
-      {/* Selector */}
-      <section className="card card-pad">
-        <div className="fcx-picker">
-          <label className="fcx-field">เลือกสูตร / เมนู
-            <select value={recipeId} onChange={(e) => void selectRecipe(e.target.value)}>
-              <option value="">— เลือกสูตร —</option>
-              {recipes.data?.map((r) => <option key={r.id} value={r.id}>{r.code} — {r.name}</option>)}
-            </select>
-          </label>
-          <label className="fcx-field">เวอร์ชันสูตร
-            <select value={versionId} onChange={(e) => setVersionId(e.target.value)} disabled={!recipe}>
-              {!recipe && <option value="">— เลือกสูตรก่อน —</option>}
-              {recipe?.versions.map((v) => <option key={v.id} value={v.id}>เวอร์ชัน {v.versionNo}{v.isActive ? ' (ใช้งาน)' : ''}</option>)}
-            </select>
-          </label>
-        </div>
-      </section>
+      <FilterBar>
+        <label className="s2-field">เลือกสูตร / เมนู
+          <select value={recipeId} onChange={(e) => void selectRecipe(e.target.value)}>
+            <option value="">— เลือกสูตร —</option>
+            {recipes.data?.map((r) => <option key={r.id} value={r.id}>{r.code} — {r.name}</option>)}
+          </select>
+        </label>
+        <label className="s2-field">เวอร์ชันสูตร
+          <select value={versionId} onChange={(e) => setVersionId(e.target.value)} disabled={!recipe}>
+            {!recipe && <option value="">— เลือกสูตรก่อน —</option>}
+            {recipe?.versions.map((v) => <option key={v.id} value={v.id}>เวอร์ชัน {v.versionNo}{v.isActive ? ' (ใช้งาน)' : ''}</option>)}
+          </select>
+        </label>
+      </FilterBar>
 
-      {error && <div className="alert" style={{ marginTop: 16 }}>{error}</div>}
+      {error && <div className="rb-callout warn" role="alert"><AlertTriangle aria-hidden /><div><strong>{error}</strong></div></div>}
+
+      {versionId && cost && (
+        <p className="costing-note">
+          ต้นทุนนี้อ้างอิง<strong>เวอร์ชันที่บันทึกล่าสุด</strong>{versionNo != null ? ` (เวอร์ชัน ${versionNo})` : ''} —
+          ใช้ราคาวัตถุดิบและอัตราแปลงหน่วยล่าสุด ไม่รวมการแก้ไขใน Recipe Builder ที่ยังไม่ได้บันทึก
+        </p>
+      )}
 
       {!recipeId && !recipes.isLoading && (
-        <section className="card" style={{ marginTop: 16 }}>
-          <EmptyState icon={Calculator} title="เลือกสูตรเพื่อเริ่มคำนวณต้นทุน"
-            description={recipes.data && recipes.data.length === 0 ? 'ยังไม่มีสูตรในระบบ — สร้างสูตรเมนูก่อน' : 'เลือกสูตรจากช่องด้านบน ระบบจะคำนวณต้นทุนต่อจานให้ทันที'}
-            action={recipes.data && recipes.data.length === 0 ? <Link to="/recipes" className="btn primary">สร้างสูตร</Link> : undefined} />
-        </section>
+        <ContentCard>
+          <EmptyState icon={Calculator} title="ยังไม่มีสูตรสำหรับคำนวณต้นทุน"
+            description={recipes.data && recipes.data.length === 0 ? 'ยังไม่มีสูตรในระบบ — สร้างสูตรเมนูก่อน' : 'เลือกสูตรจากช่องด้านบนเพื่อเริ่มคำนวณต้นทุน'}
+            action={recipes.data && recipes.data.length === 0 ? <Link to="/recipes/new" className="btn primary">สร้างสูตร</Link> : undefined} />
+        </ContentCard>
       )}
+
+      {loading && !cost && <><KPISkeleton count={4} /><CardSkeleton lines={5} /></>}
 
       {recipeId && cost && version && (
-        <div className="fcx-2col" style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {missing.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {missing.map((m) => (
-                  <div className="fcx-missing" key={m}><AlertTriangle aria-hidden /><span>{m}</span></div>
-                ))}
-              </div>
-            )}
+        <>
+          {/* ตอบ 5 คำถามแรกให้ได้ทันทีที่เปิดหน้า */}
+          <KPIGrid columns={4}>
+            <KPICard label="ต้นทุนรวมทั้งสูตร" value={`${formatMoney(cost.totalCost, 2)}`} icon={<Calculator />} hint="รวมทุกหมวด" />
+            <KPICard label="ผลผลิตที่ได้" value={formatMoney(cost.effectiveYield, 2)} icon={<Boxes />} hint="หน่วยตามสูตร" />
+            <KPICard label="ต้นทุนต่อหน่วย" value={`${formatMoney(cost.unitCost, 2)}`} icon={<CircleDollarSign />} tone="info" hint="ตัวเลขที่ใช้ตั้งราคาขาย" />
+            <KPICard label="ค่าใช้จ่ายการผลิตเพิ่มเติม" value={`${formatMoney(cost.overheadCost, 2)}`} icon={<Layers />} hint={`${overheadPct.toFixed(1)}% ของต้นทุนรวม`} />
+          </KPIGrid>
 
-            <section className="card card-pad">
-              <h3 className="form-section-title"><Layers aria-hidden />ต้นทุนแยกหมวด</h3>
-              <p className="form-section-sub">ต้นทุนรวมต่อ batch (ได้ {formatMoney(cost.effectiveYield, 2)} หน่วย)</p>
-              <div className="fcx-breakdown">
-                {SEGMENTS.map((s) => {
-                  const val = Number(cost[s.key]) || 0;
-                  const pct = segTotal ? (val / segTotal) * 100 : 0;
-                  return (
-                    <div className="fcx-brk" key={s.key}>
-                      <span className="name"><span className="dot" style={{ background: s.color }} />{s.label}</span>
-                      <span className="track"><i style={{ width: `${pct}%`, background: s.color }} /></span>
-                      <span className="amt">{formatMoney(val, 2)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
+          <div className="costing-grid">
+            <div className="costing-main">
+              <ContentCard title="ต้นทุนแยกหมวด" description={`ต้นทุนรวมต่อรอบการผลิต (ได้ ${formatMoney(cost.effectiveYield, 2)} หน่วย)`}>
+                <div className="cost-groups">
+                  {segs.map((s) => {
+                    const share = pct(s.value, segTotal);
+                    const rows = groupRows[s.key as string] ?? [];
+                    const expandable = rows.length > 0;
+                    const open = openGroup === s.key;
+                    return (
+                      <div className={`cost-group-row${open ? ' is-open' : ''}`} key={s.key}>
+                        <button
+                          type="button"
+                          className="cg-head"
+                          aria-expanded={expandable ? open : undefined}
+                          disabled={!expandable}
+                          onClick={() => expandable && setOpenGroup(open ? null : (s.key as string))}
+                        >
+                          <span className={`cg-dot tone-${s.tone}`} aria-hidden />
+                          <span className="cg-label">{s.label}</span>
+                          <span className="cg-bar" aria-hidden><i className={`tone-${s.tone}`} style={{ width: `${share}%` }} /></span>
+                          <span className="cg-pct num">{share.toFixed(1)}%</span>
+                          <span className="cg-amt num">{formatMoney(s.value, 2)}</span>
+                          {expandable && <ChevronDown className="cg-chev" aria-hidden />}
+                        </button>
+                        {expandable && open && (
+                          <ul className="cg-detail">
+                            {rows.map((r) => (
+                              <li key={r.id}>
+                                <span>{r.item?.name ?? r.childRecipe?.name ?? '—'}</span>
+                                <b className="num">{formatMoney(lineCost(r), 2)}</b>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {segs.length === 0 && <p className="subtle">ยังไม่มีต้นทุนในสูตรนี้</p>}
+                </div>
+              </ContentCard>
 
-            <section className="card card-pad">
-              <h3 className="form-section-title"><Boxes aria-hidden />รายการในสูตร</h3>
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead><tr><th>รายการ</th><th>ประเภท</th><th className="num">ปริมาณ</th><th className="num">ต้นทุน/หน่วย</th><th className="num">รวม</th></tr></thead>
-                  <tbody>
-                    {version.ingredients.map((ing) => (
-                      <tr key={ing.id}>
-                        <td><strong>{ing.item?.name ?? '—'}</strong></td>
-                        <td>{ing.item?.type === 'PACKAGING' ? 'บรรจุภัณฑ์' : 'วัตถุดิบ'}</td>
-                        <td className="num">{formatMoney(ing.quantityBase, 2)} {ing.item?.baseUnitCode ?? ''}</td>
-                        <td className="num">{ing.item && ing.item.lastCost > 0 ? formatMoney(ing.item.lastCost, 4) : <span style={{ color: 'var(--warning)' }}>ไม่มีราคา</span>}</td>
-                        <td className="num">{formatMoney(ing.lineCost, 2)}</td>
+              <ContentCard title="รายการในสูตร" description="ทุกบรรทัดที่ประกอบเป็นต้นทุนรวม" padded={false}>
+                <div className="table-wrap">
+                  <table className="data-table costing-table">
+                    <thead>
+                      <tr>
+                        <th>รายการ</th><th>ประเภท</th>
+                        <th className="num">จำนวน</th><th>หน่วย</th>
+                        <th className="num">ราคาต่อหน่วย</th><th className="num">ต้นทุน</th><th className="num">% ของต้นทุน</th>
                       </tr>
-                    ))}
-                    {version.ingredients.length === 0 && (
-                      <tr><td colSpan={5}><span className="subtle" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><PackageX width={15} aria-hidden />สูตรนี้ยังไม่มีรายการวัตถุดิบ</span></td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-
-          {/* Sidebar summary */}
-          <div className="fcx-sticky" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <section className="card card-pad">
-              <h3 className="form-section-title"><Calculator aria-hidden />สัดส่วนต้นทุน</h3>
-              <div className="fcx-donut-wrap" style={{ marginTop: 6 }}>
-                <div className="fcx-donut" style={{ background: donutGradient }}>
-                  <div className="center"><b>{formatMoney(cost.totalCost, 0)}</b><span>ต่อ batch</span></div>
+                    </thead>
+                    <tbody>
+                      {version.components.map((ing) => {
+                        const c = lineCost(ing);
+                        const unitPrice = ing.item?.lastCost ?? ing.childRecipe?.unitCost ?? 0;
+                        const type = ing.componentType === 'PACKAGING' ? 'บรรจุภัณฑ์' : ing.componentType === 'SUB_RECIPE' ? 'สูตรย่อย' : 'วัตถุดิบ';
+                        return (
+                          <tr key={ing.id}>
+                            <td data-label="รายการ"><strong>{ing.item?.name ?? ing.childRecipe?.name ?? '—'}</strong></td>
+                            <td data-label="ประเภท"><span className="badge muted">{type}</span></td>
+                            <td className="num" data-label="จำนวน">{formatMoney(ing.quantity, 2)}</td>
+                            <td data-label="หน่วย">{ing.item?.baseUnitCode ?? ''}</td>
+                            <td className="num" data-label="ราคาต่อหน่วย">
+                              {unitPrice > 0 ? formatMoney(unitPrice, 4)
+                                : <span className="cost-nowprice"><AlertTriangle aria-hidden width={13} />ไม่มีราคา</span>}
+                            </td>
+                            <td className="num" data-label="ต้นทุน">{formatMoney(c, 2)}</td>
+                            <td className="num" data-label="% ของต้นทุน">{pct(c, cost.totalCost).toFixed(1)}%</td>
+                          </tr>
+                        );
+                      })}
+                      {version.components.length === 0 && (
+                        <tr><td colSpan={7}><span className="subtle cost-empty-row"><PackageX width={15} aria-hidden />สูตรนี้ยังไม่มีรายการ</span></td></tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="fcx-legend" style={{ flex: 1 }}>
-                  {segs.map((s) => (
-                    <div key={s.key}><i style={{ background: s.color }} />{s.label}<b>{segTotal ? ((s.value / segTotal) * 100).toFixed(0) : 0}%</b></div>
+              </ContentCard>
+
+              <ContentCard
+                title="ตรวจสอบต้นทุน"
+                description={failedChecks ? `มี ${failedChecks} จุดที่ควรตรวจก่อนนำไปตั้งราคา` : 'ข้อมูลครบพร้อมนำไปตั้งราคาขาย'}
+                actions={recipeId ? <Link to={`/recipes/${recipeId}`} className="btn"><Pencil aria-hidden width={15} />ไปแก้ใน Recipe Builder</Link> : undefined}
+              >
+                <ul className="cost-checklist">
+                  {checks.map((c) => (
+                    <li key={c.label} className={c.ok ? 'ok' : 'warn'}>
+                      <span className="ck-icon" aria-hidden>{c.ok ? <Check /> : <AlertTriangle />}</span>
+                      <span className="ck-label">{c.label}</span>
+                      <span className="ck-detail">{c.detail}</span>
+                      <span className="ck-state">{c.ok ? 'ผ่าน' : 'ควรตรวจ'}</span>
+                    </li>
                   ))}
-                  {segs.length === 0 && <span className="subtle" style={{ fontSize: 13 }}>ยังไม่มีต้นทุน</span>}
+                </ul>
+                {missing.length > 0 && (
+                  <ul className="cost-missing">
+                    {missing.map((m) => <li key={m}><AlertTriangle aria-hidden width={14} />{m}</li>)}
+                  </ul>
+                )}
+              </ContentCard>
+            </div>
+
+            <StickySummary className="costing-summary">
+              <div className="cs-panel">
+                <h2><Calculator aria-hidden />สรุปต้นทุน</h2>
+                <div className="cs-hero">
+                  <span>ต้นทุนต่อหน่วย</span>
+                  <strong className="num">{formatMoney(cost.unitCost, 2)}</strong>
+                </div>
+                <div className="cost-row"><span>ต้นทุนรวม</span><b className="num">{formatMoney(cost.totalCost, 2)}</b></div>
+                <div className="cost-row"><span>ผลผลิต</span><b className="num">{formatMoney(cost.effectiveYield, 2)}</b></div>
+                <hr />
+                {segs.map((s) => (
+                  <div className="cost-row" key={s.key}>
+                    <span><i className={`cg-dot tone-${s.tone}`} aria-hidden /> {s.label}</span>
+                    <b className="num">{formatMoney(s.value, 2)}</b>
+                  </div>
+                ))}
+                {loading && <p className="subtle cs-loading">กำลังคำนวณ…</p>}
+                <div className="cs-actions">
+                  <Link to="/pricing" className="btn primary"><CircleDollarSign aria-hidden />ตั้งราคาขายจากต้นทุนนี้</Link>
+                  {recipeId && <Link to={`/recipes/${recipeId}`} className="btn"><Pencil aria-hidden width={15} />แก้สูตร</Link>}
                 </div>
               </div>
-            </section>
-
-            <section className="card card-pad">
-              <div className="fcx-result hi">
-                <div className="primary"><div className="k">ต้นทุนรวม/batch</div><div className="v">{formatMoney(cost.totalCost, 2)}</div></div>
-                <div><div className="k">ต่อหน่วย</div><div className="v">{formatMoney(cost.unitCost, 2)}</div></div>
-                <div><div className="k">Yield</div><div className="v">{formatMoney(cost.effectiveYield, 0)}</div></div>
-              </div>
-              {loading && <p className="subtle" style={{ fontSize: 12, marginTop: 8, textAlign: 'center' }}>กำลังคำนวณ…</p>}
-              <Link to="/pricing" className="btn primary" style={{ width: '100%', marginTop: 14, justifyContent: 'center' }}>
-                <CircleDollarSign aria-hidden />ตั้งราคาขายจากต้นทุนนี้
-              </Link>
-            </section>
-
-            <div className="fcx-missing" style={{ background: 'var(--blue-soft)', borderColor: '#cfe1f3', color: 'var(--blue)' }}>
-              <Info aria-hidden /><span>ต้นทุนดึงจากราคาซื้อล่าสุดของวัตถุดิบและบรรจุภัณฑ์แบบเรียลไทม์</span>
-            </div>
+            </StickySummary>
           </div>
-        </div>
+        </>
       )}
-    </>
+    </PageContainer>
   );
 }
+

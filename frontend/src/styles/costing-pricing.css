@@ -1,0 +1,207 @@
+/* ============================================================
+   S2A ERP — COSTING + PRICING (Phase 4B)
+   โหลดหลัง index.css / workspace.css จึงชนะกฎเดิมได้โดยไม่ต้องใช้ !important
+   ระยะ/สี/รัศมี ใช้ token จาก tokens.css ทั้งหมด
+   ============================================================ */
+
+/* ---------- โครงสองคอลัมน์ (เนื้อหา + แผงสรุป) ---------- */
+.costing-grid,
+.pricing-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 73fr) minmax(280px, 27fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+.costing-main,
+.pricing-main { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.costing-summary .cs-panel,
+.pricing-summary > .card {
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--surface); box-shadow: var(--shadow-flat);
+  padding: var(--card-pad);
+}
+.pricing-summary { display: flex; flex-direction: column; gap: var(--space-4); }
+.costing-summary h2,
+.costing-summary .cs-panel h2 {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin: 0 0 var(--space-3); font-size: 15px; font-weight: 700; color: var(--heading);
+}
+.costing-summary h2 svg { width: 17px; height: 17px; color: var(--blue); }
+
+/* ตัวเลขหลักของแผงสรุป — ต้องเด่นที่สุดในหน้า */
+.cs-hero {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-bottom: var(--space-3); padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-field);
+  background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--border));
+}
+.cs-hero span { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.cs-hero strong { font-family: var(--font-num); font-size: 29px; font-weight: 800; line-height: 1.15; color: var(--blue); }
+.cs-loading { font-size: 12px; text-align: center; margin-top: var(--space-2); }
+.cs-actions { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-4); }
+.cs-actions .btn { width: 100%; justify-content: center; min-height: var(--control-h); }
+
+.costing-note {
+  margin: 0; padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--blue);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2); color: var(--text-muted);
+  font-size: 12.5px; line-height: 1.6;
+}
+.costing-note strong { color: var(--text); }
+
+/* ---------- ช่องกรองของสองหน้านี้ ---------- */
+.s2-field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 200px; flex: 1 1 220px; font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.s2-field select { min-height: var(--control-h); }
+
+/* ---------- Cost breakdown: แถบสัดส่วนแนวนอน (ไม่ใช้ donut) ---------- */
+.cost-groups { display: flex; flex-direction: column; gap: var(--space-2); }
+.cost-group-row { border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface); overflow: hidden; }
+.cg-head {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1.2fr) minmax(90px, 2fr) 58px 104px 20px;
+  align-items: center; gap: var(--space-3);
+  width: 100%; padding: var(--space-3) var(--space-4);
+  border: 0; background: transparent; color: inherit; font: inherit; text-align: left;
+  cursor: pointer;
+}
+.cg-head:disabled { cursor: default; }
+.cg-head:hover:not(:disabled) { background: var(--surface-2); }
+.cg-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.cg-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
+.cg-label { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.cg-bar { height: 8px; border-radius: var(--radius-pill); background: var(--surface-3); overflow: hidden; }
+.cg-bar i { display: block; height: 100%; border-radius: var(--radius-pill); }
+.cg-pct { font-size: 12.5px; font-weight: 700; color: var(--text-muted); text-align: right; }
+.cg-amt { font-size: 14px; font-weight: 700; color: var(--text); text-align: right; }
+.cg-chev { width: 16px; height: 16px; color: var(--text-subtle); transition: transform .16s ease; }
+.cost-group-row.is-open .cg-chev { transform: rotate(180deg); }
+.cg-detail {
+  list-style: none; margin: 0; padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--divider); background: var(--surface-2);
+  display: flex; flex-direction: column; gap: var(--space-1);
+}
+.cg-detail li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: 12.5px; color: var(--text-muted); }
+.cg-detail li b { color: var(--text); }
+
+/* สีหมวด — อ้าง token ของระบบ ไม่ใช่ hex ลอย */
+.tone-blue   { background: var(--blue); }
+.tone-gold   { background: var(--gold); }
+.tone-violet { background: color-mix(in srgb, var(--blue) 45%, var(--danger)); }
+.tone-indigo { background: color-mix(in srgb, var(--navy-soft) 70%, var(--blue)); }
+.tone-rose   { background: var(--danger); }
+.tone-slate  { background: var(--text-subtle); }
+
+/* ---------- ตารางต้นทุน ---------- */
+.costing-table .num, .price-compare .num { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.cost-nowprice { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--note-warn-fg); font-weight: 600; }
+.cost-empty-row { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+/* ---------- Checklist ตรวจสอบต้นทุน ---------- */
+.cost-checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.cost-checklist li {
+  display: grid; grid-template-columns: 22px minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface);
+  font-size: 13px;
+}
+.cost-checklist .ck-icon { display: grid; place-items: center; }
+.cost-checklist .ck-icon svg { width: 16px; height: 16px; }
+.cost-checklist li.ok .ck-icon { color: var(--success); }
+.cost-checklist li.warn .ck-icon { color: var(--note-warn-fg); }
+.cost-checklist li.warn { border-color: color-mix(in srgb, var(--note-warn-accent) 40%, var(--border)); background: color-mix(in srgb, var(--note-warn-accent) 8%, var(--surface)); }
+.cost-checklist .ck-label { font-weight: 600; color: var(--text); }
+.cost-checklist .ck-detail { color: var(--text-muted); font-size: 12.5px; }
+/* สถานะไม่สื่อด้วยสีอย่างเดียว — มีทั้งไอคอนและข้อความ */
+.cost-checklist .ck-state { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-pill); }
+.cost-checklist li.ok .ck-state { background: var(--success-bg); color: var(--success-fg); }
+.cost-checklist li.warn .ck-state { background: var(--warning-bg); color: var(--warning-fg); }
+.cost-missing { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.cost-missing li { display: flex; align-items: center; gap: var(--space-2); font-size: 12.5px; color: var(--note-warn-fg); }
+
+/* ---------- Pricing ---------- */
+.price-compare .pc-cost { background: var(--surface-2); }
+.price-compare tr.is-loss { background: color-mix(in srgb, var(--danger) 7%, transparent); }
+.price-compare .badge { gap: 4px; }
+.price-glossary {
+  padding: var(--space-3) var(--card-pad);
+  border-top: 1px solid var(--divider); background: var(--surface-2);
+}
+.price-glossary p { margin: 0 0 var(--space-1); font-size: 12.5px; line-height: 1.65; color: var(--text-muted); }
+.price-glossary p:last-child { margin-bottom: 0; }
+.price-glossary b { color: var(--text); }
+
+.profit-result { margin-top: var(--space-2); }
+.profit-result .v.is-loss { color: var(--danger); }
+.profit-result .v.is-profit { color: var(--success); }
+.margin-meter { margin-top: var(--space-4); }
+.margin-meter .mm-head { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-muted); margin-bottom: var(--space-1); }
+.margin-meter .mm-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-subtle); margin-top: var(--space-1); }
+.tier-save { width: 100%; margin-top: var(--space-2); justify-content: center; min-height: var(--control-h); }
+.fcx-insights .insight-text { align-self: center; }
+.insight-empty { font-size: 13px; }
+
+.pricing-summary .cp-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-1) 0; font-size: 13px; color: var(--text-muted); }
+.pricing-summary .cp-row strong { color: var(--text); font-family: var(--font-num); }
+.pricing-summary .cp-row.loss strong { color: var(--danger); }
+.pricing-summary .cp-foot { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--divider); }
+.pricing-summary .cp-warn,
+.pricing-summary .cp-ok { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; font-size: 12.5px; font-weight: 600; }
+.pricing-summary .cp-warn { color: var(--note-warn-fg); }
+.pricing-summary .cp-ok { color: var(--success); }
+
+/* ============================================================
+   RESPONSIVE — 1024 / 760 / 430 (ชุดเดียวกับทั้งระบบ)
+   ============================================================ */
+@media (max-width: 1024px) {
+  .costing-grid, .pricing-grid { grid-template-columns: 1fr; }
+  .costing-summary, .pricing-summary { position: static; }
+  /* เกณฑ์สัมผัส 44px ครอบคลุมแท็บเล็ต */
+  .cg-head, .cost-checklist li { min-height: var(--control-h); }
+}
+@media (max-width: 760px) {
+  .cg-head {
+    grid-template-columns: auto minmax(0, 1fr) auto 20px;
+    row-gap: var(--space-2);
+  }
+  .cg-bar { grid-column: 1 / -1; }
+  .cg-pct { grid-column: 3; }
+  .cost-checklist li { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .cost-checklist .ck-detail { grid-column: 2 / -1; }
+
+  /* ตารางกลายเป็นการ์ดบนมือถือ */
+  /* .data-table ฐานมี min-width:780px ไว้กันตารางบีบบนเดสก์ท็อป
+     พอเปลี่ยนเป็นการ์ดต้องปลดออก ไม่งั้นการ์ดยังกว้าง 780px แล้วเลื่อนแนวนอน */
+  .costing-table, .price-compare { display: block; min-width: 0; width: 100%; }
+  .costing-table thead, .price-compare thead { display: none; }
+  .costing-table tbody, .price-compare tbody { display: flex; flex-direction: column; gap: var(--space-2); }
+  .costing-table tr, .price-compare tr {
+    display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-3);
+    padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface);
+  }
+  .costing-table td, .price-compare td { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); border: 0; padding: 2px 0; }
+  .costing-table td::before, .price-compare td::before {
+    content: attr(data-label);
+    font-size: 11.5px; font-weight: 600; color: var(--text-subtle);
+  }
+  .costing-table td:first-child, .price-compare td:first-child { grid-column: 1 / -1; }
+  .costing-table td:first-child::before, .price-compare td:first-child::before { content: none; }
+}
+@media (max-width: 430px) {
+  .cs-hero strong { font-size: 25px; }
+}
+
+/* ต้นทุนต่อหน่วยคือตัวเลขที่ผู้ใช้ต้องเห็นก่อนใคร — เน้นทั้งขนาดและกรอบ ไม่ใช่แค่สี
+   จำกัดขอบเขตไว้แค่สองหน้านี้ เพื่อไม่ให้ KPI tone=info ของหน้าอื่นโตตาม */
+.costing-page .s2-kpi--info,
+.pricing-page .s2-kpi--info {
+  border-color: color-mix(in srgb, var(--blue) 34%, var(--border));
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
+}
+.costing-page .s2-kpi--info .s2-kpi-value,
+.pricing-page .s2-kpi--info .s2-kpi-value { font-size: 31px; }
+@media (max-width: 430px) {
+  .costing-page .s2-kpi--info .s2-kpi-value,
+  .pricing-page .s2-kpi--info .s2-kpi-value { font-size: 27px; }
+}

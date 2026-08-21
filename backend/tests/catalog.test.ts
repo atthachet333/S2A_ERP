@@ -142,7 +142,16 @@ describe.sequential('catalog + recipe + costing integration', () => {
 
   it('คำนวณต้นทุนซ้ำจาก recipeVersion + จำลองราคาขาย markup 30%', async () => {
     const detail = await app.inject({ method: 'GET', url: `/api/recipes/${recipeId}`, headers: auth() });
-    versionId = detail.json().data.versions[0].id;
+    const legacyVersion = detail.json().data.versions[0];
+    versionId = legacyVersion.id;
+    // The deployed Recipe Builder reads these exact legacy paths while v2 uses
+    // the additive `components` and `overhead` fields.
+    expect(() => legacyVersion.ingredients.map((ingredient: { item: { name: string }; quantityBase: number }) => `${ingredient.item.name}:${ingredient.quantityBase}`)).not.toThrow();
+    expect(legacyVersion.ingredients).toHaveLength(2);
+    expect(legacyVersion.ingredients[0]).toMatchObject({ itemId, quantityBase: 1000, wastePercent: 0 });
+    expect(legacyVersion.ingredients[0].item).toMatchObject({ id: itemId, baseUnitCode: `G_${TAG}` });
+    expect(legacyVersion).toMatchObject({ standardYieldQty: 10, yieldPercent: 100, standardWaste: 0, laborCost: 20, electricCost: 0, waterCost: 0, gasCost: 0, overheadCost: 0, otherCost: 0 });
+    expect(legacyVersion.components).toHaveLength(2);
     const res = await app.inject({ method: 'POST', url: '/api/costing/calculate', headers: auth(), payload: { recipeVersionId: versionId, markupPercent: 30 } });
     expect(res.statusCode).toBe(200);
     const { breakdown, pricing } = res.json().data;
