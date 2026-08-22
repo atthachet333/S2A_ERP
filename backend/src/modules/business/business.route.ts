@@ -10,6 +10,7 @@ import { aggregateStock, buildPatch, duplicateMessage, normalizeCode, normalizeN
 import ExcelJS from 'exceljs';
 import { notificationChannels } from '../notifications/channel.service.js';
 import { renderBusinessPdf, type BusinessDocument, type DocumentType } from './document.service.js';
+import { toDocumentCompany } from './company-identity.js';
 
 /** ระดับราคาที่ยอมรับ — ชุดเดียวกับที่ costing.route.ts ใช้กับ SellingPrice.priceType
     ไม่มี enum ใน schema จึงบังคับที่ชั้น route แบบเดียวกับของเดิม */
@@ -67,7 +68,7 @@ async function expandRecipeDemand(
         where: { isActive: true }, orderBy: { versionNo: 'desc' }, take: 1,
         select: {
           standardYieldQty: true, yieldPercent: true,
-          ingredients: { include: { item: true, unit: true } },
+          ingredients: { include: { item: { include: { baseUnit: true } }, unit: true } },
         },
       },
     },
@@ -113,7 +114,7 @@ async function expandRecipeDemand(
       const quantity = ingredient.quantity.mul(multiplier).mul(wasteFactor);
       const current = demand.get(ingredient.itemId);
       if (current) current.quantity = current.quantity.plus(quantity);
-      else demand.set(ingredient.itemId, { itemId: ingredient.itemId, name: ingredient.item.name, unit: ingredient.unit?.code ?? ingredient.item.baseUnitId, quantity });
+      else demand.set(ingredient.itemId, { itemId: ingredient.itemId, name: ingredient.item.name, unit: ingredient.unit?.code ?? ingredient.item.baseUnit?.code ?? '—', quantity });
       continue;
     }
     warnings.push(`Unsupported recipe component type '${ingredient.componentType}' on ${ingredient.id}.`);
@@ -197,7 +198,7 @@ function receiptBaseUnitCost(unitPrice: number, purchaseToBaseFactor: number) {
 async function confirmReceiptWithin(tx: Prisma.TransactionClient, receiptId: string, companyId: string, userId: string) {
   const doc = await tx.goodsReceipt.findFirstOrThrow({
     where: { id: receiptId },
-    include: { items: { include: { item: true } } },
+    include: { items: { include: { item: { include: { baseUnit: true } } } } },
   });
 
   for (const line of doc.items) {
@@ -210,7 +211,8 @@ async function confirmReceiptWithin(tx: Prisma.TransactionClient, receiptId: str
     await applyMovement(tx, {
       companyId, warehouseId: doc.warehouseId, itemId: line.itemId,
       movementType: 'PURCHASE_RECEIPT', changeQty: baseQty,
-      unit: line.item.baseUnitId,
+      // PHASE 13B — เดิมเขียน baseUnitId (cuid) ลงคอลัมน์ unit ของบัญชีเดินสต็อก
+      unit: line.item.baseUnit?.code ?? null,
       refType: 'GOODS_RECEIPT', refId: doc.id, refNo: doc.receiptNo,
       unitCost: baseCost, createdById: userId,
     });
@@ -282,10 +284,14 @@ function serializeWarehouse(w: WarehouseRow, stock: { itemCount: number; onHand:
   };
 }
 
+/** จำนวนในสมการของใบปรับปรุงสต็อก — ไม่บังคับทศนิยม */
+const fmtQty = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 4 });
+
 /** คำนำหน้าชื่อไฟล์ตามชนิดเอกสาร — ให้ผู้ใช้รู้ว่าไฟล์ไหนคืออะไรตั้งแต่ชื่อ */
 const DOC_FILE_PREFIX: Record<string, string> = {
   GOODS_RECEIPT_SLIP: 'GR', STOCK_ISSUE_SLIP: 'RI', ORDER_SLIP: 'ORDER',
   KITCHEN_PREPARATION_SLIP: 'PREP', RECIPE_COST_SHEET: 'COST', SALES_REPORT: 'SALES',
+  STOCK_ADJUSTMENT_SLIP: 'AJ',
 };
 
 /**
@@ -307,11 +313,11 @@ const ORDER_TIER_TH: Record<string, string> = { RETAIL: 'ราคาปลี�
 
 export default async function businessRoutes(app: FastifyInstance) {
   app.get('/documents/:type/:id.pdf', { preHandler: requirePermission('DOCUMENT_DOWNLOAD') }, async (req, reply) => {
-    const { type, id } = z.object({ type: z.enum(['ORDER_SLIP','KITCHEN_PREPARATION_SLIP','STOCK_ISSUE_SLIP','GOODS_RECEIPT_SLIP','RECIPE_COST_SHEET','SALES_REPORT']), id: z.string().min(1) }).parse(req.params) as { type: DocumentType; id: string };
+    const { type, id } = z.object({ type: z.enum(['ORDER_SLIP','KITCHEN_PREPARATION_SLIP','STOCK_ISSUE_SLIP','GOODS_RECEIPT_SLIP','RECIPE_COST_SHEET','SALES_REPORT','STOCK_ADJUSTMENT_SLIP']), id: z.string().min(1) }).parse(req.params) as { type: DocumentType; id: string };
     const companyId = req.user.companyId!; const company = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
     /* PHASE 13 — เดิมเขียนทับ nameTh ของบริษัทหลักเป็น 'ครัวสดดี'
        ทำให้เอกสารไม่ขึ้นชื่อนิติบุคคลจริงที่จดทะเบียนไว้ จึงใช้ค่าใน Company ตรง ๆ */
-    const identity = company; let document: BusinessDocument | undefined;
+    const identity = toDocumentCompany(company); let document: BusinessDocument | undefined;
     if (type === 'ORDER_SLIP' || type === 'KITCHEN_PREPARATION_SLIP') {
       const order = await prisma.salesOrder.findFirst({ where: { id, companyId }, include: { customer: true, items: true, createdBy: { select: { fullName: true } } } });
       if (order) document = { type, title: type, documentNo: order.orderNo, date: order.deliveryDate, company: identity, createdBy: order.createdBy.fullName, status: DOC_STATUS_TH[order.status] ?? order.status, totalLabel: 'ยอดรวมทั้งสิ้น', subject: [{ label: 'ลูกค้า', value: order.customer.name }, { label: 'ผู้ติดต่อ', value: order.contactName ?? '—' }, { label: 'กำหนดส่ง', value: `${order.deliveryDate.toLocaleDateString('th-TH')} ${order.deliveryTime ?? ''}` }, ...(order.priceTier ? [{ label: 'ระดับราคา', value: ORDER_TIER_TH[order.priceTier] ?? order.priceTier }] : [])], lines: order.items.map((line) => ({ name: line.menuNameSnapshot, detail: line.note ?? undefined, quantity: line.quantity.toString(), unit: line.unit, price: line.unitPrice.toString(), total: line.lineTotal.toString() })), total: type === 'ORDER_SLIP' ? order.totalAmount.toString() : undefined, note: order.note };
@@ -322,6 +328,41 @@ export default async function businessRoutes(app: FastifyInstance) {
     } else if (type === 'STOCK_ISSUE_SLIP') {
       const issue = await prisma.stockIssue.findFirst({ where: { id, companyId }, include: { order: true, createdBy: { select: { fullName: true } }, items: true } });
       if (issue) { const itemNames = new Map((await prisma.item.findMany({ where: { companyId, id: { in: issue.items.map((line)=>line.itemId) } }, select: { id: true, name: true } })).map((item)=>[item.id,item.name])); document = { type, title: type, documentNo: issue.issueNo, date: issue.issueDate, company: identity, createdBy: issue.createdBy.fullName, status: DOC_STATUS_TH[issue.status] ?? issue.status, subject: [{ label: 'คำสั่งซื้ออ้างอิง', value: issue.order?.orderNo ?? '—' }, { label: 'ปลายทาง', value: issue.destination }, { label: 'วันที่เบิก', value: issue.issueDate.toLocaleDateString('th-TH') }], lines: issue.items.map((line)=>({ name:itemNames.get(line.itemId)??line.itemId,quantity:line.issuedQty.toString(),unit:line.unit })), note: issue.note }; }
+    } else if (type === 'STOCK_ADJUSTMENT_SLIP') {
+      /* ใบปรับปรุงสต็อก — อ่านเฉพาะเอกสารที่ร้องขอ (id) และใช้ยอดที่บันทึกไว้ตอนทำรายการเท่านั้น
+         systemQty = ยอดก่อนปรับ · diffQty = ส่วนต่าง · countedQty = ยอดหลังปรับ
+         ห้ามย้อนคำนวณจากสต็อกปัจจุบัน เพราะเอกสารเก่าจะเพี้ยนทันทีที่สต็อกขยับ */
+      const adj = await prisma.stockAdjustment.findFirst({
+        where: { id, companyId },
+        include: { warehouse: true, items: { include: { item: { include: { baseUnit: true } } } } },
+      });
+      if (adj) {
+        const ajAuthor = adj.createdById
+          ? (await prisma.user.findUnique({ where: { id: adj.createdById }, select: { fullName: true } }))?.fullName
+          : undefined;
+        document = {
+          type, title: type, documentNo: adj.adjustmentNo, date: adj.adjustmentDate, company: identity,
+          createdBy: ajAuthor ?? undefined,
+          status: DOC_STATUS_TH[adj.status] ?? adj.status,
+          subject: [
+            { label: 'คลัง', value: adj.warehouse.name },
+            { label: 'วันที่ปรับปรุง', value: adj.adjustmentDate.toLocaleDateString('th-TH') },
+            ...(adj.reason ? [{ label: 'เหตุผล', value: adj.reason }] : []),
+          ],
+          lines: adj.items.map((line) => {
+            const unit = line.item.baseUnit?.code ?? '—';
+            const before = num(line.systemQty); const change = num(line.diffQty); const after = num(line.countedQty);
+            const sign = change < 0 ? '−' : '+';
+            return {
+              name: line.item.name,
+              // สมการอ่านง่ายใต้ชื่อรายการ เช่น 100 KG − 6 KG = 94 KG
+              detail: `${fmtQty(before)} ${unit} ${sign} ${fmtQty(Math.abs(change))} ${unit} = ${fmtQty(after)} ${unit}`,
+              before, change, after, unit,
+            };
+          }),
+          note: adj.note,
+        };
+      }
     } else if (type === 'RECIPE_COST_SHEET') {
       const recipe = await prisma.recipe.findFirst({ where: { id, companyId }, include: { product: true, versions: { where: { isActive: true }, take: 1, include: { ingredients: { include: { item: { include: { baseUnit: true } }, unit: true, childRecipe: true } }, costs: { orderBy: { calculatedAt: 'desc' }, take: 1 } } } } }); const version=recipe?.versions[0]; const cost=version?.costs[0];
       if(recipe&&version)document={type,title:type,documentNo:`${recipe.code}-V${version.versionNo}`,date:cost?.calculatedAt??version.createdAt,company:identity,subject:[{label:'เมนู',value:recipe.product.name},{label:'Version',value:String(version.versionNo)},{label:'Yield',value:version.standardYieldQty.toString()}],lines:version.ingredients.map((line)=>{
@@ -625,11 +666,11 @@ export default async function businessRoutes(app: FastifyInstance) {
   app.get('/company', { preHandler: requirePermission('SYSTEM_SETTINGS') }, async (req, reply) => {
     const company = await prisma.company.findUnique({ where: { id: req.user.companyId! } });
     if (!company) return reply.status(404).send(fail('COMPANY_NOT_FOUND', 'ไม่พบบริษัท'));
-    return ok({ ...company, nameTh: company.code === 'S2A-PRIMARY' ? 'ครัวสดดี' : company.nameTh, providers: { email: notificationChannels.email.configured(), line: notificationChannels.line.configured() } });
+    return ok({ ...company, providers: { email: notificationChannels.email.configured(), line: notificationChannels.line.configured() } });
   });
 
   app.patch('/company', { preHandler: requirePermission('SYSTEM_SETTINGS') }, async (req) => {
-    const body = z.object({ nameTh: z.string().trim().min(1).max(160), nameEn: z.string().trim().max(160).nullable().optional(), logoUrl: z.string().max(500).nullable().optional(), taxId: z.string().max(30).nullable().optional(), address: z.string().max(500).nullable().optional(), phone: z.string().max(40).nullable().optional(), email: z.string().email().nullable().optional(), website: z.string().max(250).nullable().optional(), authorizedName: z.string().max(160).nullable().optional(), documentFooter: z.string().max(500).nullable().optional() }).parse(req.body);
+    const body = z.object({ nameTh: z.string().trim().min(1).max(160), nameEn: z.string().trim().max(160).nullable().optional(), logoUrl: z.string().max(500).nullable().optional(), taxId: z.string().max(30).nullable().optional(), address: z.string().max(500).nullable().optional(), phone: z.string().max(40).nullable().optional(), email: z.string().email().nullable().optional(), website: z.string().max(250).nullable().optional(), lineId: z.string().max(120).nullable().optional(), authorizedName: z.string().max(160).nullable().optional(), documentFooter: z.string().max(500).nullable().optional() }).parse(req.body);
     const before = await prisma.company.findUniqueOrThrow({ where: { id: req.user.companyId! } });
     const company = await prisma.company.update({ where: { id: before.id }, data: body });
     await prisma.auditLog.create({ data: { userId: req.user.sub, companyId: before.id, action: 'UPDATE', entity: 'CompanySettings', entityId: before.id, before, after: company } });
@@ -1470,7 +1511,7 @@ export default async function businessRoutes(app: FastifyInstance) {
           await applyMovement(tx, {
             companyId, warehouseId: body.warehouseId, itemId: line.itemId,
             movementType: change > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
-            changeQty: change, unit: item.baseUnit?.code ?? item.baseUnitId,
+            changeQty: change, unit: item.baseUnit?.code ?? null,
             refType: 'STOCK_ADJUSTMENT', refId: doc.id, refNo: doc.adjustmentNo,
             unitCost: num(item.lastCost), reason: body.reason, note: body.note,
             createdById: req.user.sub,

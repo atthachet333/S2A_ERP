@@ -1,23 +1,19 @@
 import PDFDocument from 'pdfkit';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { documentImage } from './document-assets.js';
 
 /**
- * PHASE 13 — ตัวสร้างเอกสาร PDF ของบริษัท
+ * ตัวสร้างเอกสาร PDF ของบริษัท
  *
- * ปัญหาเดิมที่ตรวจพบและแก้ในรอบนี้:
- *   1) ไม่เคยวาดโลโก้เลย ทั้งที่ Company.logoUrl มีไฟล์จริงอยู่
- *   2) ใช้แค่ nameTh + address ส่วน taxId / email / phone / website ไม่เคยแสดง
- *   3) ตารางไม่มีคอลัมน์ "ลำดับ" และ "ราคาต่อหน่วย" ทั้งที่ข้อมูลมีอยู่
- *   4) ขึ้นหน้าใหม่แล้วหัวตารางไม่ซ้ำ ทำให้หน้า 2 อ่านไม่รู้เรื่อง
- *   5) TOTAL ลอย ไม่มีเส้นคั่นและไม่มีบล็อกสรุป
- *   6) ไม่มีพื้นที่ลงนามเลย
- *   7) ไม่มีเลขหน้า
- *   8) ใช้ฟอนต์ตัวเดียวทั้ง regular และ bold จึงไม่มีน้ำหนักตัวอักษรจริง
+ * PHASE 13 วางโครงไว้ (โลโก้ / ข้อมูลบริษัท / ตาราง / ยอดรวม / ลายเซ็น / เลขหน้า)
+ * PHASE 14 เปลี่ยนขนาดกระดาษเป็น A5 = ครึ่ง A4 พอดี (419.53 × 595.28 pt)
+ *          เพื่อประหยัดกระดาษ และจัดลำดับแบรนด์ใหม่เป็น
+ *            แบรนด์หลัก = S2A (ระบบ)
+ *            รองลงมา    = บริษัทที่เอกสารนั้นออกให้ (มาจาก Company จริง)
+ *          ความหนาแน่นข้อมูลอ้างอิงแบบใบส่งของเชิงพาณิชย์ทั่วไป ไม่ได้ลอกแบรนด์ผู้อื่น
  *
- * หลักการจัดหน้า: A4 แนวตั้ง ขอบ 14mm ใช้เส้นบาง เว้นวรรคเยอะ
- * สีที่ใช้เป็น navy + gold accent บนพื้นขาว และไม่ใช้สีเป็นตัวสื่อความหมายเพียงอย่างเดียว
- * (สถานะมีข้อความกำกับเสมอ) เพื่อให้พิมพ์ขาวดำแล้วยังอ่านได้
+ * กติกาที่คงไว้: field ที่เป็น null จะไม่แสดง และไม่ใช้สีเป็นตัวสื่อความหมายเพียงอย่างเดียว
  */
 
 export type DocumentType =
@@ -42,7 +38,7 @@ export type DocumentLine = {
 export type DocumentCompany = {
   nameTh: string; nameEn?: string | null; logoUrl?: string | null;
   address?: string | null; phone?: string | null; email?: string | null;
-  taxId?: string | null; website?: string | null; documentFooter?: string | null;
+  taxId?: string | null; website?: string | null; lineId?: string | null; documentFooter?: string | null;
 };
 
 export type BusinessDocument = {
@@ -53,22 +49,22 @@ export type BusinessDocument = {
   company: DocumentCompany;
   createdBy?: string;
   status?: string;
+  reference?: string | null;
   subject?: { label: string; value: string }[];
   lines: DocumentLine[];
-  /** แถวสรุปเพิ่มเติมก่อน TOTAL เช่น ส่วนลด / ภาษี — ใส่เฉพาะที่มีจริง */
+  /** แถวสรุปเพิ่มเติมก่อนยอดรวม เช่น ส่วนลด / ภาษี — ใส่เฉพาะที่มีจริง */
   summary?: { label: string; value: string | number }[];
   total?: string | number;
   totalLabel?: string;
   note?: string | null;
 };
 
-/** ชื่อเอกสารสองภาษา — อังกฤษเป็นหัว ไทยเป็นบรรทัดรอง */
 const TITLES: Record<DocumentType, { en: string; th: string }> = {
   ORDER_SLIP: { en: 'ORDER SLIP', th: 'ใบสั่งซื้อ' },
-  KITCHEN_PREPARATION_SLIP: { en: 'KITCHEN PREPARATION SLIP', th: 'ใบเตรียมครัว' },
-  STOCK_ISSUE_SLIP: { en: 'STOCK ISSUE SLIP', th: 'ใบเบิกสินค้า' },
+  KITCHEN_PREPARATION_SLIP: { en: 'KITCHEN PREP', th: 'ใบเตรียมครัว' },
+  STOCK_ISSUE_SLIP: { en: 'STOCK ISSUE', th: 'ใบเบิกสินค้า' },
   GOODS_RECEIPT_SLIP: { en: 'GOODS RECEIPT', th: 'ใบรับสินค้า' },
-  RECIPE_COST_SHEET: { en: 'RECIPE COST SHEET', th: 'ใบต้นทุนสูตรอาหาร' },
+  RECIPE_COST_SHEET: { en: 'COST SHEET', th: 'ใบต้นทุนสูตรอาหาร' },
   SALES_REPORT: { en: 'SALES REPORT', th: 'รายงานการขาย' },
   STOCK_ADJUSTMENT_SLIP: { en: 'STOCK ADJUSTMENT', th: 'ใบปรับปรุงสต็อก' },
 };
@@ -82,37 +78,62 @@ const MUTED = '#5E6E80';
 const RULE = '#C9D3DE';
 const ZEBRA = '#F6F8FA';
 
-/* ---------- หน้ากระดาษ ---------- */
-const PAGE_W = 595.28;
-const PAGE_H = 841.89;
-const MARGIN = 40;                     // ≈14mm
-export const CONTENT_W = PAGE_W - MARGIN * 2; // 515.28
-const FOOTER_TOP = PAGE_H - 58;
+/* ---------- กระดาษ A5 = ครึ่ง A4 ---------- */
+export const PAGE_SIZE = 'A5';
+export const PAGE_W = 419.53;
+export const PAGE_H = 595.28;
+const MARGIN = 26;                              // ≈9mm — ใบสลิปเล็กใช้ขอบแคบได้
+export const CONTENT_W = PAGE_W - MARGIN * 2;   // 367.53
+const FOOTER_TOP = PAGE_H - 34;
 
 /* ---------- ฟอนต์ไทย ---------- */
 const pickFont = (candidates: string[]) => candidates.find(existsSync);
 const THAI_REGULAR = pickFont(['C:/Windows/Fonts/LeelawUI.ttf', 'C:/Windows/Fonts/leelawad.ttf', 'C:/Windows/Fonts/tahoma.ttf']);
-/** ของเดิมใช้ไฟล์เดียวกับ regular จึงไม่มีน้ำหนักตัวหนาจริง */
 const THAI_BOLD = pickFont(['C:/Windows/Fonts/leelawdb.ttf', 'C:/Windows/Fonts/tahomabd.ttf']);
+
+/**
+ * โลโก้แบรนด์หลักของระบบ — ใช้กับทุกเอกสาร ไม่ผูกกับบริษัทใดบริษัทหนึ่ง
+ *
+ * PHASE 14B ลำดับการเลือกไฟล์:
+ *   1) s2a-logo-mark.png  = เครื่องหมายเฉพาะงานเอกสาร (ยังไม่มีในโปรเจกต์ รอผู้ใช้ส่งไฟล์จริง)
+ *   2) s2a-logo.png       = โลโก้ที่ระบบใช้อยู่ ใช้ชั่วคราวไปก่อน
+ * ไม่ว่าจะเจอไฟล์ไหน จะถูกย่อสำเนาไว้ใช้กับเอกสารเสมอ ต้นฉบับความละเอียดสูงไม่ถูกแตะ
+ */
+const S2A_LOGO_SOURCE = pickFont([
+  path.resolve(process.cwd(), '../frontend/dist/s2a-logo-mark.png'),
+  path.resolve(process.cwd(), '../frontend/public/s2a-logo-mark.png'),
+  path.resolve(process.cwd(), '../frontend/dist/s2a-logo.png'),
+  path.resolve(process.cwd(), '../frontend/public/s2a-logo.png'),
+]) ?? null;
+
+export const S2A_LOGO = documentImage(S2A_LOGO_SOURCE);
+/** true เมื่อใช้ไฟล์เครื่องหมายเฉพาะเอกสารที่ผู้ใช้ส่งมาแล้ว */
+export const S2A_LOGO_IS_DEDICATED = Boolean(S2A_LOGO_SOURCE && /s2a-logo-mark\.png$/i.test(S2A_LOGO_SOURCE));
 
 /**
  * แปลง logoUrl (path บนเว็บ) เป็นไฟล์จริงบนดิสก์เพื่อให้ PDFKit ฝังภาพได้
  * PDFKit อ่านได้เฉพาะ PNG/JPEG และต้องเป็นไฟล์/บัฟเฟอร์ ไม่ใช่ URL
- * ถ้าหาไม่เจอจะคืน null แล้วหัวเอกสารจะใช้ text mark แทน (ไม่ล้ม)
+ * ถ้าหาไม่เจอคืน null แล้วหัวเอกสารจะใช้ตัวอักษรแทน (ไม่ล้ม)
  */
 export function resolveLogoPath(logoUrl?: string | null): string | null {
   if (!logoUrl) return null;
-  if (/^https?:\/\//i.test(logoUrl)) return null;          // URL ภายนอกฝังไม่ได้ตอน render
-  if (!/\.(png|jpe?g)$/i.test(logoUrl)) return null;        // SVG ฝังใน PDFKit ไม่ได้
+  if (/^https?:\/\//i.test(logoUrl)) return null;
+  if (!/\.(png|jpe?g)$/i.test(logoUrl)) return null;
+  const uploadRel = logoUrl.replace(/^\/?api\/uploads\//, '');
   const rel = logoUrl.replace(/^\/+/, '');
   const roots = [
     process.env.DOCUMENT_ASSET_ROOT,
+    path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? './data/uploads'),
     path.resolve(process.cwd(), '../frontend/dist'),
     path.resolve(process.cwd(), '../frontend/public'),
   ].filter((x): x is string => Boolean(x));
   for (const root of roots) {
+    const candidate = path.join(root, uploadRel);
+    if (candidate.startsWith(root) && existsSync(candidate)) return candidate;
+  }
+  for (const root of roots) {
     const candidate = path.join(root, rel);
-    if (existsSync(candidate)) return candidate;
+    if (candidate.startsWith(root) && existsSync(candidate)) return candidate;
   }
   return null;
 }
@@ -124,28 +145,30 @@ const qty = (v: string | number) =>
 
 export type Col = { key: string; label: string; width: number; align: 'left' | 'right' | 'center'; format?: 'money' | 'qty' };
 
-/** คอลัมน์ของแต่ละชนิดเอกสาร — ต่างกันตามข้อมูลที่เอกสารนั้นมีจริง */
+/** คอลัมน์ของแต่ละชนิดเอกสาร — ความกว้างปรับให้พอดีหน้า A5 */
 export function columnsFor(type: DocumentType, lines: DocumentLine[]): Col[] {
-  const no: Col = { key: 'no', label: 'ลำดับ', width: 34, align: 'center' };
+  const no: Col = { key: 'no', label: '#', width: 20, align: 'center' };
   const name: Col = { key: 'name', label: 'รายการ', width: 0, align: 'left' };
-  const unit: Col = { key: 'unit', label: 'หน่วย', width: 48, align: 'center' };
+  const unit: Col = { key: 'unit', label: 'หน่วย', width: 42, align: 'center' };
 
   if (type === 'STOCK_ADJUSTMENT_SLIP') {
-    return sized([no, name, { key: 'before', label: 'ก่อนปรับ', width: 62, align: 'right', format: 'qty' },
-      { key: 'change', label: 'เปลี่ยน', width: 62, align: 'right', format: 'qty' },
-      { key: 'after', label: 'หลังปรับ', width: 62, align: 'right', format: 'qty' },
-      unit, { key: 'reason', label: 'เหตุผล', width: 86, align: 'left' }]);
+    /* StockAdjustmentItem ไม่มีเหตุผลรายบรรทัด (อยู่ที่หัวเอกสาร) จึงไม่ทำคอลัมน์เหตุผล */
+    return sized([no, name,
+      { key: 'before', label: 'ก่อน', width: 54, align: 'right', format: 'qty' },
+      { key: 'change', label: 'เปลี่ยน', width: 54, align: 'right', format: 'qty' },
+      { key: 'after', label: 'หลัง', width: 54, align: 'right', format: 'qty' },
+      unit]);
   }
   // เอกสารที่ไม่มีราคา (ใบเบิก / ใบเตรียมครัว) ไม่ต้องมีคอลัมน์เงิน
   const hasPrice = lines.some((l) => l.price !== undefined || l.total !== undefined);
   if (!hasPrice) {
-    return sized([no, name, { key: 'quantity', label: 'จำนวน', width: 76, align: 'right', format: 'qty' }, unit]);
+    return sized([no, name, { key: 'quantity', label: 'จำนวน', width: 60, align: 'right', format: 'qty' }, unit]);
   }
   return sized([no, name,
-    { key: 'quantity', label: 'จำนวน', width: 62, align: 'right', format: 'qty' },
+    { key: 'quantity', label: 'จำนวน', width: 48, align: 'right', format: 'qty' },
     unit,
-    { key: 'price', label: 'ราคา/หน่วย', width: 74, align: 'right', format: 'money' },
-    { key: 'total', label: 'มูลค่า', width: 84, align: 'right', format: 'money' }]);
+    { key: 'price', label: 'ราคา/หน่วย', width: 60, align: 'right', format: 'money' },
+    { key: 'total', label: 'มูลค่า', width: 66, align: 'right', format: 'money' }]);
 }
 
 /** คอลัมน์ "รายการ" กินพื้นที่ที่เหลือทั้งหมด */
@@ -159,11 +182,11 @@ type Doc = PDFKit.PDFDocument;
 export async function renderBusinessPdf(input: BusinessDocument): Promise<Buffer> {
   const t = TITLES[input.type];
   const doc = new PDFDocument({
-    size: 'A4', margin: MARGIN, bufferPages: true,
+    size: PAGE_SIZE, margin: MARGIN, bufferPages: true,
     info: {
       Title: `${t.en} ${input.documentNo}`,
-      Author: input.company.nameTh,
-      Subject: `${t.th} ${input.documentNo}`,
+      Author: 'S2A — S2 Accounting Consultant',
+      Subject: `${t.th} ${input.documentNo} · ${input.company.nameTh}`,
       Creator: 'S2A ERP',
       CreationDate: new Date(),
     },
@@ -181,7 +204,9 @@ export async function renderBusinessPdf(input: BusinessDocument): Promise<Buffer
   const R = THAI_REGULAR ? 'Thai' : 'Helvetica';
   const B = THAI_BOLD ? 'ThaiBold' : 'Helvetica-Bold';
 
-  let y = drawHeader(doc, input, t, R, B);
+  let y = drawBrandHeader(doc, input, t, R, B);
+  y = drawMeta(doc, input, y, R, B);
+  y = drawCompanyBlock(doc, input, y, R, B);
   y = drawInfo(doc, input, y, R, B);
   y = drawTable(doc, input, y, R, B);
   y = drawTotals(doc, input, y, R, B);
@@ -194,101 +219,132 @@ export async function renderBusinessPdf(input: BusinessDocument): Promise<Buffer
 }
 
 /* ============================================================
-   HEADER — โลโก้ + ตัวตนบริษัท ซ้าย / ชื่อเอกสาร + meta ขวา
+   1) แบรนด์หลัก S2A + ชื่อเอกสาร
    ============================================================ */
-function drawHeader(doc: Doc, input: BusinessDocument, t: { en: string; th: string }, R: string, B: string): number {
-  const c = input.company;
-  const logo = resolveLogoPath(c.logoUrl);
-  let leftX = MARGIN;
+function drawBrandHeader(doc: Doc, input: BusinessDocument, t: { en: string; th: string }, R: string, B: string): number {
   const top = MARGIN;
+  let x = MARGIN;
 
-  if (logo) {
-    try {
-      doc.image(logo, MARGIN, top, { fit: [56, 56] });
-      leftX = MARGIN + 68;
-    } catch { leftX = MARGIN; }   // ไฟล์เสีย → ถอยไปใช้ text mark
+  if (S2A_LOGO) {
+    try { doc.image(S2A_LOGO, x, top - 2, { fit: [30, 30] }); x += 36; }
+    catch { /* ไฟล์เสีย → ใช้ตัวอักษรแทน */ }
   }
-  if (!logo) {
-    // fallback text mark: อักษรย่อในกรอบ ไม่ใช่รูปปลอม
-    doc.rect(MARGIN, top, 56, 56).lineWidth(1).strokeColor(NAVY).stroke();
-    doc.fillColor(NAVY).font(B).fontSize(20)
-      .text('S2A', MARGIN, top + 18, { width: 56, align: 'center' });
-    leftX = MARGIN + 68;
-  }
+  doc.fillColor(NAVY).font(B).fontSize(15).text('S2A', x, top - 1, { lineBreak: false });
+  doc.fillColor(MUTED).font(R).fontSize(6).text('S2 ACCOUNTING CONSULTANT', x, top + 15, { characterSpacing: 0.5, lineBreak: false });
 
-  const leftW = 300;
-  doc.fillColor(NAVY).font(B).fontSize(15).text(c.nameTh, leftX, top + 1, { width: leftW });
-  let ly = doc.y + 1;
-  if (c.nameEn) {
-    doc.fillColor(MUTED).font(R).fontSize(8).text(c.nameEn.toUpperCase(), leftX, ly, { width: leftW, characterSpacing: 0.6 });
-    ly = doc.y + 2;
-  }
-  // แสดงเฉพาะ field ที่มีค่าจริง — ไม่มีก็ไม่ต้องขึ้นบรรทัด
-  const contact: string[] = [];
-  if (c.address) contact.push(c.address.replace(/\s*\n\s*/g, ' '));
-  if (c.phone) contact.push(`โทร. ${c.phone}`);
-  if (c.email) contact.push(c.email);
-  if (c.website) contact.push(c.website);
-  if (c.taxId) contact.push(`เลขประจำตัวผู้เสียภาษี ${c.taxId}`);
-  if (contact.length) {
-    doc.fillColor(MUTED).font(R).fontSize(8).text(contact.join('\n'), leftX, ly, { width: leftW, lineGap: 1.5 });
-  }
+  /* ชนิดเอกสาร → เลขที่ (เด่นสุด) เพื่อให้หยิบใบถูกได้ทันทีจากปึกเอกสาร */
+  const rw = 165;
+  const rx = PAGE_W - MARGIN - rw;
+  doc.fillColor(MUTED).font(R).fontSize(6).text(t.en, rx, top - 2, { width: rw, align: 'right', characterSpacing: 0.6, lineBreak: false });
+  doc.fillColor(NAVY).font(B).fontSize(11).text(t.th, rx, top + 5, { width: rw, align: 'right', lineBreak: false });
+  doc.fillColor(NAVY).font(B).fontSize(14).text(input.documentNo, rx, top + 19, { width: rw, align: 'right', lineBreak: false });
 
-  /* ---- ขวา: ชื่อเอกสาร + ข้อมูลอ้างอิง ---- */
-  const rx = PAGE_W - MARGIN - 200;
-  doc.fillColor(NAVY).font(B).fontSize(20).text(t.en, rx, top, { width: 200, align: 'right' });
-  doc.fillColor(GOLD).font(B).fontSize(11).text(t.th, rx, doc.y, { width: 200, align: 'right' });
-
-  const meta: [string, string][] = [
-    ['เลขที่', input.documentNo],
-    ['วันที่', input.date.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })],
-  ];
-  if (input.createdBy) meta.push(['ผู้จัดทำ', input.createdBy]);
-  if (input.status) meta.push(['สถานะ', input.status]);
-
-  let my = doc.y + 6;
-  for (const [label, value] of meta) {
-    doc.fillColor(MUTED).font(R).fontSize(8).text(label, rx, my, { width: 66, align: 'right' });
-    doc.fillColor(INK).font(B).fontSize(9).text(value, rx + 70, my - 1, { width: 130, align: 'right' });
-    my += 13;
-  }
-
-  const headerBottom = Math.max(doc.y, my, top + 74) + 8;
-  doc.moveTo(MARGIN, headerBottom).lineTo(PAGE_W - MARGIN, headerBottom).lineWidth(1.6).strokeColor(NAVY).stroke();
-  doc.moveTo(MARGIN, headerBottom + 2.6).lineTo(MARGIN + 92, headerBottom + 2.6).lineWidth(1.6).strokeColor(GOLD).stroke();
-  return headerBottom + 16;
+  const bottom = top + 38;
+  doc.moveTo(MARGIN, bottom).lineTo(PAGE_W - MARGIN, bottom).lineWidth(1.2).strokeColor(NAVY).stroke();
+  doc.moveTo(MARGIN, bottom + 1.8).lineTo(MARGIN + 54, bottom + 1.8).lineWidth(1.2).strokeColor(GOLD).stroke();
+  return bottom + 8;
 }
 
 /* ============================================================
-   INFO — ตารางข้อมูลเอกสารแบบเบา ไม่ใช่การ์ดแบบหน้าเว็บ
+   2) เลขที่ / วันที่ / สถานะ / อ้างอิง / ผู้จัดทำ
+   ============================================================ */
+function drawMeta(doc: Doc, input: BusinessDocument, y: number, R: string, B: string): number {
+  /* เลขที่เอกสารอยู่ในหัวกระดาษแล้ว ตรงนี้จึงเหลือข้อมูลรอง */
+  const entries: [string, string][] = [
+    ['วันที่', input.date.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })],
+  ];
+  if (input.status) entries.push(['สถานะ', input.status]);
+  if (input.reference) entries.push(['เอกสารอ้างอิง', input.reference]);
+  if (input.createdBy) entries.push(['ผู้จัดทำ', input.createdBy]);
+
+  const perRow = 3;
+  const colW = CONTENT_W / perRow;
+  let maxY = y;
+  entries.forEach((entry, i) => {
+    const cx = MARGIN + (i % perRow) * colW;
+    const ry = y + Math.floor(i / perRow) * 15;
+    doc.fillColor(MUTED).font(R).fontSize(6.5).text(entry[0], cx, ry, { width: colW - 6, lineBreak: false });
+    doc.fillColor(INK).font(B).fontSize(8.5).text(entry[1], cx, ry + 6.5, { width: colW - 6, lineBreak: false, ellipsis: true });
+    maxY = Math.max(maxY, ry + 15);
+  });
+  return maxY + 5;
+}
+
+/* ============================================================
+   3) บริษัทที่เอกสารออกให้ — ข้อมูลจริงจาก Company เท่านั้น
+   ============================================================ */
+function drawCompanyBlock(doc: Doc, input: BusinessDocument, y: number, R: string, B: string): number {
+  const c = input.company;
+  doc.rect(MARGIN, y, CONTENT_W, 0.6).fill(RULE);
+
+  let cy = y + 5;
+  doc.fillColor(MUTED).font(R).fontSize(6).text('เอกสารสำหรับ', MARGIN, cy, { lineBreak: false });
+  cy += 8;
+
+  const logo = documentImage(resolveLogoPath(c.logoUrl), 120);
+  let textX = MARGIN;
+  if (logo) {
+    try { doc.image(logo, MARGIN, cy, { fit: [26, 26] }); textX = MARGIN + 32; }
+    catch { textX = MARGIN; }
+  }
+  const textW = CONTENT_W - (textX - MARGIN);
+
+  doc.fillColor(NAVY).font(B).fontSize(9.5).text(c.nameTh, textX, cy, { width: textW, lineBreak: false, ellipsis: true });
+  let ly = cy + 11;
+  if (c.nameEn) {
+    doc.fillColor(MUTED).font(R).fontSize(6.5).text(c.nameEn.toUpperCase(), textX, ly, { width: textW, lineBreak: false, ellipsis: true });
+    ly += 8;
+  }
+  /* แสดงเฉพาะช่องที่มีค่าจริง — ว่างแล้วข้ามไปเลย ไม่เว้นบรรทัดทิ้งไว้ */
+  if (c.address) {
+    doc.fillColor(INK).font(R).fontSize(6.8).text(c.address.replace(/\s*\n\s*/g, ' '), textX, ly, { width: textW, lineGap: 0.5 });
+    ly = doc.y + 1;
+  }
+  const contact: string[] = [];
+  if (c.taxId) contact.push(`เลขภาษี ${c.taxId}`);
+  if (c.phone) contact.push(`โทร. ${c.phone}`);
+  if (c.email) contact.push(c.email);
+  if (c.lineId) contact.push(`LINE ${c.lineId}`);
+  if (c.website) contact.push(c.website);
+  if (contact.length) {
+    doc.fillColor(MUTED).font(R).fontSize(6.8).text(contact.join('  ·  '), textX, ly, { width: textW, lineGap: 0.5 });
+    ly = doc.y + 1;
+  }
+
+  const bottom = Math.max(ly, logo ? cy + 28 : ly) + 4;
+  doc.rect(MARGIN, bottom, CONTENT_W, 0.6).fill(RULE);
+  return bottom + 7;
+}
+
+/* ============================================================
+   4) ข้อมูลเฉพาะเอกสาร (ผู้จำหน่าย / คลัง / เหตุผล ฯลฯ)
    ============================================================ */
 function drawInfo(doc: Doc, input: BusinessDocument, y: number, R: string, B: string): number {
   const items = input.subject ?? [];
   if (!items.length) return y;
-  const perRow = items.length <= 2 ? 2 : items.length <= 6 ? 3 : 4;
+  const perRow = items.length <= 2 ? 2 : 3;
   const colW = CONTENT_W / perRow;
   let maxY = y;
   items.forEach((entry, i) => {
     const x = MARGIN + (i % perRow) * colW;
-    const rowY = y + Math.floor(i / perRow) * 34;
-    doc.fillColor(MUTED).font(R).fontSize(7.5).text(entry.label.toUpperCase(), x, rowY, { width: colW - 12, characterSpacing: 0.4 });
-    doc.fillColor(INK).font(B).fontSize(10).text(entry.value || '—', x, rowY + 11, { width: colW - 12 });
-    maxY = Math.max(maxY, rowY + 30);
+    const ry = y + Math.floor(i / perRow) * 15;
+    doc.fillColor(MUTED).font(R).fontSize(6.5).text(entry.label, x, ry, { width: colW - 6, lineBreak: false });
+    doc.fillColor(INK).font(B).fontSize(8).text(entry.value || '—', x, ry + 6.5, { width: colW - 6, lineBreak: false, ellipsis: true });
+    maxY = Math.max(maxY, ry + 15);
   });
-  doc.moveTo(MARGIN, maxY).lineTo(PAGE_W - MARGIN, maxY).lineWidth(0.5).strokeColor(RULE).stroke();
-  return maxY + 14;
+  return maxY + 5;
 }
 
 /* ============================================================
-   TABLE — หัวตารางซ้ำทุกหน้า
+   5) ตาราง — หัวตารางซ้ำทุกหน้า
    ============================================================ */
 function drawTableHead(doc: Doc, cols: Col[], y: number, B: string): number {
-  const h = 22;
+  const h = 15;
   doc.rect(MARGIN, y, CONTENT_W, h).fill(NAVY);
   let x = MARGIN;
-  doc.fillColor('#FFFFFF').font(B).fontSize(8.5);
+  doc.fillColor('#FFFFFF').font(B).fontSize(7);
   for (const col of cols) {
-    doc.text(col.label, x + 6, y + 7, { width: col.width - 12, align: col.align, lineBreak: false });
+    doc.text(col.label, x + 4, y + 4.5, { width: col.width - 8, align: col.align, lineBreak: false });
     x += col.width;
   }
   return y + h;
@@ -301,7 +357,6 @@ export function cellValue(line: DocumentLine, col: Col, index: number): string {
   if (col.format === 'money') return money(raw as string | number);
   if (col.format === 'qty') {
     const n = Number(raw);
-    // ใบปรับปรุงสต็อก: แสดงเครื่องหมายให้เห็นทิศทางชัด
     return col.key === 'change' && n > 0 ? `+${qty(n)}` : qty(n);
   }
   return String(raw);
@@ -313,9 +368,9 @@ function drawTable(doc: Doc, input: BusinessDocument, y: number, R: string, B: s
 
   input.lines.forEach((line, i) => {
     const hasDetail = Boolean(line.detail);
-    const rowH = hasDetail ? 30 : 21;
-    // เหลือที่ไม่พอ → ขึ้นหน้าใหม่แล้ววาดหัวตารางซ้ำ
-    if (y + rowH > FOOTER_TOP - 10) {
+    const rowH = hasDetail ? 21 : 14;
+    /* ที่เหลือไม่พอ → ขึ้นหน้าใหม่แล้ววาดหัวตารางซ้ำ ไม่ตัดแถวกลางคัน */
+    if (y + rowH > FOOTER_TOP - 8) {
       doc.addPage();
       y = drawTableHead(doc, cols, MARGIN, B);
     }
@@ -324,112 +379,109 @@ function drawTable(doc: Doc, input: BusinessDocument, y: number, R: string, B: s
     let x = MARGIN;
     for (const col of cols) {
       const isName = col.key === 'name';
-      doc.fillColor(isName ? INK : NAVY_SOFT).font(isName ? B : R).fontSize(9);
-      doc.text(cellValue(line, col, i), x + 6, y + 6, {
-        width: col.width - 12,
+      doc.fillColor(isName ? INK : NAVY_SOFT).font(isName ? B : R).fontSize(7.5);
+      doc.text(cellValue(line, col, i), x + 4, y + 4, {
+        width: col.width - 8,
         align: col.align,
-        // หน่วย/ตัวเลขห้ามตัดบรรทัด ชื่อรายการตัดได้บรรทัดเดียว
-        lineBreak: isName,
-        ellipsis: !isName,
-        height: isName ? rowH - 8 : undefined,
+        // รหัสหน่วยและตัวเลขห้ามตกบรรทัดเด็ดขาด ชื่อยาวให้ตัดด้วย ellipsis
+        lineBreak: false,
+        ellipsis: true,
       });
       x += col.width;
     }
     if (hasDetail) {
-      doc.fillColor(MUTED).font(R).fontSize(7.5)
-        .text(line.detail!, MARGIN + cols[0].width + 6, y + 18, { width: cols[1].width - 12, lineBreak: false, ellipsis: true });
+      doc.fillColor(MUTED).font(R).fontSize(6.2)
+        .text(line.detail!, MARGIN + cols[0].width + 4, y + 13, { width: cols[1].width - 8, lineBreak: false, ellipsis: true });
     }
-    doc.moveTo(MARGIN, y + rowH).lineTo(PAGE_W - MARGIN, y + rowH).lineWidth(0.4).strokeColor(RULE).stroke();
+    doc.moveTo(MARGIN, y + rowH).lineTo(PAGE_W - MARGIN, y + rowH).lineWidth(0.3).strokeColor(RULE).stroke();
     y += rowH;
   });
   return y;
 }
 
 /* ============================================================
-   TOTALS — บล็อกสรุปชิดขวา
+   6) ยอดรวม — บล็อกกระชับชิดขวา
    ============================================================ */
 function drawTotals(doc: Doc, input: BusinessDocument, y: number, R: string, B: string): number {
   const rows = input.summary ?? [];
-  if (input.total === undefined && !rows.length) return y + 6;
+  if (input.total === undefined && !rows.length) return y + 4;
 
-  const blockW = 240;
+  const blockW = 176;
   const x = PAGE_W - MARGIN - blockW;
-  let ty = y + 12;
-  if (ty + 30 + rows.length * 16 > FOOTER_TOP) { doc.addPage(); ty = MARGIN; }
+  let ty = y + 6;
+  if (ty + 22 + rows.length * 11 > FOOTER_TOP) { doc.addPage(); ty = MARGIN; }
 
   for (const row of rows) {
-    doc.fillColor(MUTED).font(R).fontSize(9).text(row.label, x, ty, { width: blockW - 110, align: 'right' });
-    doc.fillColor(INK).font(R).fontSize(9).text(money(row.value), x + blockW - 106, ty, { width: 106, align: 'right' });
-    ty += 16;
+    doc.fillColor(MUTED).font(R).fontSize(7.5).text(row.label, x, ty, { width: blockW - 82, align: 'right', lineBreak: false });
+    doc.fillColor(INK).font(R).fontSize(7.5).text(money(row.value), x + blockW - 78, ty, { width: 78, align: 'right', lineBreak: false });
+    ty += 11;
   }
   if (input.total !== undefined) {
-    doc.moveTo(x, ty + 2).lineTo(PAGE_W - MARGIN, ty + 2).lineWidth(1).strokeColor(NAVY).stroke();
-    ty += 8;
-    doc.fillColor(NAVY).font(B).fontSize(10)
-      .text(input.totalLabel ?? 'ยอดรวมทั้งสิ้น', x, ty + 4, { width: blockW - 116, align: 'right' });
-    doc.fillColor(NAVY).font(B).fontSize(15)
-      .text(money(input.total), x + blockW - 112, ty, { width: 112, align: 'right' });
-    ty += 26;
-    doc.moveTo(x + blockW - 112, ty).lineTo(PAGE_W - MARGIN, ty).lineWidth(0.8).strokeColor(GOLD).stroke();
-    ty += 6;
+    /* ยอดรวมสุทธิ: แถบพื้นอ่อน + ตัวเลขใหญ่สุดในเอกสาร ให้เห็นก่อนตัวเลขอื่น */
+    doc.rect(x, ty, blockW, 21).fill(ZEBRA);
+    doc.moveTo(x, ty).lineTo(PAGE_W - MARGIN, ty).lineWidth(0.9).strokeColor(NAVY).stroke();
+    doc.fillColor(NAVY).font(B).fontSize(8)
+      .text(input.totalLabel ?? 'ยอดรวมทั้งสิ้น', x + 6, ty + 7, { width: blockW - 96, align: 'left', lineBreak: false });
+    doc.fillColor(NAVY).font(B).fontSize(13.5)
+      .text(money(input.total), x + blockW - 86, ty + 4, { width: 80, align: 'right', lineBreak: false });
+    ty += 21;
+    doc.moveTo(x, ty).lineTo(PAGE_W - MARGIN, ty).lineWidth(1.4).strokeColor(GOLD).stroke();
+    ty += 5;
   }
   return ty;
 }
 
 function drawNote(doc: Doc, input: BusinessDocument, y: number, R: string, B: string): number {
   if (!input.note) return y;
-  let ny = y + 10;
-  if (ny + 34 > FOOTER_TOP) { doc.addPage(); ny = MARGIN; }
-  doc.fillColor(MUTED).font(B).fontSize(8).text('หมายเหตุ', MARGIN, ny);
-  doc.fillColor(INK).font(R).fontSize(9).text(input.note, MARGIN, ny + 11, { width: CONTENT_W - 260 });
-  return Math.max(doc.y, ny + 30);
+  let ny = y + 5;
+  if (ny + 22 > FOOTER_TOP) { doc.addPage(); ny = MARGIN; }
+  doc.fillColor(MUTED).font(B).fontSize(6.5).text('หมายเหตุ', MARGIN, ny, { lineBreak: false });
+  doc.fillColor(INK).font(R).fontSize(7).text(input.note, MARGIN, ny + 8, { width: CONTENT_W - 186 });
+  return Math.max(doc.y, ny + 20);
 }
 
 /* ============================================================
-   SIGNATURES — ไม่ให้ถูกตัดข้ามหน้า
+   7) ลายเซ็น — กระชับ ไม่กินครึ่งหน้า
    ============================================================ */
 function drawSignatures(doc: Doc, y: number, R: string, B: string) {
-  const BLOCK_H = 76;
-  let sy = y + 26;
-  if (sy + BLOCK_H > FOOTER_TOP) { doc.addPage(); sy = MARGIN + 10; }
+  const BLOCK_H = 34;
+  let sy = y + 10;
+  if (sy + BLOCK_H > FOOTER_TOP) { doc.addPage(); sy = MARGIN + 6; }
 
   const roles = ['ผู้จัดทำ', 'ผู้ตรวจสอบ', 'ผู้อนุมัติ'];
   const colW = CONTENT_W / roles.length;
   roles.forEach((role, i) => {
     const x = MARGIN + i * colW;
-    const lineY = sy + 34;
-    doc.moveTo(x + 14, lineY).lineTo(x + colW - 14, lineY).lineWidth(0.7).strokeColor(RULE).dash(2, { space: 2 }).stroke();
+    const lineY = sy + 16;
+    doc.moveTo(x + 8, lineY).lineTo(x + colW - 8, lineY).lineWidth(0.5).strokeColor(RULE).dash(1.5, { space: 1.5 }).stroke();
     doc.undash();
-    doc.fillColor(INK).font(B).fontSize(9).text(role, x, lineY + 7, { width: colW, align: 'center' });
-    doc.fillColor(MUTED).font(R).fontSize(7.5)
-      .text('วันที่ ......... / ......... / .........', x, lineY + 20, { width: colW, align: 'center' });
+    doc.fillColor(INK).font(B).fontSize(7).text(role, x, lineY + 4, { width: colW, align: 'center', lineBreak: false });
+    doc.fillColor(MUTED).font(R).fontSize(5.8)
+      .text('...... / ...... / ......', x, lineY + 13, { width: colW, align: 'center', lineBreak: false });
   });
 }
 
 /* ============================================================
-   FOOTER — เดินทุกหน้า ใส่เลขหน้า X / Y
+   8) ท้ายกระดาษ — เดินทุกหน้า พร้อมเลขหน้า
    ============================================================ */
 function drawFooters(doc: Doc, input: BusinessDocument, R: string) {
   const range = doc.bufferedPageRange();
   const total = range.count;
   for (let i = 0; i < total; i += 1) {
     doc.switchToPage(range.start + i);
-    doc.moveTo(MARGIN, FOOTER_TOP).lineTo(PAGE_W - MARGIN, FOOTER_TOP).lineWidth(0.5).strokeColor(RULE).stroke();
+    /* PDFKit จะขึ้นหน้าใหม่ให้อัตโนมัติเมื่อเขียนข้อความล้ำเข้าไปในเขตขอบล่าง
+       ท้ายกระดาษต้องอยู่ในเขตนั้นพอดี จึงปิด margin ล่างชั่วคราวระหว่างวาด
+       (ไม่งั้นเอกสาร 2 บรรทัดจะกลายเป็น 3 หน้า) */
+    doc.page.margins.bottom = 0;
+    doc.moveTo(MARGIN, FOOTER_TOP).lineTo(PAGE_W - MARGIN, FOOTER_TOP).lineWidth(0.4).strokeColor(RULE).stroke();
 
-    const left: string[] = [input.company.nameTh];
-    if (input.company.phone) left.push(`โทร. ${input.company.phone}`);
-    if (input.company.email) left.push(input.company.email);
-    doc.fillColor(MUTED).font(R).fontSize(7.5)
-      .text(left.join('  ·  '), MARGIN, FOOTER_TOP + 7, { width: CONTENT_W - 170, lineBreak: false, ellipsis: true });
+    const left = input.company.documentFooter?.trim() || `${input.company.nameTh} · ออกโดยระบบ S2A`;
+    doc.fillColor(MUTED).font(R).fontSize(6)
+      .text(left, MARGIN, FOOTER_TOP + 5, { width: CONTENT_W - 120, lineBreak: false, ellipsis: true });
 
-    doc.fillColor(MUTED).font(R).fontSize(7.5)
-      .text(`${input.documentNo}   ·   หน้า ${i + 1} / ${total}`, PAGE_W - MARGIN - 170, FOOTER_TOP + 7,
-        { width: 170, align: 'right', lineBreak: false });
-
-    if (input.company.documentFooter) {
-      doc.fillColor(MUTED).font(R).fontSize(7)
-        .text(input.company.documentFooter, MARGIN, FOOTER_TOP + 20, { width: CONTENT_W, align: 'center', lineBreak: false, ellipsis: true });
-    }
+    doc.fillColor(MUTED).font(R).fontSize(6)
+      .text(`${input.documentNo}  ·  ${i + 1}/${total}`, PAGE_W - MARGIN - 120, FOOTER_TOP + 5,
+        { width: 120, align: 'right', lineBreak: false });
   }
   doc.flushPages();
 }

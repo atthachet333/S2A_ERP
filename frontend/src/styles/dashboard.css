@@ -261,3 +261,82 @@
   .dash-quick-btn span { width: 22px; height: 22px; }
   .dash-statrow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ============================================================
+   PHASE 14 — กราฟสรุปและการ์ดข้อมูลบริษัท
+   ทุกสีมาจาก token ใน tokens.css และทุกชิ้นมีตัวเลข/ป้ายกำกับเสมอ
+   จึงอ่านได้แม้พิมพ์ขาวดำหรือผู้ใช้แยกสีไม่ได้
+   ============================================================ */
+.dash-span-12 { grid-column: span 12; }
+
+/* ---------- โดนัท ---------- */
+.dash-donut { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: var(--space-4); align-items: center; }
+.dash-donut > svg { width: 108px; height: 108px; }
+.donut-slice { stroke: var(--surface); stroke-width: 1.5; }
+.donut-value { font-family: var(--font-num); font-size: 21px; font-weight: 800; fill: var(--heading); }
+.donut-label { font-size: 9px; fill: var(--text-subtle); }
+
+.tone-ok { fill: var(--success); }
+.tone-warn { fill: var(--warning); }
+.tone-bad { fill: var(--danger); }
+.tone-info { fill: var(--blue); }
+.tone-muted { fill: var(--text-subtle); }
+
+.dash-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 0; }
+.dash-legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; gap: var(--space-2); align-items: center; font-size: 12px; }
+.dash-legend .lg-dot { width: 9px; height: 9px; border-radius: 3px; }
+.dash-legend .lg-dot.tone-ok { background: var(--success); }
+.dash-legend .lg-dot.tone-warn { background: var(--warning); }
+.dash-legend .lg-dot.tone-bad { background: var(--danger); }
+.dash-legend .lg-dot.tone-info { background: var(--blue); }
+.dash-legend .lg-dot.tone-muted { background: var(--text-subtle); }
+.dash-legend .lg-name { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-legend b { font-family: var(--font-num); color: var(--text); }
+.dash-legend small { font-family: var(--font-num); color: var(--text-subtle); font-size: 11px; min-width: 38px; text-align: right; }
+
+/* ---------- แท่งเอกสาร ---------- */
+.dash-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.dash-bars li { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; }
+.dash-bars .bar-name { font-size: 12px; color: var(--text-muted); }
+.dash-bars .bar-track { display: flex; height: 10px; border-radius: 999px; background: var(--surface-muted); overflow: hidden; }
+.dash-bars .bar-fill { display: block; height: 100%; }
+.dash-bars .bar-fill.tone-ok { background: var(--success); }
+.dash-bars .bar-fill.tone-warn { background: var(--warning); }
+.dash-bars .bar-figures { display: flex; align-items: baseline; gap: var(--space-2); }
+.dash-bars .bar-figures b { font-family: var(--font-num); font-size: 13px; color: var(--text); }
+.dash-bars .bar-figures small { font-size: 11px; color: var(--text-subtle); white-space: nowrap; }
+
+/* ---------- การ์ดข้อมูลบริษัท ---------- */
+.dash-company-grid { display: grid; grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+.dc-identity { display: flex; gap: var(--space-3); align-items: center; min-width: 0; }
+.dc-logo { width: 52px; height: 52px; object-fit: contain; border: 1px solid var(--border); border-radius: var(--radius-sm); flex: none; }
+.dc-logo-text { display: grid; place-items: center; font-weight: 800; color: var(--navy); background: var(--surface-2); }
+.dc-identity strong { display: block; font-size: 14px; color: var(--heading); }
+.dc-identity span { font-size: 11.5px; color: var(--text-subtle); }
+.dc-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--space-2) var(--space-4); margin: 0; }
+.dc-rows > div { display: grid; gap: 1px; min-width: 0; }
+.dc-rows dt { font-size: 11px; color: var(--text-subtle); }
+.dc-rows dd { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+
+@media (max-width: 1366px) { .dash-span-12 { grid-column: span 12; } }
+@media (max-width: 1024px) {
+  .dash-span-12 { grid-column: 1 / -1; }
+  .dash-company-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+}
+@media (max-width: 430px) {
+  .dash-donut { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .dash-legend { width: 100%; }
+  .dash-bars li { grid-template-columns: 52px minmax(0, 1fr); }
+  .dash-bars .bar-figures { grid-column: 1 / -1; justify-content: flex-end; }
+}
+
+/* PHASE 14B — สถานะข้อมูลน้อย/ยังไม่มีข้อมูล แทนกราฟที่จะสื่อความหมายผิด */
+.dash-lowdata {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  margin: 0; padding: var(--space-3);
+  border: 1px dashed var(--border); border-radius: var(--radius-field);
+  background: var(--surface-2);
+  font-size: 12.5px; color: var(--text-muted);
+}
+.dash-lowdata b { font-family: var(--font-num); color: var(--text); }
+.dash-lowdata small { flex-basis: 100%; font-size: 11.5px; color: var(--text-subtle); }

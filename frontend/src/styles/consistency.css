@@ -54,3 +54,56 @@
    ธีมสว่างไม่แตะ เพราะผ่านอยู่แล้ว
    ============================================================ */
 :root.dark .field-error { color: var(--danger-fg); }
+
+/* ============================================================
+   PHASE 13B — จัดการโลโก้ + ตัวอย่างหัวเอกสาร ในหน้าตั้งค่าบริษัท
+   ใช้ token จาก tokens.css ทั้งหมด ไม่ hardcode สี
+   ============================================================ */
+.logo-manager { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.logo-frame {
+  display: grid; place-items: center; width: 132px; height: 132px; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-2);
+}
+.logo-frame img { width: 100%; height: 100%; object-fit: contain; }
+.logo-frame .logo-fallback { font-size: 30px; font-weight: 800; color: var(--navy); }
+.logo-actions { display: grid; gap: var(--space-2); min-width: 0; }
+.logo-actions input[type="file"] { font-size: 12.5px; color: var(--text-muted); }
+.logo-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.logo-hint { margin: 0; font-size: 12px; color: var(--text-subtle); }
+.logo-hint.is-warn { color: var(--note-warn-fg); font-weight: 600; }
+
+.doc-preview { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); padding: var(--space-4); }
+.doc-preview-head { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; }
+.doc-preview-logo { display: grid; place-items: center; width: 54px; height: 54px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.doc-preview-logo img { width: 100%; height: 100%; object-fit: contain; }
+.doc-preview-logo span { font-size: 15px; font-weight: 800; color: var(--navy); }
+.doc-preview-identity { display: grid; gap: 1px; min-width: 0; }
+.doc-preview-identity strong { font-size: 14px; color: var(--navy); }
+.doc-preview-identity span { font-size: 11.5px; color: var(--text-subtle); }
+.doc-preview-identity .dp-en { letter-spacing: .04em; }
+.doc-preview-title { text-align: right; display: grid; gap: 2px; }
+.doc-preview-title b { font-size: 16px; color: var(--navy); }
+.doc-preview-title i { font-style: normal; font-size: 12px; font-weight: 700; color: var(--gold-fg); }
+.doc-preview-foot {
+  display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between;
+  margin-top: var(--space-3); padding-top: var(--space-2);
+  border-top: 1px solid var(--divider); font-size: 11px; color: var(--text-subtle);
+}
+@media (max-width: 760px) {
+  .logo-manager { grid-template-columns: minmax(0, 1fr); }
+  .doc-preview-head { grid-template-columns: 44px minmax(0, 1fr); }
+  .doc-preview-title { grid-column: 1 / -1; text-align: left; }
+  .logo-buttons .btn { flex: 1 1 auto; min-height: var(--control-h); }
+}
+
+/* PHASE 14 — แถบแบรนด์ S2A ในตัวอย่างหัวเอกสาร (แบรนด์หลักอยู่เหนือข้อมูลบริษัท) */
+.doc-preview-brand {
+  display: grid; grid-template-columns: 34px auto minmax(0, 1fr); gap: var(--space-2);
+  align-items: center; padding-bottom: var(--space-2); margin-bottom: var(--space-3);
+  border-bottom: 2px solid var(--navy);
+}
+.doc-preview-brand > img { width: 34px; height: 34px; object-fit: contain; }
+.doc-preview-brand > div b { display: block; font-size: 15px; font-weight: 800; color: var(--navy); line-height: 1.1; }
+.doc-preview-brand > div i { font-style: normal; font-size: 8px; letter-spacing: .08em; color: var(--text-subtle); }
+.doc-preview-brand .doc-preview-title { justify-self: end; text-align: right; }
+.doc-preview-identity .dp-for { font-size: 10px; color: var(--text-subtle); }

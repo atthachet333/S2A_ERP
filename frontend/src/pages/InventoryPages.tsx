@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, ClipboardCheck, History,
+  AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, ClipboardCheck, FileDown, History,
   PackageCheck, PackageX, Pencil, Printer, RotateCcw, SlidersHorizontal, Warehouse as WarehouseIcon, X,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
@@ -430,6 +430,22 @@ export function StockAdjustmentPage() {
   }, [warehouseId]);
 
   /** สร้าง payload สำหรับพิมพ์จาก "แถวประวัติที่เลือก" เท่านั้น */
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+  /**
+   * ดาวน์โหลดใบปรับปรุงสต็อกเป็น PDF ของ "แถวที่กด" เท่านั้น
+   * ใช้ row.id ตรง ๆ ไม่แตะ printDoc/historyDoc เพื่อไม่ให้ได้ใบล่าสุดมาแทน
+   */
+  const downloadAdjustmentPdf = async (row: AdjustmentHistoryRow) => {
+    setPdfBusy(row.id);
+    try {
+      await apiClient.download(`/business/documents/STOCK_ADJUSTMENT_SLIP/${row.id}.pdf`,
+        { expect: 'pdf', fallbackName: `AJ-${row.adjustmentNo}.pdf` });
+      toast({ title: `ดาวน์โหลด ${row.adjustmentNo} แล้ว`, variant: 'success' });
+    } catch (reason) {
+      toast({ title: 'ดาวน์โหลด PDF ไม่สำเร็จ', description: reason instanceof Error ? reason.message : '', variant: 'error' });
+    } finally { setPdfBusy(null); }
+  };
+
   const printHistoryRow = (row: AdjustmentHistoryRow) => {
     setPrintDoc(null);                       // กันไม่ให้ใบที่เพิ่งบันทึกถูกพิมพ์ปนมา
     setSelectedPrintAdjustment(toPrintPayload(row, stock));
@@ -648,6 +664,7 @@ export function StockAdjustmentPage() {
                   <td data-label="จัดการ"><span className="adj-row-actions">
                     <Link to={`/inventory/movements?ref=${h.adjustmentNo}`} className="btn" aria-label={`ดูการเคลื่อนไหวของ ${h.adjustmentNo}`}><History aria-hidden width={15} />Movement</Link>
                     <button type="button" className="btn" aria-label={`พิมพ์ใบปรับปรุง ${h.adjustmentNo}`} onClick={() => printHistoryRow(h)}><Printer aria-hidden width={15} />พิมพ์</button>
+                    <button type="button" className="btn" aria-label={`ดาวน์โหลด PDF ${h.adjustmentNo}`} disabled={pdfBusy === h.id} onClick={() => void downloadAdjustmentPdf(h)}><FileDown aria-hidden width={15} />PDF</button>
                   </span></td>
                 </tr>;
               })}

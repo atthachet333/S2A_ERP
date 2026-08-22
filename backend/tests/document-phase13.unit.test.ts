@@ -78,9 +78,11 @@ describe('PHASE 13 — คอลัมน์ตารางตามชนิด
     expect(keys).not.toContain('total');
   });
 
-  it('ใบปรับปรุงสต็อกมี ก่อน / เปลี่ยน / หลัง / เหตุผล', () => {
+  /* PHASE 13B — ตัดคอลัมน์ "เหตุผล" ออก เพราะ StockAdjustmentItem ไม่มีเหตุผลรายบรรทัด
+     (เหตุผลอยู่ที่หัวเอกสาร) การมีคอลัมน์นี้จะซ้ำค่าเดิมทุกแถวหรือว่างทั้งคอลัมน์ */
+  it('ใบปรับปรุงสต็อกมี ก่อน / เปลี่ยน / หลัง / หน่วย', () => {
     const keys = columnsFor('STOCK_ADJUSTMENT_SLIP', []).map((c) => c.key);
-    expect(keys).toEqual(['no', 'name', 'before', 'change', 'after', 'unit', 'reason']);
+    expect(keys).toEqual(['no', 'name', 'before', 'change', 'after', 'unit']);
   });
 
   it('ความกว้างรวมพอดีกับพื้นที่ในขอบกระดาษเสมอ', () => {
@@ -150,10 +152,12 @@ describe('PHASE 13 — การจัดรูปแบบค่าในตา
 describe('PHASE 13 — ไฟล์ PDF', () => {
   const pageCount = (buf: Buffer) => (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
 
-  it('เป็นไฟล์ PDF จริงและขนาด A4', async () => {
+  /* PHASE 14 — เปลี่ยนกระดาษเป็น A5 (ครึ่ง A4) เพื่อประหยัดกระดาษ
+     ข้อนี้จึงตรวจว่าเป็น PDF จริงและใช้ขนาดที่ตั้งใจไว้ ณ ปัจจุบัน */
+  it('เป็นไฟล์ PDF จริงและขนาดครึ่ง A4', async () => {
     const buf = await renderBusinessPdf(baseDoc());
     expect(buf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
-    expect(buf.toString('latin1')).toContain('/MediaBox [0 0 595.28 841.89]');
+    expect(buf.toString('latin1')).toContain('/MediaBox [0 0 419.53 595.28]');
   });
 
   it('ฝังโลโก้ลงในไฟล์จริง', async () => {
@@ -161,10 +165,11 @@ describe('PHASE 13 — ไฟล์ PDF', () => {
     expect(buf.toString('latin1')).toMatch(/\/Subtype\s*\/Image/);
   });
 
-  it('ไม่มีโลโก้ก็ยังสร้างเอกสารได้ (text mark)', async () => {
+  /* PHASE 14 — แบรนด์ S2A ถูกฝังทุกเอกสารเสมอ ดังนั้นจะมีภาพอยู่แล้วหนึ่งรูป
+     ข้อนี้จึงตรวจแค่ว่า "ไม่มีโลโก้บริษัท" แล้วยังสร้างเอกสารได้ตามปกติ */
+  it('ไม่มีโลโก้บริษัทก็ยังสร้างเอกสารได้', async () => {
     const buf = await renderBusinessPdf(baseDoc({ company: { ...company, logoUrl: null } }));
     expect(buf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
-    expect(buf.toString('latin1')).not.toMatch(/\/Subtype\s*\/Image/);
   });
 
   it('ฝังฟอนต์ทั้ง regular และ bold — เอกสารจึงมีน้ำหนักตัวอักษรจริง', async () => {

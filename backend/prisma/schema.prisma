@@ -195,6 +195,8 @@ model Company {
   phone          String?
   email          String?
   website        String?
+  /** PHASE 14 — LINE ID / LINE OA สำหรับติดต่อ (ไม่บังคับ) */
+  lineId         String?
   authorizedName String?
   documentFooter String?
   signatureUrl   String?

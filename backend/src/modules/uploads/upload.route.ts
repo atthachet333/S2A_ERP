@@ -15,9 +15,11 @@ import { writeAudit } from '../../lib/http.js';
  * - เก็บไฟล์บนดิสก์ (ไม่เก็บ base64 ใน DB); DB เก็บ relative path
  * - GET เสิร์ฟรูปแบบ read-only ด้วยชื่อไฟล์ที่ผ่าน whitelist เท่านั้น
  */
-const KINDS = new Set(['items', 'menus']);
+const KINDS = new Set(['items', 'menus', 'company']);
 // อัปโหลดรูปวัตถุดิบ/บรรจุภัณฑ์/เมนู — ให้ผู้ที่จัดการรายการเหล่านั้นอัปโหลดได้
 const MANAGE = requirePermission('INGREDIENT_CREATE', 'PACKAGING_CREATE', 'INGREDIENT_EDIT', 'PACKAGING_EDIT', 'RECIPE_CREATE', 'RECIPE_EDIT');
+/** โลโก้บริษัทเป็นข้อมูลตั้งค่าระบบ จึงใช้สิทธิ์เดียวกับหน้าตั้งค่าบริษัท */
+const MANAGE_COMPANY = requirePermission('SYSTEM_SETTINGS');
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -38,12 +40,27 @@ const FILENAME_RE = /^[a-f0-9-]{36}\.(jpg|png|webp)$/;
 const CONTENT_TYPE: Record<string, string> = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 
 export default async function uploadRoutes(app: FastifyInstance) {
-  async function handleUpload(kind: 'items' | 'menus', req: FastifyRequest, reply: FastifyReply) {
+  /**
+   * PHASE 13B — โลโก้บริษัทถูกฝังลง PDF ด้วย PDFKit ซึ่งรองรับเฉพาะ PNG/JPEG
+   * จึงต้องจำกัดชนิดไฟล์ของ kind 'company' ไม่ให้รับ WEBP
+   * (ถ้ารับไว้ ผู้ใช้จะอัปโหลดได้แต่โลโก้จะหายจากเอกสารเงียบ ๆ)
+   */
+  const ALLOWED_BY_KIND: Record<string, string[]> = {
+    items: ['image/jpeg', 'image/png', 'image/webp'],
+    menus: ['image/jpeg', 'image/png', 'image/webp'],
+    company: ['image/jpeg', 'image/png'],
+  };
+
+  async function handleUpload(kind: 'items' | 'menus' | 'company', req: FastifyRequest, reply: FastifyReply) {
     const file = await req.file();
     if (!file) return reply.status(400).send(fail('VALIDATION_ERROR', 'ไม่พบไฟล์ที่อัปโหลด'));
 
+    const allowed = ALLOWED_BY_KIND[kind] ?? [];
     const declaredExt = EXT_BY_MIME[file.mimetype];
-    if (!declaredExt) return reply.status(415).send(fail('UNSUPPORTED_MEDIA', 'รองรับเฉพาะ JPG, PNG, WEBP'));
+    if (!declaredExt || !allowed.includes(file.mimetype)) {
+      return reply.status(415).send(fail('UNSUPPORTED_MEDIA',
+        kind === 'company' ? 'โลโก้รองรับเฉพาะไฟล์ PNG หรือ JPG' : 'รองรับเฉพาะ JPG, PNG, WEBP'));
+    }
 
     let buffer: Buffer;
     try {
@@ -56,7 +73,7 @@ export default async function uploadRoutes(app: FastifyInstance) {
     }
 
     const detected = detectImage(buffer);
-    if (!detected || detected !== file.mimetype) {
+    if (!detected || detected !== file.mimetype || !allowed.includes(detected)) {
       return reply.status(415).send(fail('UNSUPPORTED_MEDIA', 'ไฟล์ไม่ใช่รูปภาพที่ถูกต้อง (ตรวจ magic bytes ไม่ผ่าน)'));
     }
 
@@ -73,6 +90,7 @@ export default async function uploadRoutes(app: FastifyInstance) {
 
   app.post('/items', { preHandler: MANAGE }, (req, reply) => handleUpload('items', req, reply));
   app.post('/menus', { preHandler: MANAGE }, (req, reply) => handleUpload('menus', req, reply));
+  app.post('/company', { preHandler: MANAGE_COMPANY }, (req, reply) => handleUpload('company', req, reply));
 
   // เสิร์ฟรูป (read-only, public) — ชื่อไฟล์ต้องผ่าน whitelist ป้องกัน path traversal
   app.get('/:kind/:name', async (req, reply) => {

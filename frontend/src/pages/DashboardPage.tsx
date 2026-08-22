@@ -15,6 +15,9 @@ import {
 } from '@/lib/dashboard-lists';
 import { STATUS_BADGE, statusInfo, statusLabel } from '@/lib/operations-vocab';
 import EmptyState from '@/components/ui/EmptyState';
+import { DocBarChart, DonutChart } from '@/components/dashboard/Charts';
+import { documentBars, inventoryComposition, menuReadiness } from '@/lib/dashboard-charts';
+import { companyContactRows, useCompanyProfile } from '@/hooks/useCompanyProfile';
 import { formatMoney, formatThaiDate, greeting, timeAgo } from '@/lib/utils';
 import {
   PageContainer, PageHeader, KPIGrid, KPICard, ContentCard, KPISkeleton, CardSkeleton,
@@ -85,6 +88,18 @@ export default function DashboardPage() {
     adjustments: d.permissions.canInventory ? d.adjustments.data : undefined,
   }, 5), [d.receiving.data, d.issues.data, d.adjustments.data,
     d.permissions.canReceiving, d.permissions.canIssues, d.permissions.canInventory]);
+
+  /* PHASE 14 — กราฟทั้งหมดคำนวณจากข้อมูลที่โหลดอยู่แล้ว ไม่มี endpoint ใหม่
+     และไม่มีกราฟแนวโน้ม เพราะ stock ledger จริงมีข้อมูลวันเดียว */
+  const invSlices = useMemo(() => inventoryComposition(invKpi), [invKpi]);
+  const menuSlices = useMemo(() => menuReadiness(menus), [menus]);
+  const docBars = useMemo(() => documentBars({
+    receiving: d.permissions.canReceiving ? d.receiving.data : undefined,
+    issues: d.permissions.canIssues ? d.issues.data : undefined,
+    adjustments: d.permissions.canInventory ? d.adjustments.data : undefined,
+  }), [d.receiving.data, d.issues.data, d.adjustments.data,
+    d.permissions.canReceiving, d.permissions.canIssues, d.permissions.canInventory]);
+  const companyProfile = useCompanyProfile();
 
   const costing = useMemo(() => costingSummary(menus), [menus]);
   const pricing = useMemo(() => pricingSummary(menus), [menus]);
@@ -205,6 +220,10 @@ export default function DashboardPage() {
                   {invKpi.thresholdMissing && (
                     <p className="dash-note"><Info aria-hidden width={14} />บางรายการยังไม่ได้ตั้งจุดสั่งซื้อ ระบบจึงไม่เตือนว่าใกล้หมด</p>
                   )}
+                  {invSlices.length > 0 && (
+                    <DonutChart slices={invSlices}
+                      centerValue={String(invKpi.itemCount)} centerLabel="รายการ" />
+                  )}
                   <h3 className="dash-sub">รายการที่ควรเติมสต็อก</h3>
                   <div className="dash-fill">
                   {restock.length === 0
@@ -261,6 +280,8 @@ export default function DashboardPage() {
                 )}
               </div>
             )}
+          <h3 className="dash-sub">เอกสารทั้งหมดในระบบ</h3>
+          <DocBarChart bars={docBars} />
           {/* เอกสารล่าสุดจากทั้งสามชนิด — ใช้เลขที่และวันที่ที่ API ส่งมาจริง */}
           <h3 className="dash-sub">เอกสารล่าสุด</h3>
           <div className="dash-fill">
@@ -302,6 +323,10 @@ export default function DashboardPage() {
                 {s.itemsWithoutPrice > 0
                   ? <p className="dash-note"><AlertTriangle aria-hidden width={14} />ต้นทุนของสูตรที่ใช้วัตถุดิบเหล่านี้จะต่ำกว่าความจริง</p>
                   : <p className="dash-ok"><CheckCircle2 aria-hidden width={15} />วัตถุดิบทุกรายการมีราคาซื้อแล้ว</p>}
+                {menuSlices.length > 0 && (
+                  <DonutChart slices={menuSlices}
+                    centerValue={String(costing.total)} centerLabel="เมนู" />
+                )}
                 <h3 className="dash-sub">เมนูที่ยังคิดต้นทุนไม่ได้</h3>
                 <div className="dash-fill">
                   {d.menus.isError ? <p className="dash-note"><AlertTriangle aria-hidden width={14} />โหลดรายการเมนูไม่ได้</p>
@@ -408,6 +433,29 @@ export default function DashboardPage() {
                     ))}
                   </ul>
                 )}
+          </ContentCard>
+        )}
+        {/* ---------- ข้อมูลบริษัท (เต็มแถว จึงไม่กระทบการจับคู่ความสูงเดิม) ---------- */}
+        {companyProfile.data && (
+          <ContentCard className="dash-span-12 dash-company" title="ข้อมูลบริษัท"
+            description="ข้อมูลชุดเดียวกับที่ใช้บนหัวเอกสาร PDF"
+            actions={<Link to="/settings/company" className="btn">แก้ไขข้อมูล</Link>}>
+            <div className="dash-company-grid">
+              <div className="dc-identity">
+                {companyProfile.data.logoUrl
+                  ? <img src={companyProfile.data.logoUrl} alt="" className="dc-logo" />
+                  : <span className="dc-logo dc-logo-text">{companyProfile.data.nameTh.replace(/^บริษัท\s*/, '').slice(0, 2)}</span>}
+                <div>
+                  <strong>{companyProfile.data.nameTh}</strong>
+                  {companyProfile.data.nameEn && <span>{companyProfile.data.nameEn}</span>}
+                </div>
+              </div>
+              <dl className="dc-rows">
+                {companyContactRows(companyProfile.data).map((row) => (
+                  <div key={row.label}><dt>{row.label}</dt><dd>{row.value}</dd></div>
+                ))}
+              </dl>
+            </div>
           </ContentCard>
         )}
       </div>

@@ -138,7 +138,7 @@ export interface RecipeDetail {
 }
 
 /** อัปโหลดรูป (multipart) — คืน url ที่เก็บใน DB ต่อไป */
-export async function uploadImage(kind: 'items' | 'menus', file: File): Promise<{ url: string }> {
+export async function uploadImage(kind: 'items' | 'menus' | 'company', file: File): Promise<{ url: string }> {
   const form = new FormData();
   form.append('file', file);
   const token = sessionStore.accessToken();
