@@ -340,3 +340,11 @@
 }
 .dash-lowdata b { font-family: var(--font-num); color: var(--text); }
 .dash-lowdata small { flex-basis: 100%; font-size: 11.5px; color: var(--text-subtle); }
+
+/* ============================================================
+   PHASE 22 — DASHBOARD V4: แถวการ์ดหลัก 4 ใบ
+   ใช้ KPIGrid/KPICard เดิมของระบบ ที่เพิ่มคือรายการย่อยและโทนของงานปฏิบัติการ
+   สีสื่อกลุ่มงาน แต่ทุกใบมีทั้งป้ายและตัวเลขเสมอ สีจึงไม่ใช่ช่องทางสื่อสารเดียว
+   ============================================================ */
+.dash-primary { margin-bottom: var(--space-4); align-items: stretch; }
+.dash-primary .s2-kpi { gap: var(--space-2); }

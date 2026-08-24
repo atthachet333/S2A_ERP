@@ -8,6 +8,7 @@ import { writeAudit, num } from '../../lib/http.js';
 import { computeRecipeCost, analyzePrice, priceFromMarkup, priceFromMargin, type CostIngredientInput } from '../../lib/costing.js';
 import { RecipeCostError } from '../../lib/recipe-cost.js';
 import { computeSavedVersionCost } from '../recipes/recipe.route.js';
+import { completenessOf, costStatusOf } from '../../lib/cost-status.js';
 
 // บันทึกราคาขาย = จัดการราคา/กำไร → ใช้สิทธิ์ PRICING_EDIT
 const MANAGE = requirePermission('PRICING_EDIT');
@@ -40,6 +41,58 @@ const savePriceSchema = z.object({
 });
 
 export default async function costingRoutes(app: FastifyInstance) {
+  /**
+   * PHASE 21 — ความครบถ้วนของข้อมูลต้นทุนในแต่ละสูตรที่ใช้งานอยู่
+   *
+   * ตอบคำถามเดียว: "ต้นทุนที่เห็นอยู่นี้ คิดจากวัตถุดิบครบทุกตัวหรือยัง"
+   * ไม่ประมาณราคาที่ยังไม่รู้ให้ และไม่แตะ snapshot ใด ๆ — อ่านอย่างเดียวล้วน
+   *
+   * "ยืนยันว่าต้นทุนศูนย์" นับเป็นข้อมูลครบ ไม่ใช่ข้อมูลขาด
+   */
+  app.get('/completeness', { preHandler: requireCompany }, async (req) => {
+    const companyId = req.user.companyId!;
+    const versions = await prisma.recipeVersion.findMany({
+      where: { isActive: true, recipe: { companyId, deletedAt: null } },
+      include: {
+        recipe: { select: { id: true, product: { select: { id: true, code: true, name: true } } } },
+        ingredients: { include: { item: { select: { id: true, code: true, name: true, lastCost: true, _count: { select: { priceHistory: true } } } } } },
+      },
+    });
+
+    const rows = versions.map((version) => {
+      const lines = version.ingredients.map((line) => ({
+        item: line.item,
+        // บรรทัดที่อ้างสูตรย่อยไม่มี item จึงไม่นับในความครบถ้วนของราคาวัตถุดิบ
+        countsTowardCost: Boolean(line.item),
+        status: line.item
+          ? costStatusOf({ lastCost: num(line.item.lastCost), priceRecordCount: line.item._count.priceHistory })
+          : ('PRICED' as const),
+      }));
+      const completeness = completenessOf(lines.map((l) => ({ status: l.status, countsTowardCost: l.countsTowardCost })));
+      return {
+        recipeId: version.recipe.id,
+        recipeVersionId: version.id,
+        versionNo: version.versionNo,
+        productId: version.recipe.product?.id ?? null,
+        productCode: version.recipe.product?.code ?? null,
+        productName: version.recipe.product?.name ?? null,
+        ...completeness,
+        // ชื่อของที่ยังไม่รู้ต้นทุน เพื่อให้ผู้ใช้กดไปแก้ได้ตรงจุด ไม่ต้องเดาเอง
+        missingItems: lines.filter((l) => l.status === 'MISSING' && l.item)
+          .map((l) => ({ id: l.item!.id, code: l.item!.code, name: l.item!.name })),
+      };
+    });
+
+    return ok({
+      rows: rows.sort((a, b) => b.missing - a.missing || (a.productName ?? '').localeCompare(b.productName ?? '')),
+      summary: {
+        recipes: rows.length,
+        complete: rows.filter((r) => r.complete).length,
+        incomplete: rows.filter((r) => !r.complete).length,
+      },
+    });
+  });
+
   /** คำนวณต้นทุน + จำลองราคาขาย (backend เป็น source of truth) */
   app.post('/calculate', { preHandler: requireCompany }, async (req, reply) => {
     const body = calcSchema.parse(req.body ?? {});

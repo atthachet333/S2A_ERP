@@ -111,6 +111,19 @@
 }
 .md-equation input:focus { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
 
+/* PHASE 20 — อัตราหน่วยมาตรฐาน: ระบบเติมให้และล็อกไว้ ไม่ใช่ช่องกรอก
+   ใช้เส้นทึบแทนเส้นประ เพื่อสื่อว่า "ค่านี้ยืนยันแล้ว" ไม่ใช่ "รอกรอก" */
+.md-equation.is-locked { border-style: solid; border-color: var(--border); }
+.md-equation .eq-standard {
+  min-height: 34px; display: inline-flex; align-items: center;
+  padding: 0 var(--space-3); border-radius: var(--radius-field);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text);
+}
+/* บอกด้วยไอคอนและข้อความ ไม่ใช่สีอย่างเดียว */
+.md-hint-strong { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 600; color: var(--text-muted); }
+.md-hint-strong svg { color: var(--success); }
+
 /* ---------- แผงสรุปราคา: จุดสำคัญที่สุดของฟอร์ม ---------- */
 .md-preview {
   padding: var(--card-pad);
@@ -279,3 +292,38 @@
 .ph-row .ph-src { font-size: 12px; color: var(--text-subtle); }
 .ph-row .num small { color: var(--text-subtle); }
 .add-price-row .apr-qty { max-width: 92px; }
+
+/* ---------- PHASE 21: หน้าเติมข้อมูลต้นทุน ---------- */
+.cost-fill-table input[type="number"] {
+  width: 108px; min-height: var(--control-h); padding: 0 var(--space-2); text-align: right;
+  border: 1px solid var(--input-border); border-radius: var(--radius-sm);
+  background: var(--input-bg); color: var(--text);
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+}
+/* แถวที่ผู้ใช้แตะแล้วต้องเห็นชัดว่าต่างจากแถวที่ยังไม่ได้กรอก — ไม่ใช้สีอย่างเดียว */
+.cost-fill-table tr.is-edited { background: var(--surface-2); }
+.cost-fill-table tr.is-edited td:first-child { box-shadow: inset 3px 0 0 var(--info, var(--success)); }
+.cost-fill-units { font-family: var(--font-num); font-size: 12px; color: var(--text-muted); }
+.cost-fill-impact { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 12.5px; font-weight: 600; }
+.cost-fill-zero { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); font-size: 12px; font-weight: 600; }
+.cost-fill-reason { width: 100%; min-height: var(--control-h); margin-top: var(--space-1); padding: 0 var(--space-2); border: 1px solid var(--input-border); border-radius: var(--radius-sm); background: var(--input-bg); font-size: 12px; }
+.cost-fill-block { display: flex; align-items: center; gap: var(--space-1); margin-top: var(--space-1); font-size: 12px; font-weight: 600; color: var(--note-warn-fg); }
+
+/* แถบสรุปติดขอบล่าง — ต้องกดได้เสมอแม้รายการยาว */
+.cost-fill-bar {
+  position: sticky; bottom: 0; z-index: var(--z-sticky);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
+  margin-top: var(--space-4); padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border); border-radius: var(--radius-field);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+.cost-fill-bar > span:first-child { flex: 1 1 auto; }
+.cost-fill-warn { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 600; color: var(--note-warn-fg); }
+.cost-fill-confirm { max-height: 52vh; overflow: auto; }
+
+@media (max-width: 760px) {
+  .cost-fill-bar { flex-direction: column; align-items: stretch; }
+  .cost-fill-bar .btn { width: 100%; justify-content: center; }
+  .cost-fill-table input[type="number"] { width: 100%; }
+}

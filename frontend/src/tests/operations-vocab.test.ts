@@ -198,8 +198,11 @@ describe('operations css', () => {
 
 describe('dashboard carryover (Phase 5)', () => {
   it('28 A: KPI บอกชัดว่านับจาก ledger', () => {
-    expect(dash).toContain('รายการเคลื่อนไหวสต็อกวันนี้');
-    expect(dash).toContain('นับจากบัญชีเดินสต็อก (ledger)');
+    /* PHASE 22 — ข้อความย้ายไปอยู่ในตัวสร้างการ์ดหลัก (dashboard-primary.ts)
+       เจตนาเดิมคงไว้ครบ: ตัวเลขนี้ต้องบอกที่มาว่านับจากบัญชีเดินสต็อก ไม่ใช่จำนวนเอกสาร */
+    const surface = dash + fs.readFileSync(path.resolve(__dirname, '../lib/dashboard-primary.ts'), 'utf8');
+    expect(surface).toContain('รายการเคลื่อนไหวสต็อกวันนี้');
+    expect(surface).toContain('นับจากบัญชีเดินสต็อก (ledger)');
   });
 
   it('29 B: การ์ดเอกสารใช้คำต่างจาก KPI เพื่อไม่ให้เข้าใจว่าเลขต้องเท่ากัน', () => {

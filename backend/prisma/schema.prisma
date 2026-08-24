@@ -813,10 +813,34 @@ model GoodsReceipt {
   updatedAt   DateTime @updatedAt
   createdById String?
 
-  items GoodsReceiptItem[]
+  items       GoodsReceiptItem[]
+  attachments GoodsReceiptAttachment[]
 
   @@index([status])
   @@map("goods_receipts")
+}
+
+/**
+ * PHASE 22 — ไฟล์เอกสารต้นฉบับจากผู้ขายที่แนบมากับใบรับของ
+ *
+ * เป็นหลักฐานประกอบเท่านั้น ไม่ใช่แหล่งความจริงของรายการรับของ
+ * ใบรับของยังทำงานได้ครบถ้วนเหมือนเดิมเมื่อไม่มีไฟล์แนบ (ตารางนี้เป็นส่วนเพิ่มล้วน)
+ * เก็บเฉพาะ metadata ตัวไฟล์อยู่บนดิสก์ ไม่เก็บ binary ลงฐานข้อมูล
+ */
+model GoodsReceiptAttachment {
+  id             String       @id @default(cuid())
+  companyId      String
+  goodsReceiptId String
+  goodsReceipt   GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  originalName   String
+  storedName     String       @unique
+  mimeType       String
+  sizeBytes      Int
+  uploadedAt     DateTime     @default(now())
+  uploadedById   String?
+
+  @@index([goodsReceiptId])
+  @@map("goods_receipt_attachments")
 }
 
 model GoodsReceiptItem {

@@ -44,7 +44,7 @@ export const roleLabel = (name: string | null | undefined): string => {
  */
 const GROUP_ORDER = [
   'Dashboard', 'Ingredients', 'Packaging', 'Recipes', 'Costing', 'Pricing',
-  'Customers', 'Orders', 'Receiving', 'Stock', 'Companies', 'Documents',
+  'Customers', 'Orders', 'Receiving', 'Stock', 'StockIssue', 'StockTransfer', 'Companies', 'Documents',
   'Reports', 'Notifications', 'Users', 'Permissions', 'Audit', 'Settings', 'Other',
 ];
 export function sortGroups(groups: string[]): string[] {
@@ -72,6 +72,9 @@ export const GROUP_LABELS: Record<string, Record<Locale, string>> = {
   Orders: { th: 'ออเดอร์', en: 'Orders', 'zh-CN': '订单' },
   Receiving: { th: 'รับของ', en: 'Receiving', 'zh-CN': '入库' },
   Stock: { th: 'สต๊อก', en: 'Stock', 'zh-CN': '库存' },
+  // PHASE 19 — แยกกลุ่มงานเบิกและงานโอนย้ายออกจากสต๊อกรวม ป้ายจะได้ไม่ซ้ำกันจนติ๊กผิดช่อง
+  StockIssue: { th: 'ใบเบิก', en: 'Stock issue', 'zh-CN': '领料单' },
+  StockTransfer: { th: 'ใบโอนย้าย', en: 'Stock transfer', 'zh-CN': '调拨单' },
   Companies: { th: 'บริษัท', en: 'Companies', 'zh-CN': '公司' },
   Dashboard: { th: 'แดชบอร์ด', en: 'Dashboard', 'zh-CN': '仪表板' },
   Reports: { th: 'รายงาน', en: 'Reports', 'zh-CN': '报表' },
@@ -93,6 +96,8 @@ const ACTION_LABELS: Record<string, Record<Locale, string>> = {
   SEND: { th: 'ส่ง', en: 'Send', 'zh-CN': '发送' },
   CANCEL: { th: 'ยกเลิก', en: 'Cancel', 'zh-CN': '取消' },
   COMPLETE: { th: 'ปิดงาน', en: 'Complete', 'zh-CN': '完成' },
+  REVERSE: { th: 'กลับรายการ', en: 'Reverse', 'zh-CN': '冲销' },
+  ADJUST: { th: 'ปรับปรุง', en: 'Adjust', 'zh-CN': '调整' },
   SWITCH: { th: 'สลับ', en: 'Switch', 'zh-CN': '切换' },
   DOWNLOAD: { th: 'ดาวน์โหลด', en: 'Download', 'zh-CN': '下载' },
   EMAIL: { th: 'ส่งอีเมล', en: 'Email', 'zh-CN': '发邮件' },

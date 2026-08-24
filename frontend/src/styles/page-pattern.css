@@ -59,6 +59,30 @@ button.s2-kpi:focus-visible { outline: none; border-color: var(--input-focus); b
 .s2-kpi--warning .s2-kpi-value { color: var(--warning); }
 .s2-kpi--danger  .s2-kpi-value { color: var(--danger); }
 .s2-kpi--info    .s2-kpi-value { color: var(--info); }
+.s2-kpi--ops     .s2-kpi-value { color: var(--ops); }
+
+/* PHASE 22 — ส่วนขยายของการ์ดเดิม: หน่วยกำกับ รายการย่อย และการ์ดที่กดไปหน้าอื่นได้
+   แถบสีซ้ายบอกกลุ่มงานคู่กับไอคอนและข้อความ ไม่ได้ใช้สีสื่อความหมายเพียงอย่างเดียว */
+.s2-kpi-unit { margin-left: var(--space-2); font-size: 12px; font-weight: 600; font-style: normal; color: var(--text-subtle); }
+.s2-kpi-break { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.s2-kpi-break li { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); font-size: 12px; color: var(--text-muted); }
+.s2-kpi-break b { font-weight: 700; color: var(--text); }
+.s2-kpi .s2-kpi-hint { margin-top: auto; }
+
+a.s2-kpi--link { text-decoration: none; transition: border-color .15s ease, box-shadow .15s ease; }
+a.s2-kpi--link:hover { border-color: var(--border-strong); box-shadow: var(--shadow-card); }
+a.s2-kpi--link:focus-visible { outline: none; border-color: var(--input-focus); box-shadow: var(--focus-ring); }
+
+.s2-kpi--success { border-left: 4px solid var(--success); }
+.s2-kpi--warning { border-left: 4px solid var(--warning); }
+.s2-kpi--danger  { border-left: 4px solid var(--danger); background: var(--danger-bg); }
+.s2-kpi--info    { border-left: 4px solid var(--info); }
+.s2-kpi--ops     { border-left: 4px solid var(--ops); }
+.s2-kpi--success .s2-kpi-icon { color: var(--success-fg); background: var(--success-bg); }
+.s2-kpi--warning .s2-kpi-icon { color: var(--warning-fg); background: var(--warning-bg); }
+.s2-kpi--danger  .s2-kpi-icon { color: var(--danger-fg); background: var(--surface); }
+.s2-kpi--info    .s2-kpi-icon { color: var(--info-fg); background: var(--info-bg); }
+.s2-kpi--ops     .s2-kpi-icon { color: var(--ops); background: var(--ops-bg); }
 
 /* ---------- FilterBar ---------- */
 .s2-filterbar {

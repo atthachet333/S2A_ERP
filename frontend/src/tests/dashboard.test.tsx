@@ -95,11 +95,16 @@ describe('DashboardPage', () => {
   /* ---------- KPI จากข้อมูลจริง ---------- */
   it('5 KPI ใช้ตัวเลขจริงจาก API ไม่ใช่ค่าที่แต่งขึ้น', () => {
     renderWithProviders(<DashboardPage />);
-    // ตัวเลขนี้ปรากฏทั้งใน KPI และการ์ดคลัง ซึ่งถูกต้องทั้งคู่
+    /* PHASE 22 — แถวบนเปลี่ยนเป็นการ์ดหลัก 4 ใบ ตัวเลขยังมาจาก API เดิมทั้งหมด
+       การ์ดสต็อกสรุปจำนวนที่ต้องดู และบอกขนาดคลังจริงไว้ในบรรทัดท้าย */
     expect(screen.getAllByText('฿284,300').length).toBeGreaterThan(0);
-    expect(screen.getByText('12 รายการในคลัง')).toBeInTheDocument();
-    expect(screen.getByText('หมด 1 · ใกล้หมด 2')).toBeInTheDocument();
-    expect(screen.getByText('ทั้งหมด 4 สูตร')).toBeInTheDocument();
+    expect(screen.getByText('ทั้งคลัง 12 รายการ')).toBeInTheDocument();
+    expect(screen.getByText('หมดสต็อก')).toBeInTheDocument();
+    // "ใกล้หมด" ปรากฏทั้งในการ์ดสต็อกและในรายการเรื่องที่ต้องจัดการ ซึ่งถูกต้องทั้งคู่
+    expect(screen.getAllByText('ใกล้หมด').length).toBeGreaterThan(0);
+    // ไม่มีตัวเลขไหนถูกแต่งขึ้น — การ์ดทั้งสี่ใบมาจากชุดข้อมูลที่ mock ไว้เท่านั้น
+    expect(screen.getByText('ความครบถ้วนของต้นทุน')).toBeInTheDocument();
+    expect(screen.getByText('งานปฏิบัติการ')).toBeInTheDocument();
   });
 
   it('6 ไม่มี trend ปลอม — ไม่มีข้อความ % เพิ่ม/ลดที่ไม่มีข้อมูลย้อนหลังรองรับ', () => {
@@ -113,10 +118,13 @@ describe('DashboardPage', () => {
       permissions: { canInventory: false, canOrders: false, canOrderKpi: false, canReceiving: false, canIssues: false },
     });
     renderWithProviders(<DashboardPage />);
-    expect(screen.queryByText('มูลค่าสต็อกรวม')).not.toBeInTheDocument();
-    expect(screen.queryByText('ออเดอร์วันนี้')).not.toBeInTheDocument();
-    // สูตรยังแสดงได้เพราะมาจาก /dashboard/summary
-    expect(screen.getByText('สูตรที่ใช้งาน')).toBeInTheDocument();
+    /* PHASE 22 — การ์ดหลักมีครบสี่ใบเสมอตามที่ออกแบบไว้
+       แต่ใบที่ผู้ใช้ไม่มีสิทธิ์ต้องบอกตรง ๆ ว่าไม่มีสิทธิ์ และต้องไม่มีตัวเลขของจริงหลุดออกมา */
+    expect(screen.getAllByText('ไม่มีสิทธิ์ดูข้อมูลนี้').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('฿284,300')).not.toBeInTheDocument();
+    expect(screen.queryByText('ทั้งคลัง 12 รายการ')).not.toBeInTheDocument();
+    // การ์ดต้นทุนยังแสดงได้ เพราะข้อมูลมาจาก /dashboard/summary ไม่ใช่สิทธิ์คลัง
+    expect(screen.getByText('ความครบถ้วนของต้นทุน')).toBeInTheDocument();
   });
 
   /* ---------- Alerts ---------- */

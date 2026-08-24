@@ -1,9 +1,16 @@
-import 'dotenv/config';
 import { spawnSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+/* PHASE 15 — โหลด .env.test อย่างเจาะจง
+   ห้ามใช้ dotenv/config เฉย ๆ เพราะจะได้ .env ของ production มาแทน
+   และห้าม fallback ไป DATABASE_URL ไม่ว่ากรณีใด */
+dotenv.config({ path: fileURLToPath(new URL('../.env.test', import.meta.url)) });
 
 const testUrl = process.env.TEST_DATABASE_URL;
-if (!testUrl) throw new Error('TEST_DATABASE_URL is required');
+if (!testUrl) throw new Error('TEST_DATABASE_URL is required (ตั้งค่าใน backend/.env.test)');
 
 const parsed = new URL(testUrl);
 if (parsed.protocol !== 'mysql:' || parsed.pathname.replace(/^\//, '') !== 's2a_erp_test') {
@@ -45,12 +52,14 @@ try {
   await prisma.$disconnect();
 }
 
-const executable = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const result = spawnSync(executable, ['prisma', 'migrate', 'deploy'], {
-  cwd: new URL('..', import.meta.url),
+/* PHASE 15 — เรียก Prisma CLI ด้วย node ตรง ๆ
+   Node 24 บน Windows ปฏิเสธการ spawn ไฟล์ .cmd แบบ shell:false (EINVAL)
+   และการใช้ shell:true จะทำให้ argument ไม่ถูก escape จึงเลี่ยงทั้งสองทาง */
+const prismaCli = createRequire(import.meta.url).resolve('prisma/build/index.js');
+const result = spawnSync(process.execPath, [prismaCli, 'migrate', 'deploy'], {
+  cwd: fileURLToPath(new URL('..', import.meta.url)),
   env: { ...process.env, DATABASE_URL: testUrl, DIRECT_URL: testUrl },
   stdio: 'inherit',
-  shell: false,
 });
 
 if (result.status !== 0) process.exit(result.status ?? 1);

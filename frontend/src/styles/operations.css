@@ -70,3 +70,21 @@
   /* ลิงก์เลขเอกสารในตารางการเคลื่อนไหวเป็นเป้าสัมผัสจริง ไม่ใช่แค่ข้อความ */
   .mv-table .inline-link { display: inline-flex; align-items: center; min-height: var(--control-h); }
 }
+
+/* ---------- PHASE 22: เอกสารต้นฉบับจากผู้ขาย (ไม่บังคับ) ---------- */
+.orig-doc { display: grid; gap: var(--space-2); }
+.orig-doc-hint { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: 12px; color: var(--text-subtle); }
+.orig-doc-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.orig-doc-list li {
+  display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-2);
+}
+.od-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-sm); background: var(--surface); color: var(--text-muted); }
+.od-icon svg { width: 16px; }
+.od-main { display: grid; min-width: 0; }
+.od-main a { color: var(--link); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.od-main a:hover { text-decoration: underline; }
+.od-main small { font-size: 11.5px; color: var(--text-subtle); }
+/* ปุ่มที่ไม่มีไฟล์ให้เปิด ต้องดูปิดจริงและกดไม่ได้ ไม่ใช่กดแล้วเงียบ */
+.btn.is-disabled { opacity: .55; pointer-events: none; }

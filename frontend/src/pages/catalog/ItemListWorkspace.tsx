@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Plus, CheckCircle2, AlertTriangle, Pencil, Power, ImageOff, Ruler,
-  LayoutGrid, List, type LucideIcon,
+  LayoutGrid, List, CircleDollarSign, type LucideIcon,
 } from 'lucide-react';
 import { catalogApi, type Item, type ItemType } from '@/lib/catalog';
 import { formatThaiDate } from '@/lib/utils';
@@ -38,6 +38,10 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  /* PHASE 20C — กรองตามคุณภาพข้อมูล
+     เดิมการ์ด KPI บอกจำนวน "ยังไม่มีราคาซื้อ" ได้ แต่ผู้ใช้หาไม่เจอว่าเป็นรายการไหน
+     ต้องไล่ดูทีละหน้า ตัวกรองนี้ทำให้กดจากการ์ดแล้วเห็นเฉพาะรายการที่ต้องแก้ */
+  const [dataIssue, setDataIssue] = useState('');
   const [page, setPage] = useState(1);
   const [view, setView] = useState<'table' | 'cards'>('table');
   const [toggling, setToggling] = useState<Item | null>(null);
@@ -45,8 +49,8 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
   const noun = variant.kind === 'packaging' ? 'บรรจุภัณฑ์' : 'วัตถุดิบ';
 
   const list = useQuery({
-    queryKey: ['items', variant.type, { search, status, page }],
-    queryFn: () => catalogApi.items({ type: variant.type, search, status, page, pageSize: PAGE_SIZE }),
+    queryKey: ['items', variant.type, { search, status, dataIssue, page }],
+    queryFn: () => catalogApi.items({ type: variant.type, search, status, dataIssue, page, pageSize: PAGE_SIZE }),
     placeholderData: keepPreviousData,
   });
 
@@ -85,7 +89,7 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
   const total = list.data?.total ?? 0;
   const totalPages = list.data?.totalPages ?? 1;
   const resetPage = () => setPage(1);
-  const hasFilter = Boolean(search || status);
+  const hasFilter = Boolean(search || status || dataIssue);
 
   return (
     <PageContainer size="wide" className="master-page item-list-workspace">
@@ -94,6 +98,10 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
         title={variant.title}
         description={variant.subtitle}
         actions={<>
+          {variant.kind === 'ingredient' && kpi && kpi.noPrice > 0 && (
+            /* PHASE 21 — ทางลัดไปเติมราคาทีเดียวหลายรายการ แสดงเฉพาะตอนที่ยังมีของค้างจริง */
+            <Link to="/ingredients/cost-completion" className="btn"><CircleDollarSign aria-hidden width={16} />เติมข้อมูลต้นทุน ({kpi.noPrice})</Link>
+          )}
           <Link to="/units/conversions" className="btn"><Ruler aria-hidden width={16} />สูตรแปลงหน่วย</Link>
           <Link to={variant.newPath} className="btn primary"><Plus aria-hidden width={16} />{variant.addLabel}</Link>
         </>}
@@ -103,13 +111,19 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
         <KPICard label={variant.totalLabel} value={total} icon={<Icon />} hint={hasFilter ? 'ตามตัวกรองปัจจุบัน' : 'ทุกสถานะ'} />
         <KPICard label="ใช้งานอยู่" value={kpi ? kpi.active : '—'} icon={<CheckCircle2 />} hint="เลือกใช้ในสูตรได้" />
         <KPICard label="ยังไม่มีราคาซื้อ" value={kpi ? kpi.noPrice : '—'} icon={<AlertTriangle />}
-          tone={kpi && kpi.noPrice > 0 ? 'warning' : 'default'} hint="คิดต้นทุนไม่ได้จนกว่าจะใส่ราคา" />
+          tone={kpi && kpi.noPrice > 0 ? 'warning' : 'default'}
+          hint={kpi && kpi.noPrice > 0 ? 'คิดต้นทุนไม่ได้จนกว่าจะใส่ราคา — กดเพื่อดูรายการ' : 'คิดต้นทุนไม่ได้จนกว่าจะใส่ราคา'}
+          active={dataIssue === 'noPrice'}
+          onClick={kpi && kpi.noPrice > 0 ? () => { setDataIssue(dataIssue === 'noPrice' ? '' : 'noPrice'); setStatus(''); resetPage(); } : undefined} />
         <KPICard label="ยังไม่ตั้งอัตราแปลง" value={kpi ? kpi.noFactor : '—'} icon={<Ruler />}
-          tone={kpi && kpi.noFactor > 0 ? 'warning' : 'default'} hint="มีหน่วยซื้อแยก แต่ยังไม่ระบุอัตรา" />
+          tone={kpi && kpi.noFactor > 0 ? 'warning' : 'default'}
+          hint={kpi && kpi.noFactor > 0 ? 'มีหน่วยซื้อแยก แต่ยังไม่ระบุอัตรา — กดเพื่อดูรายการ' : 'มีหน่วยซื้อแยก แต่ยังไม่ระบุอัตรา'}
+          active={dataIssue === 'noFactor'}
+          onClick={kpi && kpi.noFactor > 0 ? () => { setDataIssue(dataIssue === 'noFactor' ? '' : 'noFactor'); setStatus(''); resetPage(); } : undefined} />
       </KPIGrid>
 
       <FilterBar actions={<>
-        {hasFilter && <button type="button" className="btn" onClick={() => { setSearch(''); setStatus(''); resetPage(); }}>ล้างตัวกรอง</button>}
+        {hasFilter && <button type="button" className="btn" onClick={() => { setSearch(''); setStatus(''); setDataIssue(''); resetPage(); }}>ล้างตัวกรอง</button>}
         <div className="view-toggle" role="group" aria-label="รูปแบบการแสดงผล">
           <button type="button" className={view === 'table' ? 'active' : ''} onClick={() => setView('table')}
             aria-pressed={view === 'table'} aria-label="มุมมองตาราง"><List aria-hidden /></button>
@@ -123,6 +137,11 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
           <option value="">ทุกสถานะ</option>
           <option value="active">ใช้งาน</option>
           <option value="inactive">ปิดใช้งาน</option>
+        </select>
+        <select value={dataIssue} onChange={(e) => { setDataIssue(e.target.value); resetPage(); }} aria-label="ความครบถ้วนของข้อมูล">
+          <option value="">ข้อมูลครบและไม่ครบ</option>
+          <option value="noPrice">เฉพาะที่ยังไม่มีราคาซื้อ</option>
+          <option value="noFactor">เฉพาะที่ยังไม่ตั้งอัตราแปลง</option>
         </select>
       </FilterBar>
 
@@ -220,7 +239,7 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
         {!list.isLoading && !list.isError && rows.length === 0 && (
           hasFilter
             ? <EmptyState icon={Icon} title="ไม่พบรายการที่ค้นหา" description="ลองเปลี่ยนคำค้นหรือล้างตัวกรอง"
-                action={<button type="button" className="btn" onClick={() => { setSearch(''); setStatus(''); resetPage(); }}>ล้างตัวกรอง</button>} />
+                action={<button type="button" className="btn" onClick={() => { setSearch(''); setStatus(''); setDataIssue(''); resetPage(); }}>ล้างตัวกรอง</button>} />
             : <EmptyState icon={Icon} title={variant.emptyTitle} description={variant.emptyDesc}
                 action={<Link to={variant.newPath} className="btn primary"><Plus aria-hidden />{variant.addLabel}</Link>} />
         )}

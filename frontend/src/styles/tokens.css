@@ -67,6 +67,9 @@
   --danger-bg: #FBE7EA;
   --info: #1677C8;
   --info-bg: #EAF4FF;
+  /* PHASE 22 — โทนของงานปฏิบัติการบนหน้าภาพรวม แยกจากสีสถานะเดิมให้อ่านออกว่าเป็นคนละกลุ่มงาน */
+  --ops: #5B4BC4;
+  --ops-bg: #EFECFC;
 
   /* ---------- SEMANTIC: badge / chip (เดิม hardcode ทำให้ dark อ่านไม่ออก) ---------- */
   --success-fg: #157a3a;
@@ -229,6 +232,8 @@
   --warning-bg: #3a2f16;
   --danger-bg: #3a2029;
   --info-bg: #16304d;
+  --ops: #A99BF5;          /* สว่างพอสำหรับพื้นเข้ม */
+  --ops-bg: #241f45;
 
   /* badge / chip — ต้องสว่างพอบนพื้นเข้ม */
   --success-fg: #5fd39c;

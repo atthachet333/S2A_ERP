@@ -3,11 +3,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, Loader2, Info, Boxes, ShoppingCart, Scale, SlidersHorizontal,
-  Calculator, History, Plus, AlertTriangle, StickyNote,
+  Calculator, History, Plus, AlertTriangle, StickyNote, Check,
 } from 'lucide-react';
 import { catalogApi, type ItemType } from '@/lib/catalog';
 import { formatMoney, formatThaiDateTime } from '@/lib/utils';
 import { unitPricePreview } from '@/lib/item-unit-price';
+import { formatFactor, resolveConversion } from '@/lib/standard-conversion';
 import { masterConflictMessage } from '@/lib/master-validation';
 import ImageUpload from '@/components/ui/ImageUpload';
 import Badge from '@/components/ui/Badge';
@@ -60,6 +61,9 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
   const { messages } = useI18n(); const t = messages.quickCreate;
 
   const units = useQuery({ queryKey: ['units'], queryFn: () => catalogApi.units() });
+  /* PHASE 20 — อ่านอัตราแปลงมาตรฐานจากตารางเดียวกับที่ backend ใช้คิดต้นทุน
+     ไม่เก็บค่า KG→G / L→ML ซ้ำไว้ในฟอร์ม เพื่อไม่ให้สองที่เพี้ยนจากกัน */
+  const conversions = useQuery({ queryKey: ['unit-conversions'], queryFn: () => catalogApi.conversions() });
   const categories = useQuery({ queryKey: ['categories'], queryFn: () => catalogApi.categories() });
   const detail = useQuery({ queryKey: ['item', id], queryFn: () => catalogApi.item(id as string), enabled: isEdit });
 
@@ -131,9 +135,32 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
     }
   }, [units.data, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const factor = Number(form.purchaseToBaseFactor);
   const baseUnitCode = units.data?.find((u) => u.id === form.baseUnitId)?.code ?? 'หน่วยฐาน';
   const purchaseUnitCode = units.data?.find((u) => u.id === form.purchaseUnitId)?.code ?? baseUnitCode;
+
+  /* PHASE 20 — บั๊กที่แก้: ฟอร์มเคยปล่อยให้ผู้ใช้เดาทิศของอัตราแปลงเอง
+     ใส่ 0.001 สำหรับ KG→G (ซึ่งเป็นทิศกลับ) แล้วต้นทุนกลายเป็น 350 ÷ 0.001 = 350,000 บาท/G
+     ความหมายที่ถูกต้องคือ "หนึ่งหน่วยซื้อมีกี่หน่วยฐาน" → 1 KG = 1,000 G → 350 ÷ 1 ÷ 1000 = 0.35 */
+  const conversion = useMemo(() => resolveConversion({
+    purchaseUnitId: form.purchaseUnitId || null,
+    baseUnitId: form.baseUnitId || null,
+    purchaseUnitCode, baseUnitCode,
+    edges: conversions.data ?? [],
+    manualFactor: form.purchaseToBaseFactor,
+  }), [form.purchaseUnitId, form.baseUnitId, form.purchaseToBaseFactor, purchaseUnitCode, baseUnitCode, conversions.data]);
+
+  const isStandard = conversion.source === 'standard';
+  const isSameUnit = conversion.source === 'same';
+  /* หน่วยมาตรฐานให้ระบบเป็นคนกำหนด ผู้ใช้แก้ไม่ได้
+     อัตราเฉพาะวัตถุดิบ (1 กระสอบ = 25 KG) ยังกรอกเองเหมือนเดิม */
+  const factor = isStandard || isSameUnit ? (conversion.factor ?? 1) : Number(form.purchaseToBaseFactor);
+
+  // เปลี่ยนหน่วยเมื่อไร อัตรามาตรฐานต้องถูกเติมลงฟอร์มทันที ทั้งหน้าสร้างและหน้าแก้ไข
+  useEffect(() => {
+    if (!isStandard && !isSameUnit) return;
+    const resolved = String(conversion.factor ?? 1);
+    if (form.purchaseToBaseFactor !== resolved) set({ purchaseToBaseFactor: resolved });
+  }, [isStandard, isSameUnit, conversion.factor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // PART 5 — ผู้ใช้ต้องเห็นความหมายของราคา/หน่วย/การแปลงก่อนกดบันทึก
   const preview = useMemo(() => unitPricePreview({
@@ -146,6 +173,7 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
   const missingName = touched && !form.name.trim();
   const missingCode = touched && !form.code.trim();
   const badFactor = !Number.isFinite(factor) || factor <= 0;
+  const factorLocked = isStandard || isSameUnit;
 
   const submit = async (addAnother = false) => {
     setError(''); setTouched(true);
@@ -255,27 +283,36 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
                 <span className="md-hint">หน่วยที่ใช้ระบุปริมาณจริงในสูตร · ต้นทุนทั้งระบบคิดต่อหน่วยนี้</span>
               </div>
 
-              {/* สมการเดียวทั้งระบบ: [1] [หน่วยซื้อ] = [factor] [หน่วยฐาน] */}
+              {/* PHASE 20 — สมการเดียวทั้งระบบ: 1 [หน่วยซื้อ] = [อัตรา] [หน่วยฐาน]
+                  หน่วยมาตรฐานระบบเติมและล็อกให้ · หน่วยเฉพาะวัตถุดิบผู้ใช้กรอกเอง */}
               <div className="md-field full">
-                <span id="lbl-factor">อัตราแปลงของรายการนี้</span>
-                <div className="md-equation">
+                <span id="lbl-factor">{factorLocked ? 'อัตราแปลงหน่วย' : `อัตราแปลงของ${noun}รายการนี้`}</span>
+                <div className={`md-equation${factorLocked ? ' is-locked' : ''}`}>
                   <span className="eq-const">1</span>
                   <span className="eq-unit">{purchaseUnitCode}</span>
                   <span className="eq-op">=</span>
-                  <input type="number" min="0" step="any" value={form.purchaseToBaseFactor}
-                    onChange={(e) => set({ purchaseToBaseFactor: e.target.value })}
-                    aria-labelledby="lbl-factor" aria-invalid={badFactor}
-                    aria-describedby={badFactor ? 'err-factor' : undefined} />
+                  {factorLocked
+                    ? <span className="eq-const eq-standard">{formatFactor(conversion.factor ?? 1)}</span>
+                    : <input type="number" min="0" step="any" value={form.purchaseToBaseFactor}
+                        onChange={(e) => set({ purchaseToBaseFactor: e.target.value })}
+                        aria-labelledby="lbl-factor" aria-invalid={badFactor}
+                        aria-describedby={badFactor ? 'err-factor' : undefined} />}
                   <span className="eq-unit">{baseUnitCode}</span>
                 </div>
-                {badFactor
+
+                {isSameUnit && <span className="md-hint">หน่วยซื้อและหน่วยฐานเป็นหน่วยเดียวกัน ไม่ต้องแปลง</span>}
+
+                {isStandard && <>
+                  <span className="md-hint md-hint-strong"><Check aria-hidden width={14} />หน่วยมาตรฐาน — ระบบคำนวณให้อัตโนมัติ</span>
+                  {conversion.reverseText && <span className="md-hint">ด้านกลับ: {conversion.reverseText}</span>}
+                </>}
+
+                {!factorLocked && (badFactor
                   ? <span className="md-error" id="err-factor"><AlertTriangle aria-hidden />จำนวนต้องมากกว่า 0</span>
-                  : <span className="md-hint">
-                      {factor === 1
-                        ? 'หน่วยซื้อและหน่วยฐานเหมือนกัน'
-                        : `ระบบคำนวณด้านกลับให้เอง: 1 ${baseUnitCode} = ${(1 / factor).toLocaleString('en-US', { maximumFractionDigits: 6 })} ${purchaseUnitCode}`}
-                    </span>}
-                <span className="md-hint">อัตรานี้ใช้เฉพาะ{noun}รายการนี้เท่านั้น · {variant.factorHint}</span>
+                  : <>
+                      <span className="md-hint">อัตรานี้ใช้เฉพาะ{noun}รายการนี้เท่านั้น · {variant.factorHint}</span>
+                      {conversion.reverseText && <span className="md-hint">ด้านกลับ: {conversion.reverseText}</span>}
+                    </>)}
               </div>
             </div>
           </ContentCard>

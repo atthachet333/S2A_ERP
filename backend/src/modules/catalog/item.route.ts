@@ -5,6 +5,8 @@ import { prisma } from '../../lib/prisma.js';
 import { fail, ok, paginate } from '../../lib/response.js';
 import { requireCompany, requirePermission } from '../auth/auth.guard.js';
 import { writeAudit, num } from '../../lib/http.js';
+import { checkStandardFactor, factorConflictMessage, type FactorConflict } from '../../lib/item-conversion.js';
+import { costStatusOf, EXPLICIT_ZERO_SOURCE } from '../../lib/cost-status.js';
 
 // สิทธิ์แบบ permission-code (source of truth ที่ backend) — ครอบคลุมทั้งวัตถุดิบและบรรจุภัณฑ์
 const CREATE = requirePermission('INGREDIENT_CREATE', 'PACKAGING_CREATE');
@@ -54,6 +56,10 @@ const listQuery = z.object({
   baseUnitId: z.string().optional(),
   status: z.enum(['active', 'inactive']).optional(),
   hasImage: z.enum(['yes', 'no']).optional(),
+  /* PHASE 20C — ตัวกรองคุณภาพข้อมูล
+     หน้ารายการมีการ์ดบอกจำนวน "ยังไม่มีราคาซื้อ" อยู่แล้ว แต่ไม่มีทางกรองให้เหลือเฉพาะรายการนั้น
+     ผู้ใช้จึงเห็นตัวเลขแต่หาไม่เจอว่าคือรายการไหน */
+  dataIssue: z.enum(['noPrice', 'noFactor']).optional(),
 });
 
 const upsertSchema = z.object({
@@ -76,13 +82,34 @@ const upsertSchema = z.object({
   purchaseQuantity: z.number().positive().optional(),
 });
 
+/**
+ * PHASE 21 — ราคา 0 ต้องเป็นการยืนยันอย่างตั้งใจเท่านั้น
+ * ช่องว่างกับเลข 0 ต้องไม่มีความหมายเดียวกัน จึงบังคับให้ส่ง explicitZero มาด้วย
+ */
 const priceSchema = z.object({
-  purchasePrice: z.number().positive('ราคาซื้อต้องมากกว่า 0'),
+  purchasePrice: z.number().min(0, 'ราคาซื้อต้องไม่ติดลบ'),
   purchaseQuantity: z.number().positive().default(1),
   supplierId: z.string().optional().nullable(),
   note: z.string().max(300).optional(),
   effectiveDate: z.string().datetime().optional(),
+  /** ยืนยันว่ารายการนี้มีต้นทุน 0 บาทจริง (เช่น น้ำประปา ของแถม) */
+  explicitZero: z.boolean().default(false),
+  zeroReason: z.string().max(200).optional(),
+}).refine((v) => v.purchasePrice > 0 || v.explicitZero, {
+  message: 'ราคา 0 ต้องยืนยันว่าเป็นต้นทุนศูนย์จริง',
+  path: ['purchasePrice'],
 });
+
+/**
+ * PHASE 20/20B — ตรวจอัตราแปลงผ่านด่านกลางของระบบ (src/lib/item-conversion.ts)
+ * ทุกเส้นทางที่เขียนอัตราต้องใช้ด่านเดียวกัน ห้ามมีตรรกะตรวจซ้ำคนละที่
+ */
+const readConversionEdges = async () =>
+  (await prisma.unitConversion.findMany({ select: { fromUnitId: true, toUnitId: true, factor: true } }))
+    .map((e) => ({ fromUnitId: e.fromUnitId, toUnitId: e.toUnitId, factor: num(e.factor) }));
+
+const factorConflictReply = (reply: import('fastify').FastifyReply, conflict: FactorConflict) =>
+  reply.status(400).send(fail('CONVERSION_FACTOR_CONFLICT', factorConflictMessage(conflict)));
 
 /** คำนวณต้นทุนต่อหน่วยฐานจากราคาซื้อ */
 function baseUnitCost(purchasePrice: number, purchaseQuantity: number, purchaseToBaseFactor: number) {
@@ -133,6 +160,15 @@ export default async function itemRoutes(app: FastifyInstance) {
     if (q.type) where.type = q.type;
     if (q.baseUnitId) where.baseUnitId = q.baseUnitId;
     if (q.status) where.isActive = q.status === 'active';
+    // ยังไม่มีราคาซื้อ = ต้นทุนต่อหน่วยฐานยังเป็น 0 (คิดต้นทุนสูตรไม่ได้จริง)
+    if (q.dataIssue === 'noPrice') where.lastCost = { lte: 0 };
+    /* ยังไม่ตั้งอัตราแปลง — ตรงกับ needsConversion ที่หน้าจอใช้นับการ์ด KPI
+       (เงื่อนไข "หน่วยซื้อต่างจากหน่วยฐาน" เทียบสองคอลัมน์ตรง ๆ ใน Prisma ไม่ได้
+        แต่ factor <= 0 ก็ถือว่าตั้งค่าไม่ครบอยู่แล้วไม่ว่าหน่วยจะเป็นอะไร) */
+    if (q.dataIssue === 'noFactor') {
+      where.purchaseUnitId = { not: null };
+      where.purchaseToBaseFactor = { lte: 0 };
+    }
     if (q.hasImage === 'yes') where.imageUrl = { not: null };
     if (q.hasImage === 'no') where.imageUrl = null;
 
@@ -167,6 +203,9 @@ export default async function itemRoutes(app: FastifyInstance) {
     const body = upsertSchema.parse(req.body);
     const dup = await prisma.item.findUnique({ where: { code: body.code } });
     if (dup) return reply.status(409).send(fail('CONFLICT', `มีรหัส ${body.code} อยู่แล้ว`));
+
+    const conflict = await checkStandardFactor(body.baseUnitId, body.purchaseUnitId, body.purchaseToBaseFactor, readConversionEdges);
+    if (conflict) return factorConflictReply(reply, conflict);
 
     let lastCost = 0;
     if (body.purchasePrice) lastCost = baseUnitCost(body.purchasePrice, body.purchaseQuantity ?? 1, body.purchaseToBaseFactor);
@@ -210,6 +249,16 @@ export default async function itemRoutes(app: FastifyInstance) {
       const dup = await prisma.item.findUnique({ where: { code: body.code } });
       if (dup) return reply.status(409).send(fail('CONFLICT', `มีรหัส ${body.code} อยู่แล้ว`));
     }
+    /* หน่วยหรืออัตราเปลี่ยนเมื่อไร ต้องตรวจกับอัตรามาตรฐานใหม่เสมอ
+       ใช้ค่าเดิมของรายการเป็นตัวตั้งสำหรับฟิลด์ที่ไม่ได้ส่งมา (PATCH ส่งมาเฉพาะที่แก้) */
+    const nextBaseUnitId = body.baseUnitId ?? existing.baseUnitId;
+    const nextPurchaseUnitId = body.purchaseUnitId !== undefined ? body.purchaseUnitId : existing.purchaseUnitId;
+    const nextFactor = body.purchaseToBaseFactor ?? num(existing.purchaseToBaseFactor);
+    if (body.baseUnitId !== undefined || body.purchaseUnitId !== undefined || body.purchaseToBaseFactor !== undefined) {
+      const conflict = await checkStandardFactor(nextBaseUnitId, nextPurchaseUnitId, nextFactor, readConversionEdges);
+      if (conflict) return factorConflictReply(reply, conflict);
+    }
+
     const data: Prisma.ItemUpdateInput = { updatedById: req.user.sub };
     if (body.code !== undefined) data.code = body.code;
     if (body.name !== undefined) data.name = body.name;
@@ -249,6 +298,130 @@ export default async function itemRoutes(app: FastifyInstance) {
     return ok(serializeItem(updated), 'เปิดการใช้งานวัตถุดิบแล้ว');
   });
 
+  /* ============================================================
+     PHASE 21 — เติมข้อมูลต้นทุนที่ยังขาด
+     ระบบช่วยให้ผู้ใช้ "กรอกให้ครบ" ไม่ใช่ "สร้างตัวเลขขึ้นมาเอง"
+     ============================================================ */
+
+  /** รายการที่ยังไม่มีข้อมูลต้นทุน พร้อมผลกระทบต่อสูตรและเมนู เรียงตามความสำคัญ */
+  app.get('/cost-completion', { preHandler: requireCompany }, async (req) => {
+    const companyId = req.user.companyId!;
+    const items = await prisma.item.findMany({
+      where: { companyId, deletedAt: null, isActive: true, type: { in: [ItemType.RAW_MATERIAL, ItemType.PACKAGING] } },
+      include: { ...itemInclude, _count: { select: { priceHistory: true } } },
+      orderBy: { code: 'asc' },
+    });
+
+    const usage = await prisma.recipeIngredient.findMany({
+      where: { itemId: { in: items.map((i) => i.id) }, recipeVersion: { isActive: true } },
+      select: { itemId: true, recipeVersion: { select: { recipeId: true, recipe: { select: { product: { select: { id: true, name: true } } } } } } },
+    });
+    const recipesOf = new Map<string, Set<string>>();
+    const menusOf = new Map<string, Map<string, string>>();
+    for (const u of usage) {
+      if (!u.itemId) continue;
+      (recipesOf.get(u.itemId) ?? recipesOf.set(u.itemId, new Set()).get(u.itemId)!).add(u.recipeVersion!.recipeId);
+      const product = u.recipeVersion?.recipe?.product;
+      if (product) (menusOf.get(u.itemId) ?? menusOf.set(u.itemId, new Map()).get(u.itemId)!).set(product.id, product.name);
+    }
+
+    const rows = items.map((item) => {
+      const status = costStatusOf({ lastCost: num(item.lastCost), priceRecordCount: item._count.priceHistory });
+      const menus = [...(menusOf.get(item.id)?.values() ?? [])];
+      return {
+        ...serializeItem(item),
+        costStatus: status,
+        priceRecordCount: item._count.priceHistory,
+        recipesAffected: recipesOf.get(item.id)?.size ?? 0,
+        menusAffected: menus.length,
+        menuNames: menus.slice(0, 4),
+      };
+    });
+
+    /* เรียงตามผลกระทบจริง: สูตรที่กระทบ → เมนูที่กระทบ → รหัส
+       ของอย่างน้ำเปล่าที่ใช้ใน 7 สูตร จึงขึ้นมาก่อนของที่ใช้สูตรเดียว */
+    const incomplete = rows
+      .filter((r) => r.costStatus === 'MISSING')
+      .sort((a, b) => b.recipesAffected - a.recipesAffected || b.menusAffected - a.menusAffected || a.code.localeCompare(b.code));
+
+    return ok({
+      rows: incomplete,
+      summary: {
+        total: rows.length,
+        priced: rows.filter((r) => r.costStatus === 'PRICED').length,
+        explicitZero: rows.filter((r) => r.costStatus === 'ZERO').length,
+        missing: incomplete.length,
+      },
+    });
+  });
+
+  /**
+   * บันทึกราคาหลายรายการในครั้งเดียว — รับเฉพาะแถวที่ผู้ใช้ส่งมาจริงเท่านั้น
+   *
+   * เลือกแบบ "ทั้งหมดหรือไม่เลย" เพราะผู้ใช้เห็นสรุปและกดยืนยันเป็นชุดเดียว
+   * ถ้าปล่อยให้สำเร็จบางแถวเงียบ ๆ ผู้ใช้จะไม่รู้ว่าอะไรเข้าไม่เข้า
+   * แถวที่ไม่ผ่านจะถูกรายงานกลับพร้อมเหตุผลรายแถว โดยไม่มีอะไรถูกเขียนเลย
+   */
+  app.post('/cost-completion', { preHandler: EDIT }, async (req, reply) => {
+    const body = z.object({
+      rows: z.array(z.object({
+        itemId: z.string().min(1),
+        purchasePrice: z.number().min(0),
+        purchaseQuantity: z.number().positive().default(1),
+        explicitZero: z.boolean().default(false),
+        zeroReason: z.string().max(200).optional(),
+        note: z.string().max(300).optional(),
+      })).min(1).max(100),
+    }).parse(req.body);
+
+    const companyId = req.user.companyId!;
+    const ids = body.rows.map((r) => r.itemId);
+    if (new Set(ids).size !== ids.length) {
+      return reply.status(400).send(fail('DUPLICATE_ROW', 'มีวัตถุดิบซ้ำกันในคำขอเดียว'));
+    }
+
+    const items = await prisma.item.findMany({ where: { id: { in: ids }, companyId, deletedAt: null } });
+    const itemOf = new Map(items.map((i) => [i.id, i]));
+
+    // ตรวจทุกแถวให้ครบก่อน แล้วค่อยเขียน — ไม่มีการเขียนบางส่วนแล้วค่อยพบว่าผิด
+    const errors: { itemId: string; code: string; message: string }[] = [];
+    const prepared: { itemId: string; cost: number; row: (typeof body.rows)[number] }[] = [];
+    for (const row of body.rows) {
+      const item = itemOf.get(row.itemId);
+      if (!item) { errors.push({ itemId: row.itemId, code: 'NOT_FOUND', message: 'ไม่พบวัตถุดิบในบริษัทนี้' }); continue; }
+      if (row.purchasePrice === 0 && !row.explicitZero) {
+        errors.push({ itemId: row.itemId, code: 'ZERO_NOT_CONFIRMED', message: 'ราคา 0 ต้องยืนยันว่าเป็นต้นทุนศูนย์จริง' });
+        continue;
+      }
+      // ใช้สูตรเดียวกับทุกที่ในระบบ ไม่สร้างสูตรที่สอง
+      prepared.push({ itemId: row.itemId, cost: baseUnitCost(row.purchasePrice, row.purchaseQuantity, num(item.purchaseToBaseFactor)), row });
+    }
+    if (errors.length) return reply.status(400).send(fail('ROW_VALIDATION_FAILED', 'มีรายการที่บันทึกไม่ได้', errors));
+
+    await prisma.$transaction(async (tx) => {
+      for (const { itemId, cost, row } of prepared) {
+        await tx.itemPriceHistory.create({
+          data: {
+            companyId, itemId, price: new Prisma.Decimal(cost),
+            source: row.purchasePrice === 0 ? EXPLICIT_ZERO_SOURCE : 'PURCHASE',
+            createdById: req.user.sub,
+            note: JSON.stringify({
+              purchasePrice: row.purchasePrice, purchaseQuantity: row.purchaseQuantity,
+              pricePerPurchaseUnit: row.purchasePrice / row.purchaseQuantity,
+              supplierId: null, note: row.note ?? null,
+              ...(row.purchasePrice === 0 ? { zeroReason: row.zeroReason ?? null } : {}),
+              source: 'COST_COMPLETION',
+            }),
+          },
+        });
+        await tx.item.update({ where: { id: itemId }, data: { lastCost: new Prisma.Decimal(cost), avgCost: new Prisma.Decimal(cost), updatedById: req.user.sub } });
+      }
+    });
+
+    await writeAudit(req, { action: 'COST_COMPLETION', entity: 'Item', entityId: prepared[0].itemId, after: { updated: prepared.length, itemIds: prepared.map((p) => p.itemId) } });
+    return ok({ updated: prepared.map((p) => ({ itemId: p.itemId, baseUnitCost: p.cost })) }, `บันทึกต้นทุน ${prepared.length} รายการแล้ว`);
+  });
+
   // ประวัติราคา
   app.get('/:id/prices', { preHandler: requireCompany }, async (req, reply) => {
     const { id } = req.params as { id: string };
@@ -269,12 +442,17 @@ export default async function itemRoutes(app: FastifyInstance) {
       prisma.itemPriceHistory.create({
         data: {
           companyId: req.user.companyId!,
-          itemId: id, price: new Prisma.Decimal(cost), source: 'PURCHASE', createdById: req.user.sub,
+          itemId: id, price: new Prisma.Decimal(cost),
+          /* PHASE 21 — แถวประวัติราคาคือหลักฐานว่ามีคนตัดสินใจแล้ว
+             source บอกว่าเป็นราคาซื้อจริง หรือเป็นการยืนยันว่าต้นทุนเป็นศูนย์ */
+          source: body.purchasePrice === 0 ? EXPLICIT_ZERO_SOURCE : 'PURCHASE',
+          createdById: req.user.sub,
           createdAt: body.effectiveDate ? new Date(body.effectiveDate) : undefined,
           note: JSON.stringify({
             purchasePrice: body.purchasePrice, purchaseQuantity: body.purchaseQuantity,
             pricePerPurchaseUnit: body.purchasePrice / body.purchaseQuantity,
             supplierId: body.supplierId ?? null, note: body.note ?? null,
+            ...(body.purchasePrice === 0 ? { zeroReason: body.zeroReason ?? null } : {}),
           }),
         },
       }),

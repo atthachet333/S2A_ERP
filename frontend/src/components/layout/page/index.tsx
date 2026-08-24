@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
 /**
@@ -55,24 +56,40 @@ export function KPIGrid({ columns, className, children }: {
   return <div className={cn('s2-kpi-grid', columns && `s2-kpi-grid--${columns}`, className)}>{children}</div>;
 }
 
-export function KPICard({ label, value, hint, icon, tone = 'default', onClick, active }: {
+export function KPICard({ label, value, unit, hint, icon, tone = 'default', breakdown, onClick, active, to }: {
   label: ReactNode;
   value: ReactNode;
+  /** หน่วยกำกับตัวเลขหลัก เช่น "เรื่อง" "รายการต้องดู" */
+  unit?: ReactNode;
   /** ข้อความประกอบ — ใส่เฉพาะที่มีข้อมูลจริง ห้ามสร้าง trend ปลอม */
   hint?: ReactNode;
   icon?: ReactNode;
-  tone?: 'default' | 'success' | 'warning' | 'danger' | 'info';
+  /* PHASE 22 — เพิ่มโทนของงานปฏิบัติการและต้นทุน เพื่อให้หน้าภาพรวมแยกกลุ่มงานได้ด้วยสายตา
+     โดยยังใช้การ์ดตัวเดียวกันทั้งระบบ ไม่แตกเป็นการ์ดเฉพาะหน้า */
+  tone?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'ops';
+  /** รายการย่อยที่อธิบายที่มาของตัวเลขหลัก ทุกบรรทัดต้องมาจากข้อมูลจริง */
+  breakdown?: { label: string; value: number }[];
   onClick?: () => void;
   active?: boolean;
+  /** ลิงก์ไปหน้าที่แก้เรื่องนี้ได้ — ใช้แทน onClick เมื่อเป็นการนำทาง */
+  to?: string;
 }) {
   const body = (
     <>
       {icon && <span className="s2-kpi-icon" aria-hidden>{icon}</span>}
       <span className="s2-kpi-label">{label}</span>
-      <strong className="s2-kpi-value num">{value}</strong>
+      <strong className="s2-kpi-value num">{value}{unit && <em className="s2-kpi-unit">{unit}</em>}</strong>
+      {breakdown && breakdown.length > 0 && (
+        <ul className="s2-kpi-break">
+          {breakdown.map((b) => (
+            <li key={b.label}><span>{b.label}</span><b className="num">{b.value.toLocaleString()}</b></li>
+          ))}
+        </ul>
+      )}
       {hint && <span className="s2-kpi-hint">{hint}</span>}
     </>
   );
+  if (to) return <Link to={to} className={cn('s2-kpi', tone !== 'default' && `s2-kpi--${tone}`, 's2-kpi--link')}>{body}</Link>;
   const cls = cn('s2-kpi', tone !== 'default' && `s2-kpi--${tone}`, active && 'is-active');
   return onClick
     ? <button type="button" className={cls} onClick={onClick} aria-pressed={active}>{body}</button>

@@ -160,3 +160,45 @@
 /* คำอ่านสำหรับ screen reader แทนสัญลักษณ์ − และ = */
 .sr-sep { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .issue-row-error { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-2); margin: var(--space-1) 0 0; font-size: 12.5px; font-weight: 600; color: var(--note-warn-fg); }
+
+/* ---------- PHASE 18: โอนย้ายระหว่างคลัง ---------- */
+
+/* แถวโอนย้ายมี 6 ช่องพอดีกับ grid-template เดิม จึงไม่ต้องประกาศคอลัมน์ใหม่
+   ที่ต่างคือมีสมการสองบรรทัด (ต้นทาง/ปลายทาง) ซึ่งต้องอ่านคู่กันเสมอ */
+.transfer-eq { margin-top: var(--space-1); }
+.transfer-eq + .transfer-eq { margin-top: var(--space-1); }
+.transfer-eq .eq-side {
+  flex: none; min-width: 62px; padding: 2px var(--space-2);
+  border-radius: var(--radius-sm); background: var(--surface);
+  font-size: 11px; font-weight: 700; color: var(--text-subtle);
+}
+/* ต้นทางลด ปลายทางเพิ่ม — ใช้คำกำกับเสมอ ไม่ได้สื่อด้วยสีอย่างเดียว */
+.transfer-eq[data-label="ปลายทาง"] strong.num { color: var(--info, var(--success)); }
+
+/* ตารางรายละเอียดแสดงผลกระทบทั้งสองฝั่งคู่กัน */
+.transfer-lines td b[aria-hidden] { padding: 0 var(--space-1); color: var(--text-subtle); font-weight: 700; }
+
+.ops-filter { display: inline-flex; align-items: center; gap: var(--space-2); font-size: 12px; color: var(--text-muted); }
+.ops-filter select { min-height: var(--control-h); padding: 0 var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+
+@media (max-width: 760px) {
+  /* บนจอเล็กแถวกลายเป็นการ์ด — สมการสองฝั่งต้องยังอ่านออกและไม่ล้นขอบ */
+  .transfer-grid { overflow: visible; }
+  .transfer-grid .issue-head { display: none; }
+  .transfer-grid .issue-row {
+    min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface);
+  }
+  .transfer-grid .issue-row > strong { grid-column: 1 / -1; }
+  .transfer-grid .issue-row > span,
+  .transfer-grid .issue-row > input {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  }
+  .transfer-grid .issue-row > span::before,
+  .transfer-grid .issue-row > input::before {
+    content: attr(data-label); font-size: 11.5px; font-weight: 600; color: var(--text-subtle);
+  }
+  .transfer-grid .transfer-eq { flex-wrap: wrap; }
+  .transfer-lines td b[aria-hidden] { padding: 0 4px; }
+}

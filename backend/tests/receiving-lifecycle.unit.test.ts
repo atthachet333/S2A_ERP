@@ -31,13 +31,27 @@ function makeTx(initial: { itemId: string; warehouseId: string; onHand: number }
       findMany: vi.fn(async ({ where }: { where: { refType: string; refId: string } }) =>
         ledger.filter((r) => r.refType === where.refType && r.refId === where.refId)),
     },
-    documentCounter: {
-      upsert: vi.fn(async ({ where }: { where: { companyId_docType_periodKey: Record<string, string> } }) => {
-        const k = Object.values(where.companyId_docType_periodKey).join('|');
-        counters[k] = { lastSeq: (counters[k]?.lastSeq ?? 0) + 1 };
-        return counters[k];
-      }),
-    },
+    /* PHASE 16 — ตัวนับเอกสารใช้ INSERT IGNORE → SELECT ... FOR UPDATE → UPDATE
+       ตัวจำลองนี้เลียนแบบสัญญาของคำสั่ง ไม่ใช่ตัวอักษร SQL แต่แยกชนิดคำสั่งด้วยคำขึ้นต้น */
+    $executeRaw: vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const key = [values[1], values[2], values[3]].join('|');
+      if (strings.join(' ').includes('INSERT')) {
+        if (!counters[key]) counters[key] = { lastSeq: 0 };
+        return 1;
+      }
+      counters[key] = { lastSeq: Number(values[0]) };
+      return 1;
+    }),
+    $queryRaw: vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = strings.join(' ');
+      if (sql.includes('stock_balances')) {
+        // SELECT ... FOR UPDATE ของยอดคงเหลือ — พารามิเตอร์คือ itemId, warehouseId
+        const row = balances.find((b) => b.itemId === values[0] && b.warehouseId === values[1]);
+        return row ? [{ id: row.id, onHand: row.onHand, reserved: row.reserved }] : [];
+      }
+      const key = [values[0], values[1], values[2]].join('|');
+      return counters[key] ? [{ lastSeq: counters[key].lastSeq }] : [];
+    }),
     item: { update: vi.fn(async (args: Record<string, unknown>) => { itemUpdates.push(args); return {}; }) },
     itemPriceHistory: { create: vi.fn(async (args: Record<string, unknown>) => { priceRows.push(args); return {}; }) },
   };

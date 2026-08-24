@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   auditActionLabel, auditEntityLabel, hasPermissionChanges, labelFor, permissionDiff,
-  registrationBadge, registrationStatusLabel, roleLabel, sortGroups, userStatus,
+  GROUP_LABELS, registrationBadge, registrationStatusLabel, roleLabel, sortGroups, userStatus,
 } from '@/lib/admin-vocab';
 
 /** PHASE 9 — ADMIN / USERS / PERMISSIONS / LOGS */
@@ -359,5 +359,54 @@ describe('PART 1 — ไม่สร้างสิ่งที่ backend ไ�
     const keys = [...roleTable.matchAll(/^ {2}([A-Z_]+):/gm)].map((m) => m[1]);
     expect(keys.length).toBeGreaterThanOrEqual(10);
     for (const key of keys) expect(block, key).toContain(key);
+  });
+});
+
+/**
+ * PHASE 19 — ป้ายสิทธิ์ต้องแยกออกจากกันได้
+ * เดิม STOCK_VIEW · STOCK_ISSUE_VIEW · STOCK_TRANSFER_VIEW ขึ้นว่า "ดูสต๊อก" เหมือนกันหมด
+ * ผู้ดูแลจึงติ๊กผิดช่องได้ง่ายในหน้าที่ให้สิทธิ์ ซึ่งอันตรายกว่าที่อื่น
+ */
+describe('ป้ายสิทธิ์ในหน้าจัดการสิทธิ์', () => {
+  const groupOf = (code: string) =>
+    code.startsWith('STOCK_TRANSFER_') ? 'StockTransfer'
+      : code.startsWith('STOCK_ISSUE_') ? 'StockIssue'
+      : code.startsWith('STOCK_') ? 'Stock'
+      : 'Other';
+
+  const STOCK_CODES = [
+    'STOCK_VIEW', 'STOCK_ISSUE_VIEW', 'STOCK_ISSUE_CREATE', 'STOCK_ISSUE_CONFIRM',
+    'STOCK_TRANSFER_VIEW', 'STOCK_TRANSFER_CREATE', 'STOCK_TRANSFER_CONFIRM', 'STOCK_TRANSFER_REVERSE',
+  ];
+
+  it('สิทธิ์กลุ่มสต๊อกทุกตัวต้องมีป้ายไม่ซ้ำกันในทุกภาษา', () => {
+    for (const locale of ['th', 'en', 'zh-CN'] as const) {
+      const labels = STOCK_CODES.map((code) => labelFor(code, groupOf(code), locale));
+      expect(new Set(labels).size, `${locale}: ${labels.join(' | ')}`).toBe(STOCK_CODES.length);
+    }
+  });
+
+  it('มีป้ายของกลุ่มใบเบิกและใบโอนย้ายครบทุกภาษา', () => {
+    for (const group of ['StockIssue', 'StockTransfer']) {
+      for (const locale of ['th', 'en', 'zh-CN'] as const) {
+        expect(GROUP_LABELS[group]?.[locale], `${group}/${locale}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('การกลับรายการมีคำแปลของตัวเอง ไม่ตกไปเป็นชื่อกลุ่มเปล่า ๆ', () => {
+    expect(labelFor('STOCK_TRANSFER_REVERSE', 'StockTransfer', 'th')).not.toBe(GROUP_LABELS.StockTransfer.th);
+    expect(labelFor('STOCK_TRANSFER_REVERSE', 'StockTransfer', 'th')).toContain('กลับรายการ');
+  });
+
+  it('รหัสที่ระบบยังไม่รู้จักต้องไม่ทำให้พัง — คืนชื่อกลุ่มแทน', () => {
+    expect(() => labelFor('BRAND_NEW_PERMISSION_XYZ', 'Other', 'th')).not.toThrow();
+    expect(labelFor('BRAND_NEW_PERMISSION_XYZ', 'Other', 'th')).toBe(GROUP_LABELS.Other.th);
+    expect(labelFor('SOMETHING', 'GroupThatDoesNotExist', 'en')).toBe('GroupThatDoesNotExist');
+  });
+
+  it('กลุ่มใหม่ต้องเรียงอยู่ในลำดับที่ตั้งใจ ไม่ตกไปท้ายสุด', () => {
+    const sorted = sortGroups(['Settings', 'StockTransfer', 'Stock', 'StockIssue', 'Dashboard']);
+    expect(sorted).toEqual(['Dashboard', 'Stock', 'StockIssue', 'StockTransfer', 'Settings']);
   });
 });

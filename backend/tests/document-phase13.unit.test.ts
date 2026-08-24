@@ -228,6 +228,10 @@ describe('PHASE 13 — ชื่อไฟล์ดาวน์โหลด', () 
 /* ============================================================
    §21 §22 ไฟล์ Excel ต้องเป็น XLSX จริง
    ============================================================ */
+/** ExcelJS รับ ArrayBuffer ได้ตรง ๆ — เลี่ยงปัญหา typing ของ Buffer<Buffer> ใน TS รุ่นใหม่ */
+const toArrayBuffer = (buf: Buffer): ArrayBuffer =>
+  buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+
 describe('PHASE 13 — ไฟล์ Excel', () => {
   const buildWorkbook = async () => {
     const wb = new ExcelJS.Workbook();
@@ -260,7 +264,7 @@ describe('PHASE 13 — ไฟล์ Excel', () => {
 
   it('โหลดกลับด้วย ExcelJS ได้ และอ่านค่าเซลล์ตรง', async () => {
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(await buildWorkbook());
+    await wb.xlsx.load(toArrayBuffer(await buildWorkbook()));
     const ws = wb.getWorksheet('รับของเข้า');
     expect(ws).toBeTruthy();
     expect(ws!.getCell('A1').value).toBe('เลขที่รับของ');
@@ -272,7 +276,7 @@ describe('PHASE 13 — ไฟล์ Excel', () => {
 
   it('เก็บรูปแบบตัวเลขและการตรึงหัวตารางไว้จริง', async () => {
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(await buildWorkbook());
+    await wb.xlsx.load(toArrayBuffer(await buildWorkbook()));
     const ws = wb.getWorksheet('รับของเข้า')!;
     expect(ws.getColumn(2).numFmt).toBe('#,##0.####');
     expect(ws.getColumn(4).numFmt).toBe('#,##0.00');
@@ -283,6 +287,6 @@ describe('PHASE 13 — ไฟล์ Excel', () => {
     const html = Buffer.from('<!doctype html><html lang="th"></html>', 'utf8');
     expect(html.subarray(0, 2).toString('latin1')).not.toBe('PK');
     const wb = new ExcelJS.Workbook();
-    await expect(wb.xlsx.load(html)).rejects.toBeTruthy();
+    await expect(wb.xlsx.load(toArrayBuffer(html))).rejects.toBeTruthy();
   });
 });

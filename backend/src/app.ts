@@ -19,6 +19,8 @@ import recipeRoutes from './modules/recipes/recipe.route.js';
 import costingRoutes from './modules/costing/costing.route.js';
 import uploadRoutes from './modules/uploads/upload.route.js';
 import businessRoutes from './modules/business/business.route.js';
+import transferRoutes from './modules/business/transfer.route.js';
+import receiptAttachmentRoutes from './modules/business/receipt-attachment.route.js';
 import companyRoutes from './modules/companies/company.route.js';
 import adminRoutes from './modules/admin/admin.route.js';
 
@@ -72,6 +74,10 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(costingRoutes, { prefix: '/costing' });
       await api.register(uploadRoutes, { prefix: '/uploads' });
       await api.register(businessRoutes, { prefix: '/business' });
+      // PHASE 18 — โอนย้ายระหว่างคลัง แยกไฟล์แต่ยังอยู่ใต้ /business เหมือนงาน operations อื่น
+      await api.register(transferRoutes, { prefix: '/business' });
+      // PHASE 22 — ไฟล์เอกสารต้นฉบับจากผู้ขาย (ส่วนเพิ่มของงานรับของ)
+      await api.register(receiptAttachmentRoutes, { prefix: '/business' });
       await api.register(companyRoutes, { prefix: '/companies' });
       await api.register(adminRoutes, { prefix: '/admin' });
     },

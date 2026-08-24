@@ -19,7 +19,7 @@ import { documentImage } from './document-assets.js';
 export type DocumentType =
   | 'ORDER_SLIP' | 'KITCHEN_PREPARATION_SLIP' | 'STOCK_ISSUE_SLIP'
   | 'GOODS_RECEIPT_SLIP' | 'RECIPE_COST_SHEET' | 'SALES_REPORT'
-  | 'STOCK_ADJUSTMENT_SLIP';
+  | 'STOCK_ADJUSTMENT_SLIP' | 'STOCK_TRANSFER_SLIP';
 
 export type DocumentLine = {
   name: string;
@@ -67,6 +67,8 @@ const TITLES: Record<DocumentType, { en: string; th: string }> = {
   RECIPE_COST_SHEET: { en: 'COST SHEET', th: 'ใบต้นทุนสูตรอาหาร' },
   SALES_REPORT: { en: 'SALES REPORT', th: 'รายงานการขาย' },
   STOCK_ADJUSTMENT_SLIP: { en: 'STOCK ADJUSTMENT', th: 'ใบปรับปรุงสต็อก' },
+  // PHASE 18 — ใบโอนย้ายไม่มีตัวเลขการเงิน จึงใช้ชุดคอลัมน์แบบไม่มีราคาที่มีอยู่แล้ว
+  STOCK_TRANSFER_SLIP: { en: 'STOCK TRANSFER', th: 'ใบโอนย้ายระหว่างคลัง' },
 };
 
 /* ---------- โทนสีเอกสาร ---------- */
@@ -445,8 +447,17 @@ function drawNote(doc: Doc, input: BusinessDocument, y: number, R: string, B: st
    ============================================================ */
 function drawSignatures(doc: Doc, y: number, R: string, B: string) {
   const BLOCK_H = 34;
-  let sy = y + 10;
-  if (sy + BLOCK_H > FOOTER_TOP) { doc.addPage(); sy = MARGIN + 6; }
+
+  /* PHASE 22 — ช่องลงนามต้องยึดกับ "ก้นกระดาษ" ไม่ใช่ลอยต่อจากเนื้อหา
+     เดิมวางที่ y + 10 ทันที เอกสารสั้น ๆ จึงจบกลางหน้าแล้วเหลือที่ว่างครึ่งล่างทั้งแถบ
+     ทำให้ดูเหมือนใบที่พิมพ์ไม่เสร็จ ทั้งที่ขนาดกระดาษเป็น A5 ถูกต้องอยู่แล้ว
+     เอกสารจริงจะเซ็นชื่อที่ท้ายหน้าเสมอ */
+  const anchored = FOOTER_TOP - BLOCK_H - 8;
+  let sy = Math.max(y + 10, anchored);
+  if (sy + BLOCK_H > FOOTER_TOP) { doc.addPage(); sy = FOOTER_TOP - BLOCK_H - 8; }
+
+  // เส้นคั่นบาง ๆ เหนือช่องลงนาม เพื่อแยกส่วนท้ายออกจากเนื้อหาอย่างชัดเจน
+  doc.moveTo(MARGIN, sy - 8).lineTo(PAGE_W - MARGIN, sy - 8).lineWidth(0.5).strokeColor(RULE).stroke();
 
   const roles = ['ผู้จัดทำ', 'ผู้ตรวจสอบ', 'ผู้อนุมัติ'];
   const colW = CONTENT_W / roles.length;

@@ -91,6 +91,10 @@ export const catalogApi = {
     return apiClient.get<Paginated<Item>>(`/items?${q.toString()}`);
   },
   item: (id: string) => apiClient.get<ItemDetail>(`/items/${id}`),
+  /* PHASE 21 — เติมข้อมูลต้นทุนที่ยังขาด */
+  costCompletion: () => apiClient.get<CostCompletion>('/items/cost-completion'),
+  saveCostCompletion: (rows: CostCompletionSave[]) => apiClient.post<{ updated: { itemId: string; baseUnitCost: number }[] }>('/items/cost-completion', { rows }),
+  recipeCompleteness: () => apiClient.get<RecipeCompleteness>('/costing/completeness'),
   // วัตถุดิบ/บรรจุภัณฑ์ที่เลือกได้ในสูตร (active เท่านั้น, ผูกกับบริษัทปัจจุบัน, ไม่แบ่งหน้า)
   selectableItems: (type?: ItemType) => apiClient.get<Item[]>(`/items/selectable${type ? `?type=${type}` : ''}`),
   createItem: (body: unknown) => apiClient.post<Item>('/items', body),
@@ -153,4 +157,45 @@ export async function uploadImage(kind: 'items' | 'menus' | 'company', file: Fil
     throw new ApiClientError(payload?.error?.code ?? 'UPLOAD_FAILED', payload?.error?.message ?? 'อัปโหลดรูปไม่สำเร็จ', res.status);
   }
   return payload.data;
+}
+
+
+/* ============================================================
+   PHASE 21 — ความครบถ้วนของข้อมูลต้นทุน
+   ============================================================ */
+
+export type CostStatus = 'PRICED' | 'ZERO' | 'MISSING';
+
+export interface CostCompletionRow extends Item {
+  costStatus: CostStatus;
+  priceRecordCount: number;
+  recipesAffected: number;
+  menusAffected: number;
+  menuNames: string[];
+}
+
+export interface CostCompletion {
+  rows: CostCompletionRow[];
+  summary: { total: number; priced: number; explicitZero: number; missing: number };
+}
+
+export interface CostCompletionSave {
+  itemId: string;
+  purchasePrice: number;
+  purchaseQuantity: number;
+  explicitZero?: boolean;
+  zeroReason?: string;
+}
+
+export interface RecipeCompletenessRow {
+  recipeId: string; recipeVersionId: string; versionNo: number;
+  productId: string | null; productCode: string | null; productName: string | null;
+  total: number; priced: number; explicitZero: number; missing: number;
+  percent: number; complete: boolean;
+  missingItems: { id: string; code: string; name: string }[];
+}
+
+export interface RecipeCompleteness {
+  rows: RecipeCompletenessRow[];
+  summary: { recipes: number; complete: number; incomplete: number };
 }

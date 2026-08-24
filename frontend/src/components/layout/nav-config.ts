@@ -155,6 +155,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/customers', label: 'ลูกค้า', icon: UsersRound, requiredPermission: 'CUSTOMER_VIEW' },
       { path: '/receiving', label: 'รับของเข้า', icon: Truck, requiredPermission: 'RECEIVING_VIEW' },
       { path: '/stock-issues', label: 'เบิกให้ครัวกลาง', icon: Boxes, requiredPermission: 'STOCK_ISSUE_VIEW' },
+      { path: '/stock-transfers', label: 'โอนย้ายระหว่างคลัง', icon: ArrowLeftRight, requiredAnyPermission: ['STOCK_TRANSFER_VIEW', 'STOCK_VIEW'] },
       { path: '/inventory', label: 'สต็อกคงเหลือ', icon: Warehouse, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
       { path: '/inventory/movements', label: 'ประวัติสต็อก', icon: History, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
       { path: '/inventory/adjustments', label: 'ปรับปรุงสต็อก', icon: ArrowLeftRight, requiredPermission: 'INVENTORY_ADJUST' },

@@ -5,7 +5,9 @@ import { prisma } from '../../lib/prisma.js';
 import { fail, ok } from '../../lib/response.js';
 import { requirePermission } from '../auth/auth.guard.js';
 import { num } from '../../lib/http.js';
-import { applyMovement, InsufficientStockError, nextDocumentNo, reverseDocument } from '../../lib/inventory-ledger.js';
+import { applyMovement, InsufficientStockError, lockBalance, lockBalancesInOrder, nextDocumentNo, nextOrderNo, reverseDocument } from '../../lib/inventory-ledger.js';
+import { withDocumentNumberRetry, withStockLockRetry } from '../../lib/tx-retry.js';
+import { checkStandardFactor, factorConflictMessage } from '../../lib/item-conversion.js';
 import { aggregateStock, buildPatch, duplicateMessage, normalizeCode, normalizeName, optionalText, searchWhere, statusWhere, toNum as pnum, warehouseDeactivateBlock } from '../../lib/partner-master.js';
 import ExcelJS from 'exceljs';
 import { notificationChannels } from '../notifications/channel.service.js';
@@ -201,6 +203,9 @@ async function confirmReceiptWithin(tx: Prisma.TransactionClient, receiptId: str
     include: { items: { include: { item: { include: { baseUnit: true } } } } },
   });
 
+  // PHASE 17 — ล็อกแถวยอดคงเหลือทั้งใบตามลำดับ itemId ก่อน เพื่อไม่ให้สองใบจับล็อกสวนทางกัน
+  await lockBalancesInOrder(tx, doc.warehouseId, doc.items.map((line) => line.itemId));
+
   for (const line of doc.items) {
     const factor = num(line.item.purchaseToBaseFactor);
     const unitPrice = num(line.unitPrice);
@@ -311,9 +316,25 @@ const DOC_STATUS_TH: Record<string, string> = {
 };
 const ORDER_TIER_TH: Record<string, string> = { RETAIL: 'ราคาปลีก', WHOLESALE: 'ราคาส่ง', AGENT: 'ราคาตัวแทน' };
 
+/**
+ * PHASE 16 — transaction ที่ต้องออกเลขเอกสาร
+ *
+ * ใช้เฉพาะ 4 จุดที่ออกเลข (ออเดอร์ · ใบรับของ · ใบเบิก · ใบปรับปรุงสต็อก)
+ * ไม่ใช่ตัวห่อสำหรับ transaction ทั่วไป — ข้อผิดพลาดทางธุรกิจยังล้มทันทีเหมือนเดิม
+ */
+const numberedTransaction = <T>(run: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> =>
+  withDocumentNumberRetry(() => prisma.$transaction(run, { maxWait: 10_000, timeout: 20_000 }));
+
+/**
+ * PHASE 17 — transaction ที่ขยับยอดคงเหลือแต่ไม่ได้ออกเลขเอกสารใหม่ (ยืนยัน / กลับรายการ)
+ * ลองใหม่เฉพาะการชนกันของล็อกเท่านั้น สต็อกไม่พอหรือสถานะไม่ถูกต้องจะล้มทันทีเหมือนเดิม
+ */
+const stockTransaction = <T>(run: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> =>
+  withStockLockRetry(() => prisma.$transaction(run, { maxWait: 10_000, timeout: 20_000 }));
+
 export default async function businessRoutes(app: FastifyInstance) {
   app.get('/documents/:type/:id.pdf', { preHandler: requirePermission('DOCUMENT_DOWNLOAD') }, async (req, reply) => {
-    const { type, id } = z.object({ type: z.enum(['ORDER_SLIP','KITCHEN_PREPARATION_SLIP','STOCK_ISSUE_SLIP','GOODS_RECEIPT_SLIP','RECIPE_COST_SHEET','SALES_REPORT','STOCK_ADJUSTMENT_SLIP']), id: z.string().min(1) }).parse(req.params) as { type: DocumentType; id: string };
+    const { type, id } = z.object({ type: z.enum(['ORDER_SLIP','KITCHEN_PREPARATION_SLIP','STOCK_ISSUE_SLIP','GOODS_RECEIPT_SLIP','RECIPE_COST_SHEET','SALES_REPORT','STOCK_ADJUSTMENT_SLIP','STOCK_TRANSFER_SLIP']), id: z.string().min(1) }).parse(req.params) as { type: DocumentType; id: string };
     const companyId = req.user.companyId!; const company = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
     /* PHASE 13 — เดิมเขียนทับ nameTh ของบริษัทหลักเป็น 'ครัวสดดี'
        ทำให้เอกสารไม่ขึ้นชื่อนิติบุคคลจริงที่จดทะเบียนไว้ จึงใช้ค่าใน Company ตรง ๆ */
@@ -325,6 +346,11 @@ export default async function businessRoutes(app: FastifyInstance) {
       const receipt = await prisma.goodsReceipt.findFirst({ where: { id, companyId }, include: { supplier: true, warehouse: true, items: { include: { item: { include: { baseUnit: true } } } } } });
       const grAuthor = receipt?.createdById ? (await prisma.user.findUnique({ where: { id: receipt.createdById }, select: { fullName: true } }))?.fullName : undefined;
       if (receipt) document = { type, title: type, documentNo: receipt.receiptNo, date: receipt.receiptDate, company: identity, createdBy: grAuthor ?? undefined, status: DOC_STATUS_TH[receipt.status] ?? receipt.status, totalLabel: 'ยอดรวมทั้งสิ้น', subject: [{ label: 'ผู้จำหน่าย', value: receipt.supplier?.name ?? '—' }, { label: 'คลังปลายทาง', value: receipt.warehouse.name }, { label: 'วันที่รับ', value: receipt.receiptDate.toLocaleDateString('th-TH') }, ...(receipt.supplierDocNo ? [{ label: 'เอกสารอ้างอิง', value: receipt.supplierDocNo }] : [])], lines: receipt.items.map((line) => ({ name: line.item.name, detail: [line.lotNo && `Lot ${line.lotNo}`, line.expiryDate && `Expiry ${line.expiryDate.toLocaleDateString('th-TH')}`].filter(Boolean).join(' · '), quantity: line.quantity.toString(), unit: line.item.baseUnit?.code ?? '—', price: line.unitPrice.toString(), total: line.totalCost.toString() })), total: receipt.items.reduce((sum,line)=>sum.plus(line.totalCost),new Prisma.Decimal(0)).toString(), note: receipt.note };
+    } else if (type === 'STOCK_TRANSFER_SLIP') {
+      /* PHASE 18 — ใบโอนย้ายระหว่างคลัง: ไม่มียอดเงิน แสดงเฉพาะคลังต้นทาง/ปลายทางและจำนวน */
+      const tr = await prisma.stockTransfer.findFirst({ where: { id, companyId }, include: { fromWarehouse: true, toWarehouse: true, items: { include: { item: { include: { baseUnit: true } } } } } });
+      const trAuthor = tr?.createdById ? (await prisma.user.findUnique({ where: { id: tr.createdById }, select: { fullName: true } }))?.fullName : undefined;
+      if (tr) document = { type, title: type, documentNo: tr.transferNo, date: tr.transferDate, company: identity, createdBy: trAuthor ?? undefined, status: DOC_STATUS_TH[tr.status] ?? tr.status, subject: [{ label: 'คลังต้นทาง', value: `${tr.fromWarehouse.code} · ${tr.fromWarehouse.name}` }, { label: 'คลังปลายทาง', value: `${tr.toWarehouse.code} · ${tr.toWarehouse.name}` }, { label: 'วันที่โอนย้าย', value: tr.transferDate.toLocaleDateString('th-TH') }], lines: tr.items.map((line) => ({ name: line.item.name, detail: line.lotNo ? `Lot ${line.lotNo}` : undefined, quantity: line.quantity.toString(), unit: line.item.baseUnit?.code ?? '—' })), note: tr.note };
     } else if (type === 'STOCK_ISSUE_SLIP') {
       const issue = await prisma.stockIssue.findFirst({ where: { id, companyId }, include: { order: true, createdBy: { select: { fullName: true } }, items: true } });
       if (issue) { const itemNames = new Map((await prisma.item.findMany({ where: { companyId, id: { in: issue.items.map((line)=>line.itemId) } }, select: { id: true, name: true } })).map((item)=>[item.id,item.name])); document = { type, title: type, documentNo: issue.issueNo, date: issue.issueDate, company: identity, createdBy: issue.createdBy.fullName, status: DOC_STATUS_TH[issue.status] ?? issue.status, subject: [{ label: 'คำสั่งซื้ออ้างอิง', value: issue.order?.orderNo ?? '—' }, { label: 'ปลายทาง', value: issue.destination }, { label: 'วันที่เบิก', value: issue.issueDate.toLocaleDateString('th-TH') }], lines: issue.items.map((line)=>({ name:itemNames.get(line.itemId)??line.itemId,quantity:line.issuedQty.toString(),unit:line.unit })), note: issue.note }; }
@@ -613,6 +639,16 @@ export default async function businessRoutes(app: FastifyInstance) {
     const companyId = req.user.companyId!;
     const unit = await prisma.unit.findFirst({ where: { id: body.baseUnitId, isActive: true, deletedAt: null } });
     if (!unit) return reply.status(400).send(fail('VALIDATION_ERROR', 'ไม่พบหน่วยฐานที่เลือก'));
+
+    /* PHASE 20B — เส้นทางนี้เคยเขียนอัตราแปลงลงฐานโดยไม่ตรวจอะไรเลย
+       จึงเป็นช่องที่ค่าผิดทิศ (KG→G = 0.001) เล็ดลอดเข้าไปได้ ทั้งที่หน้าวัตถุดิบกันไว้แล้ว
+       ใช้ด่านกลางตัวเดียวกับ /api/items เพื่อไม่ให้มีกติกาสองชุด */
+    const conflict = await checkStandardFactor(
+      body.baseUnitId, body.purchaseUnitId, body.purchaseToBaseFactor,
+      async () => (await prisma.unitConversion.findMany({ select: { fromUnitId: true, toUnitId: true, factor: true } }))
+        .map((e) => ({ fromUnitId: e.fromUnitId, toUnitId: e.toUnitId, factor: num(e.factor) })),
+    );
+    if (conflict) return reply.status(400).send(fail('CONVERSION_FACTOR_CONFLICT', factorConflictMessage(conflict)));
     const create = (code: string) => prisma.item.create({ data: { companyId, code, name: body.name, type: body.type, baseUnitId: body.baseUnitId, purchaseUnitId: body.purchaseUnitId ?? null, purchaseToBaseFactor: new Prisma.Decimal(body.purchaseToBaseFactor), createdById: req.user.sub, updatedById: req.user.sub }, include: { baseUnit: { select: { code: true, name: true } } } });
     let item;
     try { item = await create(body.code?.trim() || `ITM-${Date.now().toString().slice(-6)}`); }
@@ -733,9 +769,11 @@ export default async function businessRoutes(app: FastifyInstance) {
     if (body.idempotencyKey) { const existing = await prisma.salesOrder.findFirst({ where: { companyId, idempotencyKey: body.idempotencyKey }, include: { items: true } }); if (existing) return ok(existing); }
     const subtotal = body.items.reduce((sum, item) => sum.plus(new Prisma.Decimal(item.quantity).mul(item.unitPrice)), new Prisma.Decimal(0));
     const totalAmount = Prisma.Decimal.max(0, subtotal.minus(body.discount).plus(body.tax));
-    const order = await prisma.$transaction(async (tx) => {
-      const count = await tx.salesOrder.count({ where: { companyId } });
-      const created = await tx.salesOrder.create({ data: { companyId, orderNo: `SO-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`, customerId: customer.id, deliveryDate: body.deliveryDate, deliveryTime: body.deliveryTime, contactName: body.contactName ?? customer.contactName, phone: body.phone ?? customer.phone, email: body.email || customer.email, deliveryAddress: body.deliveryAddress ?? customer.address, subtotal, discount: body.discount, tax: body.tax, totalAmount, note: body.note, priceTier: body.priceTier ?? null, idempotencyKey: body.idempotencyKey, createdByUserId: req.user.sub, items: { create: body.items.map((item) => ({ ...item, quantity: item.quantity, unitPrice: item.unitPrice, lineTotal: new Prisma.Decimal(item.quantity).mul(item.unitPrice) })) } }, include: { items: true, customer: true } });
+    const order = await numberedTransaction(async (tx) => {
+      /* PHASE 16 — เดิมออกเลขจาก count() ทำให้สองคำขอพร้อมกันได้เลขเดียวกันแล้วชน unique([companyId, orderNo])
+         ต้องเป็นคำสั่งแรกของ transaction เสมอ ดูเหตุผลที่ allocateSeq ใน inventory-ledger */
+      const orderNo = await nextOrderNo(tx, companyId);
+      const created = await tx.salesOrder.create({ data: { companyId, orderNo, customerId: customer.id, deliveryDate: body.deliveryDate, deliveryTime: body.deliveryTime, contactName: body.contactName ?? customer.contactName, phone: body.phone ?? customer.phone, email: body.email || customer.email, deliveryAddress: body.deliveryAddress ?? customer.address, subtotal, discount: body.discount, tax: body.tax, totalAmount, note: body.note, priceTier: body.priceTier ?? null, idempotencyKey: body.idempotencyKey, createdByUserId: req.user.sub, items: { create: body.items.map((item) => ({ ...item, quantity: item.quantity, unitPrice: item.unitPrice, lineTotal: new Prisma.Decimal(item.quantity).mul(item.unitPrice) })) } }, include: { items: true, customer: true } });
       await tx.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'CREATE', entity: 'SalesOrder', entityId: created.id } });
       return created;
     });
@@ -966,15 +1004,16 @@ export default async function businessRoutes(app: FastifyInstance) {
     const companyId = req.user.companyId!;
 
     try {
-      const receipt = await prisma.$transaction(async (tx) => {
+      const receipt = await numberedTransaction(async (tx) => {
+        // PHASE 16 — ออกเลขเป็นคำสั่งแรกเสมอ ก่อนคำสั่งอ่านใด ๆ (ดูเหตุผลที่ allocateSeq ใน inventory-ledger)
+        const receiptNo = await nextDocumentNo(tx, companyId, 'GOODS_RECEIPT');
+
         const warehouse = await tx.warehouse.findFirst({ where: { id: body.warehouseId, companyId } });
         if (!warehouse) throw new Error('WAREHOUSE_NOT_FOUND');
 
         const itemIds = [...new Set(body.items.map((l) => l.itemId))];
         const items = await tx.item.findMany({ where: { id: { in: itemIds }, companyId, deletedAt: null } });
         if (items.length !== itemIds.length) throw new Error('ITEM_NOT_IN_COMPANY');
-
-        const receiptNo = await nextDocumentNo(tx, companyId, 'GOODS_RECEIPT');
         const created = await tx.goodsReceipt.create({
           data: {
             companyId, receiptNo, warehouseId: body.warehouseId, supplierId: body.supplierId,
@@ -1112,7 +1151,7 @@ export default async function businessRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const companyId = req.user.companyId!;
     try {
-      const receipt = await prisma.$transaction(async (tx) => {
+      const receipt = await stockTransaction(async (tx) => {
         const doc = await tx.goodsReceipt.findFirst({ where: { id, companyId } });
         if (!doc) throw new Error('RECEIPT_NOT_FOUND');
         if (doc.status !== 'DRAFT') throw new Error(`ALREADY_${doc.status}`);
@@ -1133,7 +1172,7 @@ export default async function businessRoutes(app: FastifyInstance) {
     const companyId = req.user.companyId!;
     const body = z.object({ reason: z.string().max(300).optional() }).parse(req.body ?? {});
     try {
-      const receipt = await prisma.$transaction(async (tx) => {
+      const receipt = await stockTransaction(async (tx) => {
         const doc = await tx.goodsReceipt.findFirst({ where: { id, companyId } });
         if (!doc) throw new Error('RECEIPT_NOT_FOUND');
         if (doc.status === 'DRAFT') throw new Error('NOT_CONFIRMED');
@@ -1282,7 +1321,10 @@ export default async function businessRoutes(app: FastifyInstance) {
     if (existing) return ok(existing);
 
     try {
-      const issue = await prisma.$transaction(async (tx) => {
+      const issue = await numberedTransaction(async (tx) => {
+        // PHASE 16 — ออกเลขเป็นคำสั่งแรกเสมอ ก่อนคำสั่งอ่านใด ๆ (ดูเหตุผลที่ allocateSeq ใน inventory-ledger)
+        const issueNo = await nextDocumentNo(tx, companyId, 'STOCK_ISSUE');
+
         const warehouse = await tx.warehouse.findFirst({ where: { id: body.warehouseId, companyId } });
         if (!warehouse) throw new Error('WAREHOUSE_NOT_FOUND');
         if (body.orderId && !await tx.salesOrder.findFirst({ where: { id: body.orderId, companyId } })) throw new Error('ORDER_NOT_FOUND');
@@ -1291,8 +1333,6 @@ export default async function businessRoutes(app: FastifyInstance) {
         const items = await tx.item.findMany({ where: { id: { in: itemIds }, companyId, deletedAt: null }, select: { id: true, lastCost: true } });
         if (items.length !== itemIds.length) throw new Error('ITEM_NOT_IN_COMPANY');
         const costOf = new Map(items.map((it) => [it.id, num(it.lastCost)]));
-
-        const issueNo = await nextDocumentNo(tx, companyId, 'STOCK_ISSUE');
         const created = await tx.stockIssue.create({
           data: {
             companyId, issueNo, warehouseId: body.warehouseId, orderId: body.orderId, note: body.note,
@@ -1306,6 +1346,7 @@ export default async function businessRoutes(app: FastifyInstance) {
 
         if (body.confirm) {
           assertCanConfirm(req, 'STOCK_ISSUE_CONFIRM');
+          await lockBalancesInOrder(tx, body.warehouseId, body.items.map((line) => line.itemId));
           // ตัดสต็อกทั้งใบแบบ atomic รายการใดไม่พอ ทั้งเอกสาร rollback
           for (const line of body.items) {
             await applyMovement(tx, {
@@ -1332,13 +1373,14 @@ export default async function businessRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const companyId = req.user.companyId!;
     try {
-      const issue = await prisma.$transaction(async (tx) => {
+      const issue = await stockTransaction(async (tx) => {
         const doc = await tx.stockIssue.findFirst({ where: { id, companyId }, include: { items: true } });
         if (!doc) throw new Error('ISSUE_NOT_FOUND');
         if (doc.status !== 'DRAFT') throw new Error(`ALREADY_${doc.status}`);
 
         const costs = await tx.item.findMany({ where: { id: { in: doc.items.map((l) => l.itemId) } }, select: { id: true, lastCost: true } });
         const costOf = new Map(costs.map((it) => [it.id, num(it.lastCost)]));
+        await lockBalancesInOrder(tx, doc.warehouseId, doc.items.map((line) => line.itemId));
         for (const line of doc.items) {
           await applyMovement(tx, {
             companyId, warehouseId: doc.warehouseId, itemId: line.itemId,
@@ -1363,7 +1405,7 @@ export default async function businessRoutes(app: FastifyInstance) {
     const companyId = req.user.companyId!;
     const body = z.object({ reason: z.string().max(300).optional() }).parse(req.body ?? {});
     try {
-      const issue = await prisma.$transaction(async (tx) => {
+      const issue = await stockTransaction(async (tx) => {
         const doc = await tx.stockIssue.findFirst({ where: { id, companyId } });
         if (!doc) throw new Error('ISSUE_NOT_FOUND');
         if (doc.status === 'DRAFT') throw new Error('NOT_CONFIRMED');
@@ -1475,15 +1517,16 @@ export default async function businessRoutes(app: FastifyInstance) {
     const companyId = req.user.companyId!;
 
     try {
-      const adjustment = await prisma.$transaction(async (tx) => {
+      const adjustment = await numberedTransaction(async (tx) => {
+        // PHASE 16 — ออกเลขเป็นคำสั่งแรกเสมอ ก่อนคำสั่งอ่านใด ๆ (ดูเหตุผลที่ allocateSeq ใน inventory-ledger)
+        const adjustmentNo = await nextDocumentNo(tx, companyId, 'STOCK_ADJUSTMENT');
+
         const warehouse = await tx.warehouse.findFirst({ where: { id: body.warehouseId, companyId } });
         if (!warehouse) throw new Error('WAREHOUSE_NOT_FOUND');
         const itemIds = [...new Set(body.items.map((l) => l.itemId))];
         const items = await tx.item.findMany({ where: { id: { in: itemIds }, companyId, deletedAt: null }, include: { baseUnit: true } });
         if (items.length !== itemIds.length) throw new Error('ITEM_NOT_IN_COMPANY');
         const itemOf = new Map(items.map((i) => [i.id, i]));
-
-        const adjustmentNo = await nextDocumentNo(tx, companyId, 'STOCK_ADJUSTMENT');
         const doc = await tx.stockAdjustment.create({
           data: {
             companyId, adjustmentNo, warehouseId: body.warehouseId, reason: body.reason,
@@ -1491,10 +1534,14 @@ export default async function businessRoutes(app: FastifyInstance) {
           },
         });
 
+        await lockBalancesInOrder(tx, body.warehouseId, body.items.map((line) => line.itemId));
+
         for (const line of body.items) {
           const item = itemOf.get(line.itemId)!;
-          const balance = await tx.stockBalance.findFirst({ where: { itemId: line.itemId, warehouseId: body.warehouseId, locationId: null, lotId: null } });
-          const onHand = balance ? num(balance.onHand) : 0;
+          /* PHASE 17 — ต้องอ่านแบบล็อกแถว ไม่ใช่ findFirst
+             โหมด SET คิดส่วนต่างจากยอดปัจจุบัน ถ้าอ่านจาก snapshot จะไปลบยอดที่คนอื่น commit ไปแล้วทิ้ง */
+          const balance = await lockBalance(tx, line.itemId, body.warehouseId);
+          const onHand = balance ? balance.onHand : 0;
           // SET = ตั้งยอดตามที่นับจริง → ส่วนต่างคำนวณจากยอดปัจจุบัน
           const change = line.mode === 'SET' ? line.quantity - onHand : line.mode === 'INCREASE' ? line.quantity : -line.quantity;
           if (change === 0) continue; // ไม่มีอะไรเปลี่ยน ไม่ต้องเขียน ledger
@@ -1544,7 +1591,7 @@ export default async function businessRoutes(app: FastifyInstance) {
     const companyId = req.user.companyId!;
     const body = z.object({ reason: z.string().max(300).optional() }).parse(req.body ?? {});
     try {
-      const doc = await prisma.$transaction(async (tx) => {
+      const doc = await stockTransaction(async (tx) => {
         const found = await tx.stockAdjustment.findFirst({ where: { id, companyId } });
         if (!found) throw new Error('ADJUSTMENT_NOT_FOUND');
         if (found.status === 'REVERSED') throw new Error('ALREADY_REVERSED');

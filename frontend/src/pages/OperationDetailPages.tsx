@@ -2,14 +2,24 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ClipboardCheck, History, Info,
-  PackageCheck, Pencil, Printer, RotateCcw, Truck, Warehouse as WarehouseIcon,
+  PackageCheck, Pencil, Printer, RotateCcw, Truck, Warehouse as WarehouseIcon, FileDown, Paperclip,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+
+/** เปิด PDF ผ่าน blob เสมอ — ลิงก์ตรงจะโดน SPA fallback คืน index.html (บทเรียน PHASE 13) */
+const openDocument = async (path: string) => {
+  const blob = await apiClient.blob(path, 'pdf');
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+};
 import { useAuth } from '@/auth/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { PageContainer, PageHeader, ContentCard } from '@/components/layout/page';
 import { STATUS_BADGE, statusInfo } from '@/lib/operations-vocab';
+import { OriginalDocumentSection } from '@/components/receiving/OriginalDocument';
+import { canEditAttachments, documentActions, type ReceiptAttachment } from '@/lib/receipt-attachment';
 
 const qty = (v: number) => Number(v ?? 0).toLocaleString('en-US', { maximumFractionDigits: 4 });
 const money = (v: number) => `฿${Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -145,12 +155,18 @@ export function ReceivingDetailPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const movements = useMovements(doc?.id);
+  const [attachments, setAttachments] = useState<ReceiptAttachment[]>([]);
 
   const load = async () => {
     try { setDoc(await apiClient.get<ReceiptDetail>(`/business/receiving/${id}`)); }
     catch (e) { setError(e instanceof Error ? e.message : 'โหลดเอกสารไม่สำเร็จ'); }
   };
   useEffect(() => { void load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ไฟล์ต้นฉบับเป็นข้อมูลเสริม โหลดแยกและล้มเหลวเงียบ ๆ ได้โดยไม่กระทบหน้าเอกสาร
+  useEffect(() => {
+    if (!id) return;
+    void apiClient.get<ReceiptAttachment[]>(`/business/receiving/${id}/attachments`).then(setAttachments).catch(() => setAttachments([]));
+  }, [id, doc?.status]);
 
   // ทุกการกระทำที่แตะสต็อกจริงต้องผ่านกล่องยืนยันที่บอกผลกระทบก่อน (แทน window.confirm เดิม)
   const [pending, setPending] = useState<'confirm' | 'reverse' | null>(null);
@@ -180,6 +196,10 @@ export function ReceivingDetailPage() {
   const hasLedger = doc.items.some((l) => impactOf(movements, l.item.code) !== null);
   const missingBefore = hasLedger && doc.items.some((l) => { const im = impactOf(movements, l.item.code); return im !== null && im.before == null; });
 
+  /* PHASE 22 — เอกสารสองใบที่แยกกันเด็ดขาด
+     ใบของ S2A ระบบสร้างเอง · ไฟล์ต้นฉบับมาจากผู้ขาย ไม่มีทางทับกัน */
+  const docs = documentActions({ receiptId: doc.id, status: doc.status, attachments });
+
   return <PageContainer className="ops-page doc-detail">
     <PageHeader
       className="no-print"
@@ -192,7 +212,7 @@ export function ReceivingDetailPage() {
         <span>{doc.supplier?.name ?? 'ไม่ระบุผู้ขาย'}</span>
         <span>{doc.items.length} รายการ</span>
       </>}
-      actions={<DocActionBar
+      actions={<><DocActionBar
         backTo="/receiving"
         movementsRef={doc.receiptNo}
         editTo={`/receiving/${doc.id}/edit`}
@@ -202,7 +222,22 @@ export function ReceivingDetailPage() {
         busy={busy}
         confirmAction={doc.status === 'DRAFT' ? { label: 'ยืนยันรับเข้า', onClick: () => setPending('confirm') } : undefined}
         reverseAction={doc.status === 'CONFIRMED' ? { onClick: () => setPending('reverse') } : undefined}
-      />}
+      />
+      {/* PHASE 22 — เอกสารสองใบแยกกันชัดเจน ไม่ทับกัน
+          ไม่มีไฟล์ต้นฉบับ = ปุ่มถูกปิดและบอกตรง ๆ ไม่ใช่กดแล้วไม่เกิดอะไร */}
+      {docs.s2a.available && (
+        <button type="button" className="btn" onClick={() => void openDocument(docs.s2a.url!)}>
+          <FileDown aria-hidden width={16} />ดูใบรับเข้าของ S2A
+        </button>
+      )}
+      <a className={`btn${docs.original.available ? '' : ' is-disabled'}`}
+        href={docs.original.url ?? undefined}
+        target="_blank" rel="noopener noreferrer"
+        aria-disabled={!docs.original.available}
+        onClick={(e) => { if (!docs.original.available) e.preventDefault(); }}>
+        <Paperclip aria-hidden width={16} />{docs.original.label}
+      </a>
+      </>}
     />
 
     {/* บอกให้ครบว่าเอกสารไหน คลังไหน กี่รายการ และสต็อกจะเปลี่ยนอย่างไร ก่อนลงมือ */}
@@ -290,6 +325,10 @@ export function ReceivingDetailPage() {
         <LedgerNote status={doc.status} hasLedger={hasLedger} missingBefore={missingBefore}
           draftText="เอกสารยังเป็นร่าง จึงยังไม่มีผลต่อสต็อก — ยอดก่อนรับ/หลังรับจะเกิดขึ้นเมื่อยืนยันรับเข้า" />
       </ContentCard>
+
+      <div className="no-print">
+        <OriginalDocumentSection receiptId={doc.id} canEdit={canEditAttachments(doc.status)} />
+      </div>
 
       <ContentCard className="doc-card no-print" title={<><History aria-hidden width={17} />ไทม์ไลน์</>}>
         <Timeline steps={[

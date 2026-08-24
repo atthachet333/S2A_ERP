@@ -20,6 +20,7 @@ const MovementHistoryPage = lazy(() => import('@/pages/InventoryPages').then((m)
 const StockAdjustmentPage = lazy(() => import('@/pages/InventoryPages').then((m) => ({ default: m.StockAdjustmentPage })));
 const ReceivingDetailPage = lazy(() => import('@/pages/OperationDetailPages').then((m) => ({ default: m.ReceivingDetailPage })));
 const StockIssueDetailPage = lazy(() => import('@/pages/OperationDetailPages').then((m) => ({ default: m.StockIssueDetailPage })));
+const StockTransferDetailPage = lazy(() => import('@/pages/StockTransferPages').then((m) => ({ default: m.StockTransferDetailPage })));
 import FoodCostingPage from '@/pages/catalog/FoodCostingPage';
 import MenuPage from '@/pages/catalog/MenuPage';
 const RecipeBuilderPage = lazy(() => import('@/pages/catalog/RecipeBuilderPage'));
@@ -27,6 +28,7 @@ const RecipeListPage = lazy(() => import('@/pages/catalog/RecipeListPage'));
 import IngredientsPage from '@/pages/catalog/IngredientsPage';
 import PackagingPage from '@/pages/catalog/PackagingPage';
 import IngredientFormPage from '@/pages/catalog/IngredientFormPage';
+import CostCompletionPage from '@/pages/catalog/CostCompletionPage';
 import PackagingFormPage from '@/pages/catalog/PackagingFormPage';
 import CatalogWarehousePage from '@/pages/catalog/CatalogWarehousePage';
 import PartnerMastersPage from '@/pages/catalog/PartnerMastersPage';
@@ -45,6 +47,7 @@ import CustomersPage, { CustomerProfilePage } from '@/pages/orders/CustomersPage
 const AdminPermissionsPage = lazy(() => import('@/pages/AdminPermissionsPage'));
 const RegistrationsPage = lazy(() => import('@/pages/RegistrationsPage'));
 import { ReceivingPage, StockIssuePage } from '@/pages/OperationsPages';
+import { StockTransferPage } from '@/pages/StockTransferPages';
 import CompanySettingsPage from '@/pages/CompanySettingsPage';
 import { useI18n } from '@/i18n/i18n';
 
@@ -86,6 +89,10 @@ export default function App() {
           <Route path="/stock-issues/new" element={<StockIssuePage />} />
           <Route path="/stock-issues/:id/edit" element={<StockIssuePage />} />
           <Route path="/stock-issues/:id" element={<StockIssueDetailPage />} />
+          <Route path="/stock-transfers" element={<StockTransferPage />} />
+          <Route path="/stock-transfers/new" element={<StockTransferPage />} />
+          <Route path="/stock-transfers/:id/edit" element={<StockTransferPage />} />
+          <Route path="/stock-transfers/:id" element={<StockTransferDetailPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/inventory/movements" element={<MovementHistoryPage />} />
           <Route path="/inventory/adjustments" element={<StockAdjustmentPage />} />
@@ -102,6 +109,7 @@ export default function App() {
           <Route path="/activity" element={<ActivityPage />} />
           {/* วัตถุดิบ (PART D1 — แยกจากบรรจุภัณฑ์ชัดเจน) */}
           <Route path="/ingredients" element={<IngredientsPage />} />
+          <Route path="/ingredients/cost-completion" element={<CostCompletionPage />} />
           <Route path="/ingredients/new" element={<IngredientFormPage />} />
           <Route path="/ingredients/:id" element={<IngredientFormPage />} />
           {/* บรรจุภัณฑ์ */}

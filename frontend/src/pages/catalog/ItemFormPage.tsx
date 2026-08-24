@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Save, TrendingUp, History, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, TrendingUp, History, Loader2, Check } from 'lucide-react';
 import { catalogApi, type ItemType } from '@/lib/catalog';
+import { formatFactor, resolveConversion } from '@/lib/standard-conversion';
 import { formatMoney, formatThaiDateTime } from '@/lib/utils';
 import ImageUpload from '@/components/ui/ImageUpload';
 import Badge from '@/components/ui/Badge';
@@ -38,6 +39,9 @@ export default function ItemFormPage() {
   const { toast } = useToast();
 
   const units = useQuery({ queryKey: ['units'], queryFn: () => catalogApi.units() });
+  /* PHASE 20B — ใช้อัตราแปลงมาตรฐานชุดเดียวกับหน้าวัตถุดิบและหน้าบรรจุภัณฑ์
+     ก่อนหน้านี้ฟอร์มนี้ปล่อยให้กรอกอัตราเองล้วน จึงยังใส่ 0.001 สำหรับ KG→G ได้อยู่ */
+  const conversions = useQuery({ queryKey: ['unit-conversions'], queryFn: () => catalogApi.conversions() });
   const categories = useQuery({ queryKey: ['categories'], queryFn: () => catalogApi.categories() });
   const detail = useQuery({ queryKey: ['item', id], queryFn: () => catalogApi.item(id as string), enabled: isEdit });
 
@@ -63,13 +67,35 @@ export default function ItemFormPage() {
     if (!isEdit && !form.baseUnitId && units.data && units.data.length > 0) set({ baseUnitId: units.data[0].id });
   }, [units.data, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const factor = Number(form.purchaseToBaseFactor) || 1;
+  const baseUnitCode = units.data?.find((u) => u.id === form.baseUnitId)?.code ?? 'หน่วยฐาน';
+  const purchaseUnitCode = units.data?.find((u) => u.id === form.purchaseUnitId)?.code ?? baseUnitCode;
+
+  /* ความหมายเดียวทั้งระบบ: อัตรา = "หนึ่งหน่วยซื้อ มีกี่หน่วยฐาน"
+     1 KG = 1,000 G → 1000 (ไม่ใช่ 0.001) · ต้นทุน = ราคา ÷ จำนวนที่ซื้อ ÷ อัตรา */
+  const conversion = useMemo(() => resolveConversion({
+    purchaseUnitId: form.purchaseUnitId || null,
+    baseUnitId: form.baseUnitId || null,
+    purchaseUnitCode, baseUnitCode,
+    edges: conversions.data ?? [],
+    manualFactor: form.purchaseToBaseFactor,
+  }), [form.purchaseUnitId, form.baseUnitId, form.purchaseToBaseFactor, purchaseUnitCode, baseUnitCode, conversions.data]);
+
+  const isStandard = conversion.source === 'standard';
+  const isSameUnit = conversion.source === 'same';
+  const factorLocked = isStandard || isSameUnit;
+  const factor = factorLocked ? (conversion.factor ?? 1) : (Number(form.purchaseToBaseFactor) || 1);
+
+  // เปลี่ยนหน่วยเมื่อไร อัตรามาตรฐานต้องถูกเติมทันที ทั้งตอนสร้างและตอนแก้ไข
+  useEffect(() => {
+    if (!factorLocked) return;
+    const resolved = String(conversion.factor ?? 1);
+    if (form.purchaseToBaseFactor !== resolved) set({ purchaseToBaseFactor: resolved });
+  }, [factorLocked, conversion.factor]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const price = Number(form.purchasePrice) || 0;
   const qty = Number(form.purchaseQuantity) || 1;
   const pricePerPurchaseUnit = qty > 0 ? price / qty : 0;
   const baseCostPreview = pricePerPurchaseUnit / (factor > 0 ? factor : 1);
-  const baseUnitCode = units.data?.find((u) => u.id === form.baseUnitId)?.code ?? 'หน่วยฐาน';
-  const purchaseUnitCode = units.data?.find((u) => u.id === form.purchaseUnitId)?.code ?? 'หน่วยซื้อ';
 
   const submit = async (addAnother = false) => {
     setError('');
@@ -160,10 +186,23 @@ export default function ItemFormPage() {
                   {units.data?.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.code})</option>)}
                 </select>
               </label>
-              <label className="full">อัตราแปลง: 1 {purchaseUnitCode} = ? {baseUnitCode}
-                <input type="number" value={form.purchaseToBaseFactor} onChange={(e) => set({ purchaseToBaseFactor: e.target.value })} />
-                <span className="field-hint">เช่น 1 กก. = 1000 กรัม, 1 กำ = 80 กรัม (กำหนดต่อวัตถุดิบได้เอง)</span>
-              </label>
+              {/* PHASE 20B — หน่วยมาตรฐานระบบเติมและล็อกให้ · หน่วยเฉพาะรายการยังกรอกเอง */}
+              {isSameUnit
+                ? <div className="full">
+                    <span className="field-hint">หน่วยซื้อและหน่วยฐานเป็นหน่วยเดียวกัน ไม่ต้องแปลง</span>
+                  </div>
+                : factorLocked
+                  ? <div className="full">
+                      <strong className="conv-standard">อัตราแปลงหน่วย: 1 {purchaseUnitCode} = {formatFactor(conversion.factor ?? 1)} {baseUnitCode}</strong>
+                      <span className="field-hint"><Check aria-hidden width={14} />หน่วยมาตรฐาน — ระบบคำนวณให้อัตโนมัติ</span>
+                      {conversion.reverseText && <span className="field-hint">ด้านกลับ: {conversion.reverseText}</span>}
+                    </div>
+                  : <label className="full">อัตราแปลงของรายการนี้: 1 {purchaseUnitCode} = ? {baseUnitCode}
+                      <input type="number" min="0" step="any" value={form.purchaseToBaseFactor}
+                        onChange={(e) => set({ purchaseToBaseFactor: e.target.value })} />
+                      <span className="field-hint">เช่น 1 กระสอบ = 25 กก. → กรอก 25 · 1 ลัง = 12 ชิ้น → กรอก 12</span>
+                      {conversion.reverseText && <span className="field-hint">ด้านกลับ: {conversion.reverseText}</span>}
+                    </label>}
             </div>
           </section>
 

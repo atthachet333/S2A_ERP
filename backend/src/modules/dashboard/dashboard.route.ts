@@ -21,7 +21,11 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       prisma.item.count({ where: { deletedAt: null, type: ItemType.RAW_MATERIAL, companyId: req.user.companyId! } }),
       prisma.item.count({ where: { deletedAt: null, type: ItemType.FINISHED_GOOD, companyId: req.user.companyId! } }),
       prisma.recipe.count({ where: { deletedAt: null, isActive: true, companyId: req.user.companyId!, versions: { some: { isActive: true } } } }),
-      prisma.item.count({ where: { deletedAt: null, companyId: req.user.companyId!, type: { not: ItemType.FINISHED_GOOD }, priceHistory: { none: {} } } }),
+      /* PHASE 21 — นับเฉพาะที่ "ยังไม่มีข้อมูลต้นทุน" จริง ๆ
+         รายการที่ยืนยันแล้วว่าต้นทุนเป็น 0 (เช่น น้ำประปา) จะมีแถวประวัติราคาอยู่
+         จึงหลุดออกจากคำเตือนนี้เอง ไม่ต้องเตือนซ้ำทั้งที่จัดการเรียบร้อยแล้ว
+         เพิ่ม isActive เพราะของที่ปิดใช้งานแล้วไม่กระทบต้นทุนสูตรที่ใช้อยู่ */
+      prisma.item.count({ where: { deletedAt: null, isActive: true, companyId: req.user.companyId!, type: { not: ItemType.FINISHED_GOOD }, priceHistory: { none: {} } } }),
     ]);
     return ok({ users, activeUsers, units, warehouses, items, recipes, rawMaterials, menus, activeRecipes, itemsWithoutPrice });
   });

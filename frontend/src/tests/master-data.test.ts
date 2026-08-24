@@ -255,7 +255,9 @@ describe('PART 4–5 — ฟอร์มแบ่งหัวข้อ + preview
   });
 
   it('33 สมการหน่วยเป็นรูปแบบเดียวทั้งระบบ: [1] [หน่วยซื้อ] = [x] [หน่วยฐาน]', () => {
-    expect(itemForm).toContain('className="md-equation"');
+    /* PHASE 20 — โครงสมการยังเป็นรูปแบบเดียวกัน แต่ className เพิ่มสถานะล็อก
+       เมื่อเป็นอัตราหน่วยมาตรฐานที่ระบบเติมให้ จึงตรวจที่ชื่อคลาสแทนสตริงตายตัว */
+    expect(itemForm).toMatch(/className=\{?`?md-equation/);
     expect(itemForm).toContain('<span className="eq-const">1</span>');
     expect(itemForm).toContain('<span className="eq-op">=</span>');
   });

@@ -17,6 +17,12 @@ function groupOf(code: string): string {
   if (code.startsWith('CUSTOMER_')) return 'Customers';
   if (code.startsWith('ORDER_')) return 'Orders';
   if (code.startsWith('RECEIVING_')) return 'Receiving';
+  /* PHASE 19 — เดิมสิทธิ์ที่ขึ้นต้นด้วย STOCK_ ถูกยุบเป็นกลุ่มเดียว
+     ทำให้ป้ายในหน้าจัดการสิทธิ์ซ้ำกันจนแยกไม่ออก เช่น STOCK_VIEW · STOCK_ISSUE_VIEW ·
+     STOCK_TRANSFER_VIEW ต่างขึ้นว่า "ดูสต๊อก" เหมือนกันหมด ผู้ดูแลจึงติ๊กผิดช่องได้ง่าย
+     แยกกลุ่มตามงานจริง ป้ายจึงกลายเป็น "ดูสต๊อก" · "ดูใบเบิก" · "ดูใบโอนย้าย" */
+  if (code.startsWith('STOCK_TRANSFER_')) return 'StockTransfer';
+  if (code.startsWith('STOCK_ISSUE_')) return 'StockIssue';
   if (code.startsWith('STOCK_')) return 'Stock';
   if (code.startsWith('COMPANY_')) return 'Companies';
   if (code.startsWith('DOCUMENT_')) return 'Documents';

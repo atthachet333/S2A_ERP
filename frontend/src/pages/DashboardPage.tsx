@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowRight, ChartColumnBig, CheckCircle2,
+  AlertTriangle, ArrowRight, CheckCircle2,
   ClipboardList, Info, PackageOpen, Plus, RefreshCw, ShoppingCart, SlidersHorizontal,
-  TrendingDown, UtensilsCrossed, Warehouse, type LucideIcon,
+  TrendingDown, UtensilsCrossed, Warehouse, CircleDollarSign, ClipboardCheck, type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
@@ -19,6 +19,7 @@ import { DocBarChart, DonutChart } from '@/components/dashboard/Charts';
 import { documentBars, inventoryComposition, menuReadiness } from '@/lib/dashboard-charts';
 import { companyContactRows, useCompanyProfile } from '@/hooks/useCompanyProfile';
 import { formatMoney, formatThaiDate, greeting, timeAgo } from '@/lib/utils';
+import { primaryCards, type PrimaryCard } from '@/lib/dashboard-primary';
 import {
   PageContainer, PageHeader, KPIGrid, KPICard, ContentCard, KPISkeleton, CardSkeleton,
 } from '@/components/layout/page';
@@ -32,6 +33,19 @@ const QUICK_ACTIONS: { to: string; label: string; icon: LucideIcon; perms: strin
   { to: '/ingredients/new', label: 'เพิ่มวัตถุดิบ', icon: Plus, perms: ['ITEM_CREATE', 'CATALOG_MANAGE'] },
   { to: '/orders', label: 'ออเดอร์', icon: ShoppingCart, perms: ['ORDER_VIEW'] },
 ];
+
+/** ไอคอนของการ์ดหลัก — สื่อความหมายคู่กับข้อความเสมอ ไม่ใช้สีอย่างเดียว */
+/** โทนของการ์ดหลัก → โทนของ KPICard ที่ระบบมีอยู่แล้ว */
+const TONE_MAP = {
+  danger: 'danger', costing: 'warning', inventory: 'info', operations: 'ops', healthy: 'success',
+} as const;
+
+const PRIMARY_ICON = {
+  attention: AlertTriangle,
+  costing: CircleDollarSign,
+  inventory: Warehouse,
+  operations: ClipboardCheck,
+} as const;
 
 const SEVERITY_META: Record<Severity, { label: string; icon: LucideIcon }> = {
   critical: { label: 'ต้องแก้ทันที', icon: AlertTriangle },
@@ -102,6 +116,28 @@ export default function DashboardPage() {
   const companyProfile = useCompanyProfile();
 
   const costing = useMemo(() => costingSummary(menus), [menus]);
+
+  /* PHASE 22 — ข้อมูลของการ์ดหลักมาจากชุดข้อมูลจริงที่หน้านี้ดึงอยู่แล้วทั้งหมด
+     ไม่มีการเรียก API เพิ่มเพื่อสร้างตัวเลขใหม่ และไม่มีค่าที่เดาขึ้นเอง */
+  const primary = useMemo(() => primaryCards({
+    alerts,
+    itemsMissingCost: s?.itemsWithoutPrice,
+    costing: costing.total > 0 ? { totalMenus: costing.total, withCost: costing.total - costing.noCost - costing.noRecipe } : undefined,
+    inventory: invKpi ? {
+      itemCount: invKpi.itemCount, outCount: invKpi.outCount,
+      lowCount: invKpi.lowCount, negativeCount: invKpi.negativeCount, totalValue: invKpi.totalValue,
+    } : undefined,
+    operations: {
+      receivingDrafts: (d.receiving.data ?? []).filter((r) => r.status === 'DRAFT').length,
+      issueDrafts: (d.issues.data ?? []).filter((r) => r.status === 'DRAFT').length,
+      todayMovements: invKpi?.movementsToday ?? 0,
+    },
+    permissions: {
+      canInventory: d.permissions.canInventory,
+      canOperations: d.permissions.canReceiving || d.permissions.canIssues,
+    },
+  }), [alerts, s?.itemsWithoutPrice, costing, invKpi, d.receiving.data, d.issues.data,
+    d.permissions.canInventory, d.permissions.canReceiving, d.permissions.canIssues]);
   const pricing = useMemo(() => pricingSummary(menus), [menus]);
   const recipeGaps = useMemo(() => recipesNeedingAttention(menus, 5), [menus]);
 
@@ -132,28 +168,25 @@ export default function DashboardPage() {
         }
       />
 
-      {/* ---------- KPI ---------- */}
+      {/* ---------- PHASE 22 — การ์ดหลัก 4 ใบ ----------
+          ตอบสี่คำถามแรกของผู้บริหาร: ต้องจัดการอะไร · ต้นทุนครบไหม · สต็อกเป็นไง · งานเดินแค่ไหน
+          ทุกตัวเลขมาจากข้อมูลจริงทั้งหมด ไม่มีแนวโน้มหรือการพยากรณ์ที่สร้างขึ้นเอง */}
       {initialLoading ? <KPISkeleton count={4} /> : (
-        <KPIGrid columns={4}>
-          {d.permissions.canInventory && invKpi && (
-            <>
-              <KPICard label="มูลค่าสต็อกรวม" value={`${formatMoney(invKpi.totalValue, 0)}`} icon={<Warehouse />}
-                hint={`${invKpi.itemCount} รายการในคลัง`} />
-              <KPICard label="ต้องเติมสต็อก" value={invKpi.outCount + invKpi.lowCount} icon={<PackageOpen />}
-                tone={invKpi.outCount > 0 ? 'danger' : invKpi.lowCount > 0 ? 'warning' : 'default'}
-                hint={`หมด ${invKpi.outCount} · ใกล้หมด ${invKpi.lowCount}`} />
-              <KPICard label="รายการเคลื่อนไหวสต็อกวันนี้" value={invKpi.movementsToday} icon={<ChartColumnBig />}
-                hint="นับจากบัญชีเดินสต็อก (ledger)" />
-            </>
-          )}
-          {d.permissions.canOrderKpi && d.orderKpi.data && (
-            <KPICard label="ออเดอร์วันนี้" value={d.orderKpi.data.todayOrders} icon={<ShoppingCart />}
-              hint={`เดือนนี้ ${d.orderKpi.data.monthOrders} รายการ`} />
-          )}
-          {s && (
-            <KPICard label="สูตรที่ใช้งาน" value={s.activeRecipes} icon={<UtensilsCrossed />}
-              hint={`ทั้งหมด ${s.recipes} สูตร`} />
-          )}
+        <KPIGrid columns={4} className="dash-primary">
+          {primary.map((card: PrimaryCard) => {
+            const Icon = PRIMARY_ICON[card.id];
+            return <KPICard
+              key={card.id}
+              label={card.label}
+              value={card.value == null ? '—' : card.value.toLocaleString()}
+              unit={card.value != null ? card.unit : undefined}
+              icon={<Icon />}
+              tone={TONE_MAP[card.tone]}
+              breakdown={card.breakdown}
+              hint={card.hint}
+              to={card.to}
+            />;
+          })}
         </KPIGrid>
       )}
 

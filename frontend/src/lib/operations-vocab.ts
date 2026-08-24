@@ -12,7 +12,7 @@
  * จึงต้องแยก map ตามชนิดเอกสาร ห้ามยุบเป็นตารางเดียว
  */
 
-export type DocKind = 'receiving' | 'issue' | 'adjustment' | 'order';
+export type DocKind = 'receiving' | 'issue' | 'adjustment' | 'order' | 'transfer';
 export type StatusTone = 'draft' | 'done' | 'reversed' | 'cancelled' | 'progress';
 
 export interface StatusInfo { label: string; tone: StatusTone }
@@ -37,6 +37,15 @@ const ADJUSTMENT: Record<string, StatusInfo> = {
   REVERSED: { label: 'กลับรายการแล้ว', tone: 'reversed' },
 };
 
+/* PHASE 18 — ใบโอนย้ายใช้ enum DocumentStatus เดียวกับใบรับของ แต่คำอธิบายต่างกัน
+   CONFIRMED ของใบโอนย้าย = ย้ายของออกจากคลังต้นทางเข้าคลังปลายทางแล้ว */
+const TRANSFER: Record<string, StatusInfo> = {
+  DRAFT: { label: 'ร่าง', tone: 'draft' },
+  CONFIRMED: { label: 'โอนย้ายแล้ว', tone: 'done' },
+  REVERSED: { label: 'กลับรายการแล้ว', tone: 'reversed' },
+  CANCELLED: { label: 'ยกเลิก', tone: 'cancelled' },
+};
+
 /** ตรงกับ enum SalesOrderStatus ใน prisma/schema.prisma (ตรวจจากสคีมาจริง ไม่ได้เดา) */
 const ORDER: Record<string, StatusInfo> = {
   DRAFT: { label: 'ร่าง', tone: 'draft' },
@@ -50,7 +59,7 @@ const ORDER: Record<string, StatusInfo> = {
 };
 
 const TABLES: Record<DocKind, Record<string, StatusInfo>> = {
-  receiving: RECEIVING, issue: ISSUE, adjustment: ADJUSTMENT, order: ORDER,
+  receiving: RECEIVING, issue: ISSUE, adjustment: ADJUSTMENT, order: ORDER, transfer: TRANSFER,
 };
 
 /** ไม่รู้จักสถานะ → คืนค่าดิบ ไม่เดาความหมาย (แต่ยังมี tone กลางให้แสดงผลได้) */
@@ -76,6 +85,9 @@ const MOVEMENT: Record<string, MovementInfo> = {
   PRODUCTION_ISSUE: { label: 'เบิกออก', tone: 'out' },
   ADJUSTMENT_OUT: { label: 'ปรับลด', tone: 'out' },
   STOCK_COUNT: { label: 'นับสต็อก', tone: 'in' },
+  // PHASE 18 — สองขาของใบโอนย้าย แยกให้เห็นชัดว่าออกจากคลังไหนและเข้าคลังไหน
+  TRANSFER_OUT: { label: 'โอนออก', tone: 'out' },
+  TRANSFER_IN: { label: 'โอนเข้า', tone: 'in' },
 };
 
 /** reason = REVERSAL มาก่อนเสมอ เพราะเป็นการกลับรายการไม่ว่าชนิดเดิมจะเป็นอะไร */
@@ -86,12 +98,13 @@ export function movementInfo(movementType: string, reason?: string | null): Move
 
 /* ---------- ชนิดเอกสารต้นทาง ---------- */
 export const REF_TYPE_TH: Record<string, string> = {
-  GOODS_RECEIPT: 'ใบรับของ', STOCK_ISSUE: 'ใบเบิก', STOCK_ADJUSTMENT: 'ใบปรับปรุงสต็อก',
+  GOODS_RECEIPT: 'ใบรับของ', STOCK_ISSUE: 'ใบเบิก', STOCK_ADJUSTMENT: 'ใบปรับปรุงสต็อก', STOCK_TRANSFER: 'ใบโอนย้ายระหว่างคลัง',
 };
 /** เส้นทางกลับไปเอกสารต้นทาง — ไม่รู้จักคืน null เพื่อไม่ให้สร้างลิงก์เสีย */
 export function refTypeLink(refType: string | null | undefined): string | null {
   return refType === 'GOODS_RECEIPT' ? '/receiving'
     : refType === 'STOCK_ISSUE' ? '/stock-issues'
     : refType === 'STOCK_ADJUSTMENT' ? '/inventory/adjustments'
+    : refType === 'STOCK_TRANSFER' ? '/stock-transfers'
     : null;
 }

@@ -129,15 +129,29 @@ describe.sequential('catalog + recipe + costing integration', () => {
 
     const recipe = await app.inject({
       method: 'POST', url: '/api/recipes', headers: auth(),
-      payload: { productId: menuId, version: { standardYieldQty: 10, yieldPercent: 100, laborCost: 20, ingredients: [{ itemId, quantityBase: 1000, wastePercent: 0 }, { itemId: packagingId, quantityBase: 10, wastePercent: 0 }] } },
+      /* PHASE 15 — อัปเดตให้ตรง contract ของ Recipe Builder v2
+         เดิมส่ง ingredients/quantityBase/laborCost ซึ่ง API เลิกรับตั้งแต่ Phase 5
+         (frontend ใช้ components/overhead อยู่แล้ว) */
+      payload: { productId: menuId, version: {
+        standardYieldQty: 10, yieldPercent: 100,
+        overhead: { mode: 'TOTAL', total: 20 },
+        components: [
+          { componentType: 'ITEM', itemId, quantity: 1000, wastePercent: 0 },
+          { componentType: 'PACKAGING', itemId: packagingId, quantity: 10, wastePercent: 0 },
+        ],
+      } },
     });
     expect(recipe.statusCode).toBe(201);
     recipeId = recipe.json().data.id;
-    // 200 material + (10 boxes × 3.50) + 20 labor = 255 total; /10 = 25.50 per unit
-    expect(recipe.json().data.cost.materialCost).toBeCloseTo(200, 4);
-    expect(recipe.json().data.cost.packagingCost).toBeCloseTo(35, 4);
-    expect(recipe.json().data.cost.totalCost).toBeCloseTo(255, 4);
-    expect(recipe.json().data.cost.unitCost).toBeCloseTo(25.5, 4);
+    /* 200 วัตถุดิบ + (10 กล่อง × 3.50) + 20 overhead = 255 · หาร 10 = 25.50 ต่อหน่วย
+       ตัวเลขเท่าเดิมทุกตัว เปลี่ยนแค่ชื่อ field ตาม engine v2
+       (materialCost → ingredientCost, unitCost → costPerYieldUnit) */
+    const cost = recipe.json().data.cost;
+    expect(cost.ingredientCost).toBeCloseTo(200, 4);
+    expect(cost.packagingCost).toBeCloseTo(35, 4);
+    expect(cost.overheadCost).toBeCloseTo(20, 4);
+    expect(cost.totalCost).toBeCloseTo(255, 4);
+    expect(cost.costPerYieldUnit).toBeCloseTo(25.5, 4);
   });
 
   it('คำนวณต้นทุนซ้ำจาก recipeVersion + จำลองราคาขาย markup 30%', async () => {
@@ -150,7 +164,10 @@ describe.sequential('catalog + recipe + costing integration', () => {
     expect(legacyVersion.ingredients).toHaveLength(2);
     expect(legacyVersion.ingredients[0]).toMatchObject({ itemId, quantityBase: 1000, wastePercent: 0 });
     expect(legacyVersion.ingredients[0].item).toMatchObject({ id: itemId, baseUnitCode: `G_${TAG}` });
-    expect(legacyVersion).toMatchObject({ standardYieldQty: 10, yieldPercent: 100, standardWaste: 0, laborCost: 20, electricCost: 0, waterCost: 0, gasCost: 0, overheadCost: 0, otherCost: 0 });
+    /* v2 เก็บค่าใช้จ่ายทางอ้อมไว้ใน overhead ส่วนคอลัมน์ laborCost เดิมจึงเป็น 0
+       ตัวเลขรวมยังเท่าเดิม (20) แค่ย้ายที่เก็บ */
+    expect(legacyVersion).toMatchObject({ standardYieldQty: 10, yieldPercent: 100, standardWaste: 0, laborCost: 0, electricCost: 0, waterCost: 0, gasCost: 0, overheadCost: 20, otherCost: 0 });
+    expect(legacyVersion.overhead).toMatchObject({ mode: 'TOTAL', total: 20 });
     expect(legacyVersion.components).toHaveLength(2);
     const res = await app.inject({ method: 'POST', url: '/api/costing/calculate', headers: auth(), payload: { recipeVersionId: versionId, markupPercent: 30 } });
     expect(res.statusCode).toBe(200);
@@ -159,6 +176,47 @@ describe.sequential('catalog + recipe + costing integration', () => {
     expect(breakdown.unitCost).toBeCloseTo(25.5, 4);
     expect(pricing.sellingPrice).toBeCloseTo(33.15, 2); // 25.5 × 1.3
     expect(pricing.isLoss).toBe(false);
+  });
+
+  it('PHASE 20C · กรองเฉพาะวัตถุดิบที่ยังไม่มีราคาซื้อได้', async () => {
+    /* หน้ารายการมีการ์ดบอกจำนวน "ยังไม่มีราคาซื้อ" อยู่แล้ว แต่เดิมไม่มีทางกรองให้เหลือเฉพาะรายการนั้น */
+    const zeroCost = await app.inject({
+      method: 'POST', url: '/api/items', headers: auth(),
+      payload: { code: `ZC-${TAG}`, name: 'ของยังไม่มีราคา(ทดสอบ)', type: ItemType.RAW_MATERIAL, baseUnitId },
+    });
+    expect(zeroCost.statusCode).toBe(201);
+    const zeroCostId = zeroCost.json().data.id as string;
+
+    const filtered = await app.inject({ method: 'GET', url: '/api/items?dataIssue=noPrice&pageSize=100', headers: auth() });
+    expect(filtered.statusCode).toBe(200);
+    const rows = filtered.json().data.items as { id: string; lastCost: number }[];
+    expect(rows.every((r) => Number(r.lastCost) <= 0), 'ต้องเหลือเฉพาะที่ต้นทุนเป็น 0').toBe(true);
+    expect(rows.map((r) => r.id)).toContain(zeroCostId);
+    // รายการที่มีราคาแล้วต้องไม่ติดมาด้วย
+    expect(rows.map((r) => r.id)).not.toContain(itemId);
+
+    // ไม่ใส่ตัวกรอง = เห็นทั้งหมดเหมือนเดิม
+    const all = await app.inject({ method: 'GET', url: '/api/items?pageSize=100', headers: auth() });
+    expect((all.json().data.items as { id: string }[]).map((r) => r.id)).toContain(itemId);
+
+    await prisma.item.deleteMany({ where: { id: zeroCostId } });
+  });
+
+  it('PHASE 20C · ต้นทุนเป็นศูนย์ไม่ถูกบล็อก — ยังสร้างและใช้ในสูตรได้ตามปกติ', async () => {
+    /* ไม่ประดิษฐ์กติกาว่าห้ามต้นทุนเป็น 0 เพราะบางรายการยังไม่รู้ราคาจริง
+       ระบบต้องทำงานต่อได้ และแค่ทำให้มองเห็นเท่านั้น */
+    const res = await app.inject({
+      method: 'POST', url: '/api/items', headers: auth(),
+      payload: { code: `ZC2-${TAG}`, name: 'ของไม่มีราคาแต่ใช้ได้(ทดสอบ)', type: ItemType.RAW_MATERIAL, baseUnitId },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(Number(res.json().data.lastCost)).toBe(0);
+
+    const selectable = await app.inject({ method: 'GET', url: '/api/items/selectable?type=RAW_MATERIAL', headers: auth() });
+    expect(selectable.statusCode).toBe(200);
+    expect((selectable.json().data as { id: string }[]).map((r) => r.id)).toContain(res.json().data.id);
+
+    await prisma.item.deleteMany({ where: { id: res.json().data.id } });
   });
 
   it('ปิดการใช้งานวัตถุดิบ (soft) โดยไม่ลบจริง', async () => {
