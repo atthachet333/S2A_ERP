@@ -5,6 +5,7 @@ import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
 import { ContentCard } from '@/components/layout/page';
 import { ACCEPTED_ATTACHMENT_TYPES, formatFileSize, uploadReceiptAttachment, type ReceiptAttachment } from '@/lib/receipt-attachment';
+import { DocumentExtractionReview } from './DocumentExtractionReview';
 
 /**
  * PHASE 22 — เอกสารต้นฉบับจากผู้ขาย (ไม่บังคับ)
@@ -99,6 +100,10 @@ export function OriginalDocumentSection({ receiptId, canEdit }: { receiptId?: st
           </button>
           <span className="orig-doc-hint">รองรับ PDF, JPG, PNG และ WEBP</span>
         </>
+      )}
+
+      {receiptId && canEdit && rows.length > 0 && (
+        <DocumentExtractionReview receiptId={receiptId} attachments={rows} />
       )}
 
       {receiptId && !canEdit && rows.length > 0 && (

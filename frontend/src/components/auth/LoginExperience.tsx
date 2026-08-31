@@ -1,40 +1,129 @@
-import { useRef, useState, type CSSProperties, type FormEvent, type PointerEvent } from 'react';
-import { ArrowLeft, ArrowRight, Calculator, ChefHat, CircleDollarSign, Eye, EyeOff, LoaderCircle, LockKeyhole, PackageOpen, Tags, TrendingUp, UserRound } from 'lucide-react';
+import { useState, type FormEvent } from 'react';
+import { ArrowLeft, Boxes, Calculator, LoaderCircle, LockKeyhole, ShieldCheck, TrendingUp, Truck, UserRound } from 'lucide-react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useI18n } from '@/i18n/i18n';
 import { loginContent } from '@/i18n/login-content';
+import { AuthAlert, AuthBrandPanel, AuthCard, AuthField, AuthShell, PasswordField } from './AuthShell';
 
-const nodes = [{key:'ingredient',icon:PackageOpen},{key:'recipe',icon:ChefHat},{key:'cost',icon:Calculator,anchor:true},{key:'price',icon:Tags},{key:'profit',icon:TrendingUp}];
-
+/**
+ * PHASE 37 — หน้าเข้าสู่ระบบ
+ *
+ * ของเดิมเป็นฉากตกแต่งขนาดใหญ่: parallax ตามเมาส์, ไดอะแกรมเส้นเคลื่อนไหว,
+ * ป้ายลอย 5 อัน, mini-flow และ footer ซ้อนกันหลายชั้น รอบฟอร์มที่มีแค่ 2 ช่อง
+ * ผลคือสิ่งที่ผู้ใช้มาทำจริง (กรอกแล้วกดเข้าสู่ระบบ) ไม่ใช่สิ่งที่เด่นที่สุดบนหน้า
+ *
+ * เฟสนี้ยกฟอร์มขึ้นเป็นตัวเอก และเหลือแผงแบรนด์ไว้เพียงพอที่จะสื่อว่าเป็นระบบอะไร
+ *
+ * ตรรกะการล็อกอิน ปลายทางการนำทาง และ key ของ localStorage คงเดิมทั้งหมด
+ */
 export default function LoginExperience() {
-  const { messages, locale } = useI18n(); const auth = messages.auth; const flow = messages.home.flow; const visual=loginContent[locale];
-  const { user, login } = useAuth(); const navigate = useNavigate(); const canvasRef = useRef<HTMLElement>(null);
-  const [username, setUsername] = useState(() => localStorage.getItem('s2a_remembered_username') ?? ''); const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(Boolean(localStorage.getItem('s2a_remembered_username'))); const [show, setShow] = useState(false); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
-  if (user) return <Navigate to={user.mustChangePassword ? '/change-password' : user.activeCompany ? user.defaultLandingPage : '/select-company'} replace />;
-  const submit = async (event: FormEvent) => { event.preventDefault(); setError(''); setBusy(true); try { const loggedIn = await login(username, password); if (remember) localStorage.setItem('s2a_remembered_username', username); else localStorage.removeItem('s2a_remembered_username'); navigate(loggedIn.mustChangePassword ? '/change-password' : '/select-company', { replace: true }); } catch { setError(auth.invalid); } finally { setBusy(false); } };
-  const parallax = (event: PointerEvent<HTMLElement>) => { if (event.pointerType !== 'mouse' || matchMedia('(prefers-reduced-motion: reduce)').matches) return; const box = event.currentTarget.getBoundingClientRect(); const x = ((event.clientX - box.left) / box.width - .5) * 8; const y = ((event.clientY - box.top) / box.height - .5) * 8; canvasRef.current?.style.setProperty('--px', `${x}px`); canvasRef.current?.style.setProperty('--py', `${y}px`); };
-  return <main className="gateway-shell">
-    <section ref={canvasRef} className="gateway-canvas" onPointerMove={parallax} onPointerLeave={() => { canvasRef.current?.style.setProperty('--px','0px'); canvasRef.current?.style.setProperty('--py','0px'); }}>
-      <div className="gateway-blueprint" /><div className="gateway-haze" /><div className="gateway-arc" />
-      <header className="gateway-brand"><span className="gateway-logo"><img src="/s2a-logo.png" alt="S2 Accounting Consultant" /></span><div><strong>S2 ACCOUNTING CONSULTANT</strong><small>FOOD COST INTELLIGENCE SYSTEM</small></div><i /></header>
-      <div className="gateway-story"><p>{messages.home.support}</p><h1>{auth.gatewayLead} <strong>{auth.gatewayCost}</strong><br />{auth.gatewayBefore} <em>{auth.gatewayPrice}</em></h1><h2>{messages.home.hero}</h2></div>
-      <div className="cost-network" aria-label={visual.aria}><svg className="network-path" viewBox="0 0 660 280" preserveAspectRatio="none" aria-hidden><path d="M82 54 C155 54 178 82 224 102 S306 124 340 150"/><path d="M340 150 C390 166 412 206 472 220"/><path d="M340 150 C420 142 474 126 568 112"/><path className="network-pulse" d="M82 54 C155 54 178 82 224 102 S306 124 340 150 C390 166 412 206 472 220 C510 207 538 160 568 112"/></svg><div className="network-label label-yield">YIELD</div><div className="network-label label-version">RECIPE VERSION</div><div className="network-label label-unit">UNIT COST</div><div className="network-label label-markup">MARKUP</div><div className="network-label label-margin">MARGIN</div>{nodes.map(({key,icon:Icon,anchor},index)=><article key={key} className={`s2-node node-${key}${anchor?' anchor':''}`} style={{'--step':index} as CSSProperties}><span><Icon /></span><div><strong>{flow[index]}</strong><small>{visual.details[index]}</small></div>{anchor&&<b><CircleDollarSign /> {visual.core}</b>}</article>)}<span className="network-output">{visual.signal}</span></div>
-      <footer className="gateway-foot"><span><i /> {visual.active}</span><small>{visual.path}</small></footer>
-    </section>
-    <section className="access-panel"><div className="access-bridge"><span>{visual.access}</span></div><form className="access-console" onSubmit={(event) => void submit(event)}>
-      <div className="console-rule" /><div className="console-toolbar"><Link to="/" className="console-back"><ArrowLeft /> {messages.common.backHome}</Link><LanguageSwitcher compact /></div><div className="console-mobile-brand"><img src="/s2a-logo.png" alt="S2A" /><span>S2A COST INTELLIGENCE</span></div>
-      <header><div className="console-kicker"><small>{visual.system}</small><span><i /> {visual.secure}</span></div><h2>{auth.signIn}</h2><p>{auth.subtitle}</p></header>
-      {error && <div className="auth-alert console-alert" role="alert">{error}</div>}
-      <label>{auth.username}<div className="console-input"><UserRound /><input autoFocus autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder={auth.usernamePlaceholder} required /></div></label>
-      <label>{auth.password}<div className="console-input"><LockKeyhole /><input type={show?'text':'password'} autoComplete="current-password" value={password} onChange={(event)=>setPassword(event.target.value)} placeholder={auth.passwordPlaceholder} required /><button type="button" onClick={()=>setShow((value)=>!value)} aria-label={show?visual.hide:visual.show}>{show?<EyeOff/>:<Eye/>}</button></div></label>
-      <div className="console-options"><label><input type="checkbox" checked={remember} onChange={(event)=>setRemember(event.target.checked)} />{auth.remember}</label><Link to="/forgot-password">{auth.forgot}</Link></div>
-      <button className={`gateway-submit${username&&password?' ready':''}`} disabled={busy}>{busy?<><LoaderCircle className="spin"/>{auth.signingIn}</>:<><span>{auth.signIn}<small>{visual.enter}</small></span><ArrowRight/></>}</button>
-      <p className="console-register">{auth.noAccount} <Link to="/register">{auth.register}</Link></p>
-      <div className="console-mini-flow" aria-hidden="true"><span>{flow[0]}</span><i />{flow[1]}<i />{flow[2]}<i />{auth.workspace}</div>
-      <footer><span><i/>{visual.ready}</span><b>{visual.secureAccess} • S2A ERP</b></footer>
-    </form></section>
-  </main>;
+  const { messages, locale } = useI18n();
+  const auth = messages.auth;
+  const visual = loginContent[locale];
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
+
+  const [username, setUsername] = useState(() => localStorage.getItem('s2a_remembered_username') ?? '');
+  const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(Boolean(localStorage.getItem('s2a_remembered_username')));
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (user) {
+    return <Navigate to={user.mustChangePassword ? '/change-password' : user.activeCompany ? user.defaultLandingPage : '/select-company'} replace />;
+  }
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      const loggedIn = await login(username, password);
+      if (remember) localStorage.setItem('s2a_remembered_username', username);
+      else localStorage.removeItem('s2a_remembered_username');
+      navigate(loggedIn.mustChangePassword ? '/change-password' : '/select-company', { replace: true });
+    } catch {
+      setError(auth.invalid);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /* แผงซ้ายเดิมมีแค่หัวข้อสั้น ๆ กับสามบรรทัด ทำให้ดูโล่งและไม่ได้บอกว่าระบบทำอะไรได้บ้าง
+     เฟสนี้เพิ่มพาดหัว คำอธิบาย ห้าข้อสรุปความสามารถ ป้ายโมดูล และประโยคปิดท้าย
+     ยังคุมปริมาณข้อความไม่ให้กลายเป็นโบรชัวร์ */
+  const brand = (
+    <AuthBrandPanel
+      eyebrow={auth.loginEyebrow}
+      title={auth.loginHeadline}
+      lead={auth.loginLead}
+      tiles={auth.loginTiles.map(([tileTitle, description], index) => ({
+        icon: [Calculator, Boxes, Truck, TrendingUp][index] ?? ShieldCheck,
+        title: tileTitle,
+        description,
+      }))}
+      tags={[...auth.loginTags]}
+      caption={auth.loginCaption}
+    />
+  );
+
+  return (
+    <AuthShell brand={brand}>
+      <AuthCard
+        kicker={auth.formEyebrow}
+        title={auth.signIn}
+        subtitle={auth.formLead}
+        toolbar={<>
+          <Link to="/" className="auth2-back"><ArrowLeft aria-hidden width={16} />{messages.common.backHome}</Link>
+          <LanguageSwitcher compact />
+        </>}
+        footer={<>{auth.noAccount} <Link to="/register">{auth.register}</Link></>}
+      >
+        <form className="auth2-form" onSubmit={(event) => void submit(event)}>
+          {error && <AuthAlert tone="error"><ShieldCheck aria-hidden width={18} />{error}</AuthAlert>}
+
+          <AuthField label={auth.username} icon={UserRound}>
+            {({ id, describedBy }) => (
+              <input
+                id={id}
+                autoFocus
+                autoComplete="username"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder={auth.usernamePlaceholder}
+                aria-describedby={describedBy}
+                required
+              />
+            )}
+          </AuthField>
+
+          <PasswordField
+            label={auth.password}
+            icon={LockKeyhole}
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+            placeholder={auth.passwordPlaceholder}
+            showLabel={visual.show}
+            hideLabel={visual.hide}
+          />
+
+          <div className="auth2-options">
+            <label>
+              <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+              {auth.remember}
+            </label>
+            <Link to="/forgot-password">{auth.forgot}</Link>
+          </div>
+
+          <button className="auth2-submit" disabled={busy}>
+            {busy ? <><LoaderCircle className="spin" aria-hidden />{auth.signingIn}</> : auth.signIn}
+          </button>
+          <p className="auth2-note-line"><ShieldCheck aria-hidden />{auth.formNote}</p>
+        </form>
+      </AuthCard>
+    </AuthShell>
+  );
 }

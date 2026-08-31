@@ -4,11 +4,11 @@ import {
   Sprout, UtensilsCrossed, Calculator, Tags, TrendingUp, ArrowRight, LogIn,
   PlayCircle, Package, ChartPie, Boxes, PackageOpen, ChartColumnBig, ShieldCheck,
   Target, Gauge, Sparkles, Lightbulb, ScrollText, Coins, Layers, CheckCircle2,
-  Crown, Flame, ArrowDownWideNarrow, Menu, X, type LucideIcon,
-} from 'lucide-react';
+  Crown, Flame, ArrowDownWideNarrow, Menu, X, Phone, Globe, MapPin, MessageCircle, Truck, type LucideIcon } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
 import './home.css';
 import CookieConsent from '@/components/CookieConsent';
+import LineContactModal from '@/components/public/LineContactModal';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useI18n } from '@/i18n/i18n';
 import { resolveHomeContent } from '@/i18n/home-content';
@@ -60,6 +60,8 @@ const NAV = [
   { id: 'features' },
   { id: 'process' },
   { id: 'kpi' },
+  // PHASE 41 — ชี้ไปยังคอลัมน์ติดต่อในส่วนท้าย ไม่ได้สร้าง route ใหม่
+  { id: 'contact' },
 ];
 
 export default function HomePage() {
@@ -111,6 +113,7 @@ export default function HomePage() {
   const loginTo = loggedIn ? '/dashboard' : '/login';
   const loginLabel = loggedIn ? messages.home.dashboard : messages.home.signIn;
   const navLabels = messages.home.nav;
+  const [lineOpen, setLineOpen] = useState(false);
 
   return (
     <div className="hp-root" ref={rootRef as React.RefObject<HTMLDivElement>}>
@@ -220,6 +223,24 @@ export default function HomePage() {
       </section>
 
       {/* ============ FEATURE OVERVIEW ============ */}
+      {/* PHASE 43 — แถบคุณค่าแบบกระชับ คั่นระหว่าง hero กับส่วนฟีเจอร์
+          ตั้งใจให้เตี้ยและอ่านจบเร็ว ไม่ใช่การ์ดใหญ่อีกชุด */}
+      <section className="hp-value-strip" aria-label={page.valueStrip[0][0]}>
+        <div className="hp-container">
+          <ul>
+            {page.valueStrip.map(([title, description], index) => (
+              <li key={title}>
+                <span className="hp-vs-ic" aria-hidden>{[<Calculator />, <Boxes />, <Truck />, <TrendingUp />][index]}</span>
+                <div>
+                  <strong>{title}</strong>
+                  <span>{description}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
       <section className="hp-section hp-features" id="features">
         <div className="hp-container">
           <div className="hp-section-head hp-reveal">
@@ -390,14 +411,69 @@ export default function HomePage() {
                 </span>
               </a>
               <p>{page.footer[0]}</p>
+              <p className="hp-brand-tags">Food Cost · Inventory · Production</p>
             </div>
             <div className="hp-footer-col">
-              <h5>{page.footer[1]}</h5><a href="#about">{page.footer[2]}</a><a href="#features">{page.footer[3]}</a><a href="#process">{page.footer[4]}</a><a href="#kpi">{page.footer[5]}</a>
+              <h5>{page.footer[1]}</h5><a href="#about">{page.footer[2]}</a><a href="#features">{page.footer[3]}</a><a href="#process">{page.footer[4]}</a><a href="#kpi">{page.footer[5]}</a><Link to={loginTo}>{loginLabel}</Link>
             </div>
-            <div className="hp-footer-col">
-              <h5>{page.footer[6]}</h5>
-              <Link to={loginTo}>{loginLabel}</Link>
-              <span>{page.footer[7]}</span><span>{page.footer[8]}</span><span>{page.footer[9]}</span>
+            {/* PHASE 47 — โซนที่ 3: "ศูนย์ติดต่อ"
+                เดิมข้อมูลติดต่อกับสำนักงานเป็นสองคอลัมน์แยกกันในกริดเดียวกับแบรนด์/เมนู
+                ทำให้อ่านเป็นสี่ก้อนที่ไม่เกี่ยวกัน
+                ตอนนี้รวมเป็นแผงเดียวที่มีพื้นหลังของตัวเอง แล้วแบ่งภายในเป็นสองฝั่ง */}
+            <div className="hp-contact-hub" id="contact">
+              <div className="hp-hub-col">
+                <h5>{page.contact.heading}</h5>
+                <ul className="hp-contact-list">
+                  {page.contact.people.map(([who, tel]) => (
+                    <li key={tel}>
+                      <a className="hp-contact-item" href={`tel:${tel.replace(/-/g, '')}`}>
+                        <span className="hp-contact-ic" aria-hidden><Phone /></span>
+                        <span className="hp-contact-value">{tel}</span>
+                        <span className="hp-contact-label">{who}</span>
+                      </a>
+                    </li>
+                  ))}
+                  <li>
+                    <a className="hp-contact-item is-wide" href={`https://${page.contact.website}`} target="_blank" rel="noreferrer noopener">
+                      <span className="hp-contact-ic" aria-hidden><Globe /></span>
+                      <span className="hp-contact-value">{page.contact.website}</span>
+                    </a>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="hp-hub-col">
+                <h5>{page.contact.officeHeading}</h5>
+                {/* PHASE 49 — ที่อยู่เดิมถูก render เป็น <span> แยกบรรทัดละอัน
+                    ข้อความจึงตัดบรรทัดตายตัว 4 บรรทัด ไม่ว่าคอลัมน์จะกว้างแค่ไหน
+                    ตอนนี้เป็นข้อความไหลต่อเนื่อง ใส่ <br /> เฉพาะจุดที่ควรขึ้นบรรทัดจริง
+                    และรวมสองบรรทัดท้าย (เขต/แขวง + จังหวัด+รหัสไปรษณีย์) ให้ไหลรวมกัน
+                    เนื้อหาที่อยู่ไม่ถูกแก้ เปลี่ยนแค่วิธีแสดงผล */}
+                <address className="hp-address">
+                  <MapPin aria-hidden />
+                  <span>
+                    {(page.contact.address.length > 3
+                      ? [...page.contact.address.slice(0, -2), page.contact.address.slice(-2).join(' ')]
+                      : page.contact.address
+                    ).map((line, index, all) => (
+                      <span key={line}>{line}{index < all.length - 1 && <br />}</span>
+                    ))}
+                  </span>
+                </address>
+                <p className="hp-foot-label">{page.contact.lineLabel}</p>
+                <div className="hp-line-block">
+                  <button type="button" className="hp-line-id" onClick={() => setLineOpen(true)} aria-haspopup="dialog">
+                    <span className="hp-contact-ic is-line" aria-hidden><MessageCircle /></span>
+                    <span className="hp-contact-body">
+                      <span className="hp-contact-value">{page.contact.line}</span>
+                      <span className="hp-contact-label">{page.contact.lineModal.subtitleShort}</span>
+                    </span>
+                  </button>
+                  <button type="button" className="hp-line-cta" onClick={() => setLineOpen(true)} aria-haspopup="dialog">
+                    {page.contact.lineModal.title}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           <div className="hp-footer-bottom">
@@ -407,6 +483,7 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+      {lineOpen && <LineContactModal copy={page.contact.lineModal} onClose={() => setLineOpen(false)} />}
       <CookieConsent />
     </div>
   );

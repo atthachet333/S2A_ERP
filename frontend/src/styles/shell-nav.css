@@ -1,0 +1,85 @@
+/* ============================================================
+   S2A ERP — PHASE 34 · SIDEBAR NAVIGATION
+   ------------------------------------------------------------
+   ไฟล์นี้ import เป็นลำดับสุดท้ายใน main.tsx จึงทับกฎเดิมของ
+   .nav-group / .nav-group-label ที่กระจายอยู่ใน index.css ได้
+   โดยไม่ต้องแก้บรรทัด CSS ที่ถูกบีบรวมไว้แล้ว
+
+   ของใหม่ในเฟสนี้: หัวข้อกลุ่มกดพับได้ (.nav-group-toggle)
+   และตัวห่อรายการเมนู (.nav-group-body)
+   ============================================================ */
+
+.nav-group {
+  margin-bottom: 4px;
+  padding: 6px 8px 8px;
+  /* เดิมทุกกลุ่มมีเส้นคั่นล่าง ทำให้แถบข้างดูเป็นตารางถี่ ๆ
+     เฟสนี้ใช้ระยะห่าง + หัวข้อกลุ่มเป็นตัวแบ่งแทน ดูสงบกว่า */
+  border-bottom: 0;
+}
+
+/* ---------- หัวข้อกลุ่มแบบกดพับได้ ---------- */
+.nav-group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 7px 10px;
+  margin-bottom: 2px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: inherit;
+  text-align: start;
+  transition: background .15s ease, color .15s ease;
+}
+
+.nav-group-toggle:hover { background: rgba(255, 255, 255, .06); }
+
+.nav-group-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(160, 200, 245, .55);
+}
+
+.nav-group-toggle .nav-group-label {
+  padding: 0;
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #8ba3c2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-group-toggle:hover .nav-group-label { color: #cddcee; }
+
+.nav-group-caret {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: #6d86a5;
+  transition: transform .18s ease, color .15s ease;
+}
+
+.nav-group-toggle:hover .nav-group-caret { color: #cddcee; }
+
+/* พับอยู่ = ลูกศรชี้ไปทางเริ่มต้นของบรรทัด (รองรับ RTL ด้วย logical property) */
+.nav-group--collapsed .nav-group-caret { transform: rotate(-90deg); }
+
+/* ---------- ตัวห่อรายการเมนู ---------- */
+.nav-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* [hidden] ต้องชนะ display:flex ด้านบน ไม่งั้นกลุ่มที่พับแล้วยังโผล่ */
+.nav-group-body[hidden] { display: none; }
+
+/* ---------- โหมดแถบข้างหุบ (icon rail) ---------- */
+.collapsed .nav-group { padding: 4px 6px; }
+.collapsed .nav-group-body { align-items: center; }

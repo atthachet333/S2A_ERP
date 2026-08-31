@@ -12,6 +12,11 @@ export interface DashboardSummary {
   menus: number;
   activeRecipes: number;
   itemsWithoutPrice: number;
+  production: { runs: number; averageYieldPercent: number | null; costVariance: number; recordedWaste: { unitCode: string; quantity: number }[]; lowSample: boolean };
+  purchasePlanning: { plans: number; draftPlans: number; shortageItems: number; estimatedCost: number };
+  purchaseOrders?: { draft: number; awaitingDelivery: number; partial: number; overdue: number };
+  inventoryValuation?: { knownValue: number; unknownCostStockCount: number; history: { snapshotId: string; businessDate: string; knownValue: number; completeness: number }[] };
+  costInsights?: { productionVariance: number; productionRunCount: number; movers: { itemId: string; itemCode: string; itemName: string; previousCost: number; latestCost: number; change: number; latestAt: string; latestSource: string }[] };
 }
 
 /** ตัวเลขสรุปจากฐานข้อมูลจริง (System Overview + Setup Progress) */

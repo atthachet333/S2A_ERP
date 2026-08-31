@@ -8,6 +8,7 @@ vi.mock('@/auth/AuthContext', () => ({ useAuth: () => ({ user: store.user }) }))
 vi.mock('@/hooks/useHealth', () => ({ useHealth: () => store.health }));
 
 import Header from '@/components/layout/Header';
+import { navGroupLabelForPath } from '@/components/layout/nav-config';
 
 const noop = () => {};
 
@@ -46,5 +47,58 @@ describe('Header', () => {
     expect(container.querySelector('.app-header')).toHaveClass('app-header--scrolled');
     window.scrollY = 0; fireEvent.scroll(window);
     expect(container.querySelector('.app-header')).not.toHaveClass('app-header--scrolled');
+  });
+});
+
+/* ============================================================
+   PHASE 34 — breadcrumb ต้องบอกกลุ่มจริงที่เมนูสังกัดอยู่
+   ยืนยันจากภาพหน้าจอจริง: หน้า /dashboard เคยขึ้นว่า "ระบบ > ภาพรวม"
+   ทั้งที่ภาพรวมไม่ได้อยู่ในกลุ่ม "ระบบ"
+   ============================================================ */
+describe('PHASE 34 — breadcrumb group', () => {
+  it('จับคู่ path เข้ากับกลุ่มที่ถูกต้องใน NAV_GROUPS', () => {
+    expect(navGroupLabelForPath('/dashboard')).toBe('ภาพรวม');
+    expect(navGroupLabelForPath('/ingredients')).toBe('ต้นทุนและสูตร');
+    expect(navGroupLabelForPath('/orders')).toBe('การขายและลูกค้า');
+    expect(navGroupLabelForPath('/purchase-orders')).toBe('จัดซื้อ');
+    expect(navGroupLabelForPath('/production')).toBe('การผลิต');
+    expect(navGroupLabelForPath('/activity')).toBe('การตรวจสอบระบบ');
+  });
+
+  it('เลือก prefix ที่ยาวที่สุด ไม่ให้หน้าลูกตกไปอยู่กลุ่มของหน้าแม่', () => {
+    // /inventory อยู่กลุ่ม "สินค้าและคลัง" ส่วน /inventory/valuation อยู่ "รายงานและวิเคราะห์"
+    expect(navGroupLabelForPath('/inventory')).toBe('สินค้าและคลัง');
+    expect(navGroupLabelForPath('/inventory/valuation')).toBe('รายงานและวิเคราะห์');
+    expect(navGroupLabelForPath('/inventory/valuation/history')).toBe('รายงานและวิเคราะห์');
+  });
+
+  it('path ที่ไม่มีในเมนู คืนค่าว่าง เพื่อให้หัวเว็บถอยไปใช้ค่าสำรองเดิม', () => {
+    expect(navGroupLabelForPath('/profile')).toBeUndefined();
+  });
+
+  it('ไม่มีหน้าไหนถูกบังคับให้เป็นกลุ่ม "ระบบ" อีก', () => {
+    const forced = ['/dashboard', '/ingredients', '/recipes', '/orders', '/customers', '/production']
+      .filter((path) => navGroupLabelForPath(path) === 'ระบบ');
+    expect(forced).toEqual([]);
+  });
+});
+
+/* PHASE 34 — ยืนยันจากภาพหน้าจอจริงที่ 1559px:
+   หัวเว็บขึ้น "ภาพรวม > ภาพรวม" เพราะชื่อกลุ่มกับชื่อหน้าเป็นคำเดียวกัน */
+describe('PHASE 34 — breadcrumb ไม่ซ้ำชื่อหน้า', () => {
+  it('ซ่อน breadcrumb เมื่อชื่อกลุ่มตรงกับชื่อหน้า', () => {
+    store.user = makeUser({ roles: ['SUPER_ADMIN'] });
+    store.health = { data: undefined, isLoading: true, isError: false };
+    renderWithProviders(<Header onToggleSidebar={noop} onOpenDrawer={noop} onLogout={noop} />, { route: '/dashboard' });
+    // ชื่อหน้ายังอยู่ครบ แต่ไม่มีแถบ breadcrumb ซ้ำคำเดิม
+    expect(screen.getByRole('heading', { level: 1, name: 'ภาพรวม' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('เส้นทาง')).not.toBeInTheDocument();
+  });
+
+  it('ยังแสดง breadcrumb เมื่อกลุ่มกับชื่อหน้าต่างกัน', () => {
+    store.user = makeUser({ roles: ['SUPER_ADMIN'] });
+    store.health = { data: undefined, isLoading: true, isError: false };
+    renderWithProviders(<Header onToggleSidebar={noop} onOpenDrawer={noop} onLogout={noop} />, { route: '/ingredients' });
+    expect(screen.getByLabelText('เส้นทาง')).toHaveTextContent('ต้นทุนและสูตร');
   });
 });

@@ -1,14 +1,15 @@
-import { useState } from 'react';
-import { Eye, EyeOff, LockKeyhole, UserRound } from 'lucide-react';
-import { Navigate, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/auth/AuthContext';
 import LoginExperience from '@/components/auth/LoginExperience';
 
-export default function LoginPage() { return <LoginExperience />; }
-export function LegacyLoginPage() {
-  const { user, login } = useAuth(); const navigate = useNavigate();
-  const [username, setUsername] = useState(() => localStorage.getItem('s2a_remembered_username') ?? ''); const [password, setPassword] = useState(''); const [remember, setRemember] = useState(Boolean(localStorage.getItem('s2a_remembered_username'))); const [show, setShow] = useState(false); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
-  if (user) return <Navigate to={user.mustChangePassword ? '/change-password' : '/dashboard'} replace />;
-  const submit = async (event: React.FormEvent) => { event.preventDefault(); setError(''); setBusy(true); try { const loggedIn = await login(username, password); if (remember) localStorage.setItem('s2a_remembered_username', username); else localStorage.removeItem('s2a_remembered_username'); navigate(loggedIn.mustChangePassword ? '/change-password' : '/dashboard', { replace: true }); } catch (reason) { setError(reason instanceof Error ? reason.message : 'เข้าสู่ระบบไม่สำเร็จ'); } finally { setBusy(false); } };
-  return <div className="auth-page"><section className="auth-story"><img src="/s2a-logo.png" alt="S2A ERP" /><div><p className="eyebrow">SMART OPERATIONS</p><h1>ระบบบริหารต้นทุนการผลิต<br />และคลังสินค้า</h1><p>ข้อมูลที่ชัดเจน การตัดสินใจที่แม่นยำ และกระบวนการทำงานที่เชื่อมถึงกัน</p></div></section><section className="auth-panel"><form className="auth-card" onSubmit={(event) => void submit(event)}><div className="mobile-logo"><img src="/s2a-logo.png" alt="S2A ERP" /></div><p className="eyebrow">WELCOME TO S2A ERP</p><h2>เข้าสู่ระบบ</h2><p className="subtle">กรอกข้อมูลบัญชีองค์กรของคุณ</p>{error && <div className="alert">{error}</div>}<label>ชื่อผู้ใช้<div className="input-wrap"><UserRound /><input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required /></div></label><label>รหัสผ่าน<div className="input-wrap"><LockKeyhole /><input type={show ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /><button type="button" onClick={() => setShow(!show)} aria-label={show ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}>{show ? <EyeOff /> : <Eye />}</button></div></label><label className="remember"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />จำชื่อผู้ใช้</label><button className="primary-button" disabled={busy}>{busy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}</button><small className="security-note">ระบบรักษาความปลอดภัยสำหรับผู้ได้รับอนุญาตเท่านั้น</small></form></section></div>;
+/**
+ * PHASE 38 — หน้าเข้าสู่ระบบ
+ *
+ * ไฟล์นี้เป็นเพียงจุดต่อของ route `/login` เข้ากับ LoginExperience
+ * ซึ่งเป็นการใช้งานจริงเพียงชุดเดียวของหน้าเข้าสู่ระบบ
+ *
+ * เดิมไฟล์นี้ยัง export `LegacyLoginPage` ซึ่งเป็นฟอร์มเข้าสู่ระบบอีกชุดหนึ่ง
+ * ที่เขียนซ้ำทั้งหมด (พร้อมข้อความไทยแบบ hardcode) แต่ไม่มีที่ไหนเรียกใช้เลย
+ * ถูกลบออกในเฟสนี้ เพื่อไม่ให้เหลือหน้าเข้าสู่ระบบสองชุดในโค้ดเบส
+ */
+export default function LoginPage() {
+  return <LoginExperience />;
 }

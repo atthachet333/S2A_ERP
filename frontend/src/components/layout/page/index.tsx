@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/i18n/i18n';
+import { resolvePageIdentity } from '@/components/layout/page-identity';
 
 /**
  * PHASE 2+3 — Global Page Pattern
@@ -31,14 +33,32 @@ export function PageHeader({ title, description, breadcrumb, badge, meta, action
   actions?: ReactNode;
   className?: string;
 }) {
+  /* PHASE 34 — หัวเว็บ (App Header) เป็นเจ้าของ breadcrumb และชื่อหน้าแล้ว
+     ตรงนี้จึงตัดของที่ซ้ำออก เหลือไว้เฉพาะสิ่งที่เป็นของหน้านั้นจริง ๆ
+
+     กติกาที่ใช้ตัดสิน:
+     - breadcrumb ที่เป็น "ข้อความล้วน" = ป้ายชื่อโมดูล ซึ่งหัวเว็บแสดงอยู่แล้ว -> ซ่อน
+     - breadcrumb ที่เป็น element (มี <Link> ย้อนกลับ) = เส้นทางนำทางจริง ไม่ใช่การซ้ำ -> เก็บไว้
+       (เช่น หน้ารายละเอียดผู้จำหน่ายที่มีปุ่มย้อนกลับ ถ้าตัดทิ้งเท่ากับลบฟีเจอร์)
+     - ชื่อหน้าที่ตรงกับชื่อบนหัวเว็บเป๊ะ ๆ -> ซ่อน เพราะจะได้ h1 ซ้ำสองอัน */
+  const { pathname } = useLocation();
+  const { messages } = useI18n();
+  const identity = resolvePageIdentity(pathname, messages.navigation as unknown as Record<string, string>);
+
+  const breadcrumbIsModuleLabel = typeof breadcrumb === 'string';
+  const showBreadcrumb = Boolean(breadcrumb) && !breadcrumbIsModuleLabel;
+  const showTitle = !(typeof title === 'string' && title === identity.title);
+
   return (
     <header className={cn('s2-page-header', className)}>
       <div className="s2-page-header-main">
-        {breadcrumb && <div className="s2-page-breadcrumb">{breadcrumb}</div>}
-        <div className="s2-page-title-row">
-          <h1>{title}</h1>
-          {badge}
-        </div>
+        {showBreadcrumb && <div className="s2-page-breadcrumb">{breadcrumb}</div>}
+        {(showTitle || badge) && (
+          <div className="s2-page-title-row">
+            {showTitle && <h1>{title}</h1>}
+            {badge}
+          </div>
+        )}
         {description && <p className="s2-page-desc">{description}</p>}
         {meta && <div className="s2-page-meta">{meta}</div>}
       </div>

@@ -8,10 +8,14 @@
  * ลำดับ: ลูกก่อน พ่อแม่ทีหลัง — ตารางที่ยังไม่มีใน schema จะถูกข้ามอย่างเงียบ ๆ
  */
 export const TEST_CLEANUP_TABLES = [
+  'inventory_valuation_snapshot_lines', 'inventory_valuation_snapshots',
   'stock_ledgers',
   'stock_balances',
   'inventory_lots',
+  'goods_receipt_extraction_lines', 'goods_receipt_extractions',
   'goods_receipt_items', 'goods_receipts',
+  'purchase_order_items', 'purchase_orders',
+  'purchase_plan_requirements', 'purchase_plan_targets', 'purchase_plans',
   'stock_issue_items', 'stock_issues',
   'stock_adjustment_items', 'stock_adjustments',
   'stock_transfer_items', 'stock_transfers',

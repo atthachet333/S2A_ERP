@@ -99,3 +99,8 @@ select,input,textarea{ color: var(--text); }option{ color: #12233a; background: 
    Force them to primary text in dark only (auth pages use always-white cards,untouched). */
 :root.dark .app-content :is(h1,h2,h3,h4){ color: var(--text); }:root.dark .stat-value,:root.dark .fcx-rank .nm strong,:root.dark .activity-item .ai-main strong,:root.dark .cell-user .cu-text strong{ color: var(--text); }/* Icon accent tiles: keep tinted (were hard light) in dark */
 :root.dark .icon-chip.slate{ background: var(--surface-3); color: var(--text-muted); }:root.dark .icon-chip.gold{ background: #3a2f16; color: var(--brand-gold-soft); }
+/* Registration validation states */
+.onboarding-form .field-hint{display:block;margin-top:3px;color:#6e8192;font-size:8px;font-weight:500}
+.onboarding-form .field-error{display:block;margin-top:3px;color:#b42318;font-size:9px;font-weight:700}
+.onboarding-form input[aria-invalid="true"]{color:#8f1d16}
+.onboarding-form .console-input:has(input[aria-invalid="true"]){border-color:#d55b52;box-shadow:0 0 0 2px rgba(180,35,24,.08)}

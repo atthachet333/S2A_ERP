@@ -154,7 +154,7 @@ describe('เครื่องมือดูแลสิทธิ์', () => {
 
   it('คำสั่งที่เขียนข้อมูลต้องมีด่านชื่อฐานข้อมูลและรองรับ --dry-run', () => {
     for (const [name, source] of [['permission-tools', tools], ['stock-transfer sync', stockTransferSync]] as const) {
-      expect(source, name).toContain("EXPECTED_DATABASE = 's2a_erp'");
+      expect(source, name).toContain("EXPECTED_DATABASE = 's2a_erp_main'");
       expect(source, name).toContain('SELECT DATABASE()');
       expect(source, name).toContain('--dry-run');
       expect(source, name).toContain('TEST_DATABASE_URL');

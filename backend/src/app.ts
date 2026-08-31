@@ -21,6 +21,14 @@ import uploadRoutes from './modules/uploads/upload.route.js';
 import businessRoutes from './modules/business/business.route.js';
 import transferRoutes from './modules/business/transfer.route.js';
 import receiptAttachmentRoutes from './modules/business/receipt-attachment.route.js';
+import documentExtractionRoutes from './modules/business/document-extraction.route.js';
+import productionRoutes from './modules/production/production.route.js';
+import purchasePlanningRoutes from './modules/purchase-planning/purchase-planning.route.js';
+import purchaseOrderRoutes from './modules/purchase-orders/purchase-order.route.js';
+  import analyticsRoutes from './modules/analytics/analytics.route.js';
+  import costVarianceRoutes from './modules/analytics/cost-variance.route.js';
+  import profitSimulatorRoutes from './modules/analytics/profit-simulator.route.js';
+import lotRoutes from './modules/inventory/lot.route.js';
 import companyRoutes from './modules/companies/company.route.js';
 import adminRoutes from './modules/admin/admin.route.js';
 
@@ -78,6 +86,17 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(transferRoutes, { prefix: '/business' });
       // PHASE 22 — ไฟล์เอกสารต้นฉบับจากผู้ขาย (ส่วนเพิ่มของงานรับของ)
       await api.register(receiptAttachmentRoutes, { prefix: '/business' });
+      // PHASE 23 — อ่านไฟล์ต้นฉบับเป็นผลชั้นกลางสำหรับตรวจทานและ apply เข้า DRAFT เท่านั้น
+      await api.register(documentExtractionRoutes, { prefix: '/business' });
+      // PHASE 24 — ใบผลิตสินค้า: ร่าง → ยืนยันแบบ atomic → กลับรายการ
+      await api.register(productionRoutes, { prefix: '/business' });
+      // PHASE 26 — แผนความต้องการวัตถุดิบเชิงแนะนำ ไม่จองหรือขยับสต็อก
+      await api.register(purchasePlanningRoutes, { prefix: '/business' });
+      await api.register(purchaseOrderRoutes, { prefix: '/business' });
+        await api.register(analyticsRoutes, { prefix: '/business' });
+        await api.register(costVarianceRoutes, { prefix: '/business' });
+        await api.register(profitSimulatorRoutes, { prefix: '/business' });
+      await api.register(lotRoutes, { prefix: '/business' });
       await api.register(companyRoutes, { prefix: '/companies' });
       await api.register(adminRoutes, { prefix: '/admin' });
     },

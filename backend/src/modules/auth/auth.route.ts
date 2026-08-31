@@ -15,16 +15,31 @@ const selectCompanySchema = z.object({ companyId: z.string().min(1) });
 const passwordSchema = z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(10).regex(/[a-z]/).regex(/[A-Z]/).regex(/\d/).regex(/[^A-Za-z0-9]/) });
 const forgotPasswordSchema = z.object({ identifier: z.string().trim().min(1).max(200) });
 const resetPasswordSchema = z.object({ token: z.string().min(20), newPassword: z.string().min(10).regex(/[a-z]/).regex(/[A-Z]/).regex(/\d/).regex(/[^A-Za-z0-9]/) });
-const registerSchema = z.object({ fullName: z.string().trim().min(2).max(160), username: z.string().trim().min(3).max(60).regex(/^[A-Za-z0-9._-]+$/), email: z.string().trim().email().max(200), phone: z.string().trim().max(40).optional(), password: z.string().min(10).regex(/[a-z]/).regex(/[A-Z]/).regex(/\d/).regex(/[^A-Za-z0-9]/), termsAccepted: z.literal(true) }).strict();
+const registerSchema = z.object({
+  fullName: z.string({ required_error: 'กรุณาระบุชื่อ-นามสกุล' }).trim().min(2, 'ชื่อ-นามสกุลต้องมีอย่างน้อย 2 ตัวอักษร').max(160, 'ชื่อ-นามสกุลยาวเกินไป'),
+  username: z.string({ required_error: 'กรุณาระบุชื่อผู้ใช้' }).trim().min(3, 'ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร').max(60, 'ชื่อผู้ใช้ยาวเกินไป').regex(/^[A-Za-z0-9._-]+$/, 'ชื่อผู้ใช้ใช้ได้เฉพาะตัวอักษรอังกฤษ ตัวเลข จุด ขีดกลาง และขีดล่าง'),
+  email: z.string({ required_error: 'กรุณาระบุอีเมล' }).trim().email('รูปแบบอีเมลไม่ถูกต้อง').max(200, 'อีเมลยาวเกินไป'),
+  phone: z.string().trim().max(40, 'หมายเลขโทรศัพท์ยาวเกินไป').optional(),
+  password: z.string({ required_error: 'กรุณาระบุรหัสผ่าน' }).min(10, 'รหัสผ่านต้องมีอย่างน้อย 10 ตัวอักษร').regex(/[a-z]/, 'รหัสผ่านต้องมีตัวพิมพ์เล็ก').regex(/[A-Z]/, 'รหัสผ่านต้องมีตัวพิมพ์ใหญ่').regex(/\d/, 'รหัสผ่านต้องมีตัวเลข').regex(/[^A-Za-z0-9]/, 'รหัสผ่านต้องมีอักขระพิเศษ'),
+  termsAccepted: z.literal(true, { errorMap: () => ({ message: 'กรุณายอมรับเงื่อนไขการใช้งาน' }) }),
+}).strict();
 const resetTokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 const registrationAttempts = new Map<string, { count: number; resetAt: number }>();
 const registrationAllowed = (ip: string) => { const now = Date.now(); const current = registrationAttempts.get(ip); if (!current || current.resetAt <= now) { registrationAttempts.set(ip, { count: 1, resetAt: now + 15 * 60_000 }); return true; } if (current.count >= 8) return false; current.count += 1; return true; };
+const duplicateRegistrationCode = (error: Prisma.PrismaClientKnownRequestError) => {
+  const target = String(error.meta?.target ?? '').toLowerCase();
+  if (target.includes('username')) return ['USERNAME_ALREADY_EXISTS', 'ชื่อผู้ใช้นี้ถูกใช้แล้ว'] as const;
+  if (target.includes('email')) return ['EMAIL_ALREADY_EXISTS', 'อีเมลนี้ถูกใช้แล้ว'] as const;
+  return ['ACCOUNT_ALREADY_EXISTS', 'ชื่อผู้ใช้หรืออีเมลนี้ถูกใช้งานแล้ว'] as const;
+};
 const signAccessToken = (app: FastifyInstance, user: ReturnType<typeof toAuthUser>) => app.jwt.sign({ sub: user.id, username: user.username, roles: user.roles, permissions: user.permissions, companyId: user.activeCompany?.id });
 
 export default async function authRoutes(app: FastifyInstance) {
   app.post('/register', async (req, reply) => {
-    if (!registrationAllowed(req.ip)) return reply.status(429).send(fail('REGISTRATION_RATE_LIMITED', 'มีการลงทะเบียนมากเกินไป กรุณาลองใหม่ภายหลัง'));
     const body = registerSchema.parse(req.body);
+    // Invalid forms are rejected before the expensive-work limiter, so correcting a
+    // field does not consume all registration attempts. Valid attempts remain limited.
+    if (!registrationAllowed(req.ip)) return reply.status(429).send(fail('REGISTRATION_RATE_LIMITED', 'มีการลงทะเบียนมากเกินไป กรุณาลองใหม่ภายหลัง'));
     const passwordHash = await bcrypt.hash(body.password, 12);
     try {
       const user = await prisma.$transaction(async (tx) => {
@@ -34,7 +49,10 @@ export default async function authRoutes(app: FastifyInstance) {
       });
       return reply.status(201).send(ok({ id: user.id, username: user.username, email: user.email, status: 'PENDING_WORKSPACE', emailVerificationRequired: false }, 'สร้างบัญชีสำเร็จ'));
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return reply.status(409).send(fail('ACCOUNT_ALREADY_EXISTS', 'ชื่อผู้ใช้หรืออีเมลนี้ถูกใช้งานแล้ว'));
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const [code, message] = duplicateRegistrationCode(error);
+        return reply.status(409).send(fail(code, message));
+      }
       throw error;
     }
   });

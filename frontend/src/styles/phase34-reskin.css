@@ -1,0 +1,646 @@
+/* ============================================================
+   S2A ERP — PHASE 34 · VISUAL RE-SKIN
+   ------------------------------------------------------------
+   import ท้ายสุดใน main.tsx จึงทับสกินเดิมได้โดยไม่ต้องรื้อ CSS เก่า
+
+   ขอบเขต: "หน้าตา" ล้วน ๆ — ปุ่ม การ์ด ตาราง ฟอร์ม ป้ายสถานะ
+   ไม่แตะโครง layout ของหน้า ไม่แตะ business logic
+
+   ข้อจำกัดที่ต้องเคารพ (มี test คุมอยู่):
+   - ห้ามประกาศ theme token ใน :root ที่ไฟล์นี้ (source เดียวคือ tokens.css)
+   - ใช้ได้เฉพาะ var() ที่ประกาศไว้แล้วจริง
+   - ห้ามใส่ background ให้ .app-header (ประกาศได้ชุดเดียว)
+   - z-index ของ shell ต้องมาจาก token
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   1) ปุ่ม — เดิม primary เป็น gradient navy→blue ซึ่งอ่านเป็น
+   "SaaS dashboard ทั่วไป" เฟสนี้เปลี่ยนเป็นสีทึบ + เงาตื้น
+   ให้ดูนิ่งและแพงขึ้น ความสูงยังเป็น 44px ตาม spec เดิม
+   ------------------------------------------------------------ */
+.btn {
+  border-radius: var(--radius-field);
+  font-size: 14px;
+  letter-spacing: .01em;
+  padding: 0 18px;
+  transition: background .16s ease, border-color .16s ease, box-shadow .16s ease, transform .12s ease;
+}
+
+.btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.btn:active { transform: translateY(1px); }
+
+.btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.btn.primary {
+  background: var(--navy);
+  border: 1px solid var(--navy);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-flat);
+}
+
+.btn.primary:hover { background: var(--navy-soft); border-color: var(--navy-soft); }
+
+/* ปุ่มรองแบบมีน้ำหนัก — ใช้เส้นขอบสีแบรนด์แทนพื้นทึบ */
+.btn.secondary,
+.btn.ghost-primary {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--navy);
+}
+
+.btn.danger-btn,
+.danger-btn {
+  border-radius: var(--radius-field);
+}
+
+.btn[disabled],
+.btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+
+/* ------------------------------------------------------------
+   2) ปุ่มไอคอน — ให้เป็นสี่เหลี่ยมมนขนาดเดียวกันทั้งระบบ
+   เดิมมี 38 / 42 ปะปนกัน ทำให้แถวปุ่มไม่ตรงแนว
+   ------------------------------------------------------------ */
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: var(--radius-field);
+}
+
+.icon-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ------------------------------------------------------------
+   3) การ์ด — เงาแบบสองชั้นตื้น ๆ อ่านเป็นกระดาษวางบนโต๊ะ
+   ไม่ใช่กล่องลอยเหมือน template สำเร็จรูป
+   ------------------------------------------------------------ */
+.card {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-flat);
+}
+
+.card-pad { padding: var(--card-pad); }
+
+/* ------------------------------------------------------------
+   4) ตาราง — จุดที่ผู้ใช้ ERP ใช้เวลานานที่สุด
+   หัวตารางติดบนสุดตอนเลื่อน · แถวสูงสบายตา · เส้นคั่นบางเส้นเดียว
+   ------------------------------------------------------------ */
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  /* letter-spacing ถูกถอดออก — วัดจริงด้วยฟอนต์จริงแล้วพบสองเรื่อง
+     1) ภาษาไทยไม่มีช่องว่างระหว่างคำ การถ่างตัวอักษรทำให้สระ/วรรณยุกต์
+        ลอยห่างจากพยัญชนะ อ่านยากขึ้น ไม่ได้ช่วยเหมือนกับตัวพิมพ์ใหญ่ภาษาอังกฤษ
+     2) กินความกว้างรวมของหัวตาราง 12 คอลัมน์ไปราว 43px โดยไม่ให้ข้อมูลเพิ่ม */
+  letter-spacing: normal;
+  text-transform: uppercase;
+  text-align: start;
+  /* หัวตารางใช้ระยะขอบแคบกว่าช่องข้อมูลได้ ตัวอักษรเล็กกว่าอยู่แล้ว */
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  /* เดิมบังคับ nowrap ทำให้หัวข้อไทยยาว ๆ อย่าง "ต้นทุน/หน่วยฐาน" ดันความกว้าง
+     คอลัมน์ไปถึง 130px ทั้งที่ข้อมูลข้างในกว้างแค่ 52px
+     ปล่อยให้ตัดบรรทัดได้ ความกว้างรวมของตารางลดจาก 1226px เหลือ 1071px
+     โดยไม่ต้องตัดคอลัมน์หรือย่อข้อความใด ๆ ทิ้ง */
+  white-space: normal;
+  vertical-align: bottom;
+}
+
+.data-table tbody td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td { border-bottom: 0; }
+
+.data-table tbody tr { transition: background .12s ease; }
+.data-table tbody tr:hover { background: var(--surface-hover); }
+
+/* ตัวเลข เงิน เปอร์เซ็นต์ ชิดขวาเสมอ เพื่อให้เทียบหลักกันได้ด้วยตา */
+.data-table th.num,
+.data-table td.num,
+.data-table .num { text-align: end; }
+
+/* ข้อความบรรทัดรองในเซลล์ (รหัส/หน่วย) ให้เบาลง ไม่แย่งสายตา */
+.data-table .cell-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-top: 2px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* ตารางที่อยู่ในกรอบแล้ว ไม่ต้องมีขอบซ้อนอีกชั้น */
+.table-wrap > .data-table { border: 0; }
+
+/* ------------------------------------------------------------
+   5) ฟอร์ม — ช่องกรอกสูงเท่ากันหมด 44px และมีวงแหวนโฟกัสชุดเดียว
+   ------------------------------------------------------------ */
+/* ตั้งใจไม่แตะ padding / border / background ตรงนี้
+   เพราะคอมโพเนนต์เดิมหลายตัว (combobox ในสูตรอาหาร, ช่องค้นหาแบบไร้ขอบ,
+   ช่องกรอกในตารางเบิกของ) ตั้งค่าเหล่านั้นไว้เองด้วย specificity เท่ากัน
+   ถ้าทับแบบเหมารวมจะไปพังของที่ทำงานถูกอยู่แล้ว
+   ที่นี่จึงคุมเฉพาะ "ความสูง ความมน และวงแหวนโฟกัส" ซึ่งเป็นตัวที่เคยไม่ตรงกัน */
+input:not([type]),
+input[type='text'],
+input[type='number'],
+input[type='search'],
+input[type='email'],
+input[type='password'],
+input[type='date'],
+select,
+textarea {
+  min-height: var(--control-h);
+  border-radius: var(--radius-field);
+  font-size: 14px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+textarea { line-height: 1.6; }
+
+/* ช่องกรอกที่ตั้งใจให้ "ไร้ขอบ" เพราะกรอบนอกเป็นตัวคุมหน้าตาและพื้นที่กดอยู่แล้ว
+   (ยืนยันกับเบราว์เซอร์จริง: .console-input สูง 47px มีเส้นขอบและมุมมนของตัวเอง
+    ส่วน input ข้างในเป็น padding:0 พื้นโปร่ง)
+   ถ้าไปบังคับ min-height ให้ input ข้างใน กล่องจะอ้วนขึ้นโดยไม่จำเป็น
+   แต่ font-size ยังคุมไว้ที่กฎกลาง เพื่อให้ทุกช่องในฟอร์มเดียวกันตัวอักษรเท่ากัน
+   (ก่อนแก้: ช่องชื่อผู้ใช้ 12px / ช่องรหัสผ่าน 14px ในฟอร์มล็อกอินเดียวกัน) */
+.console-input input,
+.auth-input input,
+.issue-picker-search input,
+.s2a-combo-search input { min-height: 0; }
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--input-focus);
+  box-shadow: var(--focus-ring);
+}
+
+input::placeholder,
+textarea::placeholder { color: var(--input-placeholder); }
+
+input[aria-invalid='true'],
+textarea[aria-invalid='true'] { border-color: var(--danger); }
+input[aria-invalid='true']:focus-visible,
+textarea[aria-invalid='true']:focus-visible { box-shadow: var(--focus-ring-danger); }
+
+/* คำอธิบายใต้ช่องกรอก */
+.field-hint,
+.md-hint { color: var(--text-subtle); font-size: 12.5px; line-height: 1.55; }
+
+/* หัวข้อย่อยของฟอร์ม — ใช้เส้นบางคั่นแทนกล่องซ้อนกล่อง */
+.form-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--heading);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-4);
+}
+
+/* ------------------------------------------------------------
+   6) ป้ายสถานะ — อ่านง่ายขึ้นเล็กน้อย และสูงเท่ากันทุกใบ
+   สีความหมายยังมาจาก token เดิม ไม่เปลี่ยนความหมายของสถานะ
+   ------------------------------------------------------------ */
+.badge {
+  padding: 4px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  border-radius: var(--radius-pill);
+}
+
+/* ------------------------------------------------------------
+   7) หัวข้อส่วน — ให้จังหวะห่างเท่ากันทุกหน้า
+   ------------------------------------------------------------ */
+.section-head { margin-bottom: var(--space-5); }
+
+.eyebrow { letter-spacing: .18em; }
+
+/* ------------------------------------------------------------
+   8) ตัวเลขทั้งระบบใช้ Manrope + tabular-nums
+   เพื่อให้คอลัมน์เงินเรียงหลักตรงกันทุกแถว
+   ------------------------------------------------------------ */
+.num,
+.money,
+.kpi,
+.stat-value,
+.data-table td.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------
+   9) การซ้อนชั้น (layering) — แก้ของที่พิสูจน์แล้วว่าผิดจริง
+
+   .modal-backdrop ถูกประกาศชั้นซ้อนไว้เป็นเลขดิบสองร้อย
+   ซึ่งเท่ากับ --z-drawer พอดี แปลว่าโมดัลของหน้าสูตรอาหาร
+   และหน้าสูตรแปลงหน่วย อยู่ "ชั้นเดียวกัน" กับลิ้นชักแจ้งเตือน
+   ไม่ใช่อยู่เหนือมัน ต่างจากฉากหลังตัวอื่นทุกตัวในระบบ
+   (.dialog-backdrop / .cookie-modal-backdrop / .cookie-gate-backdrop /
+    .company-create-backdrop) ที่ใช้ var(--z-modal) กันหมด
+
+   แก้ที่เลเยอร์ override แทนการไปแก้บรรทัด CSS ที่ถูกบีบรวมไว้
+   ------------------------------------------------------------ */
+.modal-backdrop { z-index: var(--z-modal); }
+
+/* แผงตัวเลือกแบบ portal ใช้เลขดิบซึ่งบังเอิญเท่ากับ --z-portal พอดี
+   ผูกกลับเข้ากับ token เพื่อไม่ให้หลุดกันคนละทางเวลาปรับสเกลในอนาคต */
+.s2a-combo-panel.is-portal { z-index: var(--z-portal); }
+
+/* ------------------------------------------------------------
+   10) ตารางรายการสินค้า 12 คอลัมน์ (/items)
+
+   วัดจริงด้วยฟอนต์จริงผ่าน canvas measureText:
+     ความกว้างธรรมชาติเดิม (nowrap + letter-spacing)  = 1226px
+     หลังปล่อยหัวตารางตัดบรรทัด + ถอด letter-spacing   = 1071px
+     พื้นที่ที่มีจริงที่ 1366px (หัก sidebar 264 + ขอบ) = 1054px
+
+   ค่า min-width เดิม 1180px ถูกตั้งไว้ก่อนมีตัวเลขวัดจริง และตอนนี้
+   "กว้างกว่าความจำเป็นจริง" จึงปรับลงมาให้ตรงกับที่วัดได้ ไม่ใช่ถอดทิ้ง
+   ยังคงกันไม่ให้คอลัมน์ถูกบีบจนอ่านไม่ออกเหมือนเดิม
+
+   ไม่ตัดคอลัมน์ ไม่รวมฟิลด์ ไม่ย่อความหมายใด ๆ
+   ------------------------------------------------------------ */
+/* วัดจริงจากตารางที่ inject ลง DOM โดยใช้ CSS ชุดเดียวกับหน้าจริง:
+     min-width:0 → กว้าง 1052px ที่ 1366 (ล้นออก 0) และ 1126px ที่ 1440 (ล้นออก 0)
+     ไม่มีเซลล์ไหนถูกตัดข้อความเลย (scrollWidth ไม่เกิน clientWidth สักช่อง)
+     คอลัมน์ชื่อยังได้ 220px เต็มตามเดิม
+
+   แปลว่าเนื้อหา "พอดีอยู่แล้ว" ที่ความกว้างโน้ตบุ๊ก — ตัวที่ทำให้ล้นคือ
+   min-width 1180px ที่ตั้งไว้เกินความจำเป็นจริงต่างหาก
+
+   จึงลดลงมาเหลือ 960px: ที่ 1366/1440 ค่านี้ไม่มีผล (ความกว้างธรรมชาติมากกว่า)
+   ตารางจึงพอดีจอไม่ต้องเลื่อนแนวนอน ส่วนจอที่แคบกว่านั้นค่านี้ยังกัน
+   ไม่ให้คอลัมน์ถูกบีบจนอ่านไม่ออก แล้วปล่อยให้เลื่อนแนวนอนใน .table-wrap ตามเดิม */
+.item-list-workspace .data-table { min-width: 960px; }
+
+/* ปุ่มในคอลัมน์ "จัดการ" ให้ชิดกันขึ้น ลดความกว้างคอลัมน์โดยยังกดง่าย */
+.md-row-actions { display: flex; gap: var(--space-1); flex-wrap: nowrap; }
+
+/* คอลัมน์รหัสและหน่วยเป็นรหัสสั้น ไม่ต้องตัดบรรทัด */
+.data-table td .num { white-space: nowrap; }
+
+/* ------------------------------------------------------------
+   11) ตารางตรวจผลอ่านเอกสาร (.extract-table) — อาการเดียวกับ /items
+
+   วัดจริงในเบราว์เซอร์:
+     min-width 1100px (ของเดิม) → ล้นออก 48px ที่ 1366
+     min-width 0                → กว้าง 1052px ล้นออก 0 ไม่มีเซลล์ถูกตัด
+                                   คอลัมน์ที่ต้องกว้างยังได้ครบ (190px / 240px)
+
+   ค่าเดิมกว้างเกินความจำเป็นจริงเช่นกัน ลดลงมาเป็น 940px
+   ที่ 1366/1440 ค่านี้ไม่มีผล ตารางจึงพอดีจอ ส่วนจอแคบกว่านั้นยังมีพื้นกันบีบ
+   ------------------------------------------------------------ */
+.extract-table { min-width: 940px; }
+
+/* ------------------------------------------------------------
+   12) PHASE 35 — กล่องยืนยัน (ConfirmDialog) ต้องไม่ล้นจอ
+
+   วัดจริงที่ความสูงจอ 768px ด้วยเนื้อหายาว:
+     .md-modal (MasterModal) → max-height 88vh + body เลื่อนได้  = ถูกต้องอยู่แล้ว
+     .dialog   (ConfirmDialog) → max-height:none สูง 928px ล้นจอ
+                                 และเลื่อนไม่ได้ (scrollable:false)
+   ผลคือถ้าข้อความยืนยันยาว ปุ่มยืนยัน/ยกเลิกจะหลุดออกนอกจอและกดไม่ได้เลย
+
+   แก้ด้วยรูปแบบเดียวกับ .md-modal ที่พิสูจน์แล้วว่าใช้ได้
+   ปุ่มด้านล่างไม่อยู่ในส่วนที่เลื่อน จึงกดได้เสมอ
+   ------------------------------------------------------------ */
+.dialog {
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog .dialog-body {
+  overflow-y: auto;
+  /* flex item ต้องปลด min-height:auto ไม่งั้นจะไม่ยอมหดให้เลื่อน */
+  min-height: 0;
+}
+
+.dialog .dialog-actions { flex: none; }
+
+/* ------------------------------------------------------------
+   13) PHASE 39 — วิเคราะห์การเปลี่ยนแปลงต้นทุน (Recipe Changes)
+
+   เดิมตัวเลือกสูตร/เวอร์ชัน/ปุ่ม Excel ลอยอยู่ใน .filter-bar
+   โดยไม่มีป้ายกำกับและไม่มีความสัมพันธ์ทางสายตาระหว่างกัน
+   ทำให้อ่านไม่ออกว่ากำลังเทียบอะไรกับอะไร
+   ------------------------------------------------------------ */
+.cv-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-field);
+  background: var(--surface-2);
+}
+
+.cv-control { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cv-control > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.cv-control select {
+  height: var(--control-h);
+  min-width: 160px;
+  border-radius: var(--radius-field);
+}
+/* ช่องเลือกสูตรได้พื้นที่มากกว่า เพราะชื่อสูตรยาวกว่าเลขเวอร์ชันมาก */
+.cv-control--recipe { flex: 1 1 260px; }
+.cv-control--recipe select { width: 100%; min-width: 0; }
+
+/* ลูกศรสื่อว่าเป็นการเทียบ "จาก → ไป" ไม่ใช่ตัวกรองสองอันแยกกัน */
+.cv-arrow {
+  display: grid;
+  place-items: center;
+  height: var(--control-h);
+  color: var(--text-subtle);
+  flex: none;
+}
+.cv-arrow svg { width: 18px; height: 18px; }
+
+/* ปุ่มส่งออกชิดขวาเมื่อมีที่ว่าง และตกบรรทัดอย่างเป็นระเบียบเมื่อแคบ */
+.cv-export { margin-inline-start: auto; }
+
+.cv-title-en {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  letter-spacing: .02em;
+}
+
+.cv-formula {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: var(--space-3) 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-subtle);
+}
+.cv-formula svg { flex: none; }
+
+/* การ์ดสรุป 4 ใบ — กะทัดรัดกว่าเดิม ป้ายเล็ก ค่าตัวใหญ่ ความสูงเท่ากัน */
+.cv-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.cv-metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 84px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+}
+.cv-metric > span {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.cv-metric > span small {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-subtle);
+}
+.cv-metric > b {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--heading);
+}
+.cv-metric.is-up > b { color: var(--danger); }
+.cv-metric.is-down > b { color: var(--success); }
+
+/* 4 -> 2 คอลัมน์เมื่อพื้นที่เนื้อหาแคบลง ไม่ปล่อยให้การ์ดผอมจนอ่านไม่ออก */
+@media (max-width: 1180px) {
+  .cv-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .cv-metrics { grid-template-columns: minmax(0, 1fr); }
+  .cv-export { margin-inline-start: 0; width: 100%; justify-content: center; }
+}
+
+/* ------------------------------------------------------------
+   14) PHASE 39 — โมดัล "เพิ่มลูกค้าอย่างรวดเร็ว"
+
+   ปัญหาเดิมที่วัดได้จากโครงสร้าง:
+   - .cust-modal ถูกบังคับกว้างแค่ min(94vw,680px) ด้วย !important
+     ทั้งที่เป็นฟอร์มสองคอลัมน์ 10 ช่อง จึงยืดยาวลงแนวตั้งแทน
+   - max-height:90vh + overflow-y:auto อยู่ที่ตัวโมดัลทั้งก้อน
+     เวลาเลื่อนจึงเลื่อนทั้งหัวและแถบปุ่มหายไปด้วย
+   - ที่อยู่จัดส่ง/ออกใบกำกับเป็น full-width ทั้งคู่ กินความสูงเปล่า
+   ------------------------------------------------------------ */
+.dialog.cust-modal {
+  /* ต้องใช้ !important สู้กับกฎเดิมที่ประกาศ !important ไว้ */
+  width: min(94vw, 880px) !important;
+  max-height: min(88vh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* หัวโมดัลอยู่กับที่ ไม่เลื่อนหายไปพร้อมเนื้อหา */
+.cust-modal .cust-modal-head {
+  flex: none;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--border);
+}
+.cust-modal .cust-modal-head .cm-icon { width: 42px; height: 42px; border-radius: var(--radius-field); }
+.cust-modal .cust-modal-head h3 { font-size: 17px; font-weight: 700; color: var(--heading); }
+.cust-modal .cust-modal-head p { margin-top: 2px; font-size: 13px; }
+
+/* เฉพาะส่วนเนื้อหาที่เลื่อน */
+.cust-modal .cust-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.cust-server-error { margin: 0; }
+
+/* ระยะห่างระหว่างกลุ่มต้องมากกว่าระหว่างช่องกรอก เพื่อให้อ่านเป็นกลุ่มได้ */
+.cust-section { display: flex; flex-direction: column; gap: var(--space-3); }
+.cust-section > h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--heading);
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cust-modal .cust-grid { gap: var(--space-3) var(--space-4); }
+
+/* ป้ายชิดซ้ายติดกับช่องของมัน เครื่องหมายบังคับอยู่ติดป้าย ไม่ลอยแยก */
+.cust-modal .cust-field { gap: 6px; align-items: stretch; text-align: start; }
+.cust-modal .cust-field > label {
+  justify-content: flex-start;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.cust-modal .cust-field .opt { margin-inline-start: auto; font-size: 11px; }
+
+.cust-modal .cust-field input,
+.cust-modal .cust-field textarea {
+  min-height: 44px;
+  border-radius: var(--radius-field);
+  font-size: 14px;
+}
+/* textarea ไม่ควรครองพื้นที่โมดัล ผู้ใช้ยังลากขยายเองได้ */
+.cust-modal .cust-field textarea { min-height: 76px; max-height: 160px; line-height: 1.6; }
+
+/* แถบปุ่มติดขอบล่างเสมอ กดได้โดยไม่ต้องเลื่อนทั้งหน้า */
+.cust-modal .cust-modal-foot {
+  flex: none;
+  margin: 0;
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  align-items: center;
+}
+.cust-modal .cust-modal-foot .btn { min-width: 104px; height: var(--control-h); justify-content: center; }
+/* ปุ่มหลักเป็นสีทึบเข้าชุดกับปุ่มหลักที่อื่นในระบบ ไม่ใช่ gradient */
+.cust-modal .cust-save {
+  background: var(--navy);
+  border: 1px solid var(--navy);
+  color: var(--text-inverse);
+}
+.cust-modal .cust-save:hover:not(:disabled) { background: var(--navy-soft); border-color: var(--navy-soft); filter: none; }
+
+@media (max-width: 720px) {
+  .dialog.cust-modal { width: 96vw !important; max-height: 92vh; }
+  .cust-modal .cust-grid { grid-template-columns: minmax(0, 1fr); }
+  .cust-modal .cust-modal-head,
+  .cust-modal .cust-modal-body,
+  .cust-modal .cust-modal-foot { padding-inline: var(--space-4); }
+}
+
+/* ------------------------------------------------------------
+   15) PHASE 40 — แถบตัวกรองแบบใช้ซ้ำได้ (.filter-grid)
+
+   ปัญหาเดิมของแผงตัวกรองใบสั่งซื้อ มาจากกฎเดียว:
+     .purchase-order-filters label { width: 100%; }
+   ใน flex container ทำให้ทั้งป้าย "สถานะ" และ checkbox กินเต็มบรรทัดคนละแถว
+   ป้ายจึงดูหลุดจาก select และ checkbox ก็ลอยอยู่กลางที่ว่าง
+   อีกทั้ง <label>สถานะ<select/></label> ไม่ได้เป็น flex column
+   ข้อความกับ select จึงอยู่บรรทัดเดียวกันแบบไม่ได้ตั้งใจ
+
+   ชุดคลาสนี้เขียนแบบทั่วไปเพื่อให้แผงตัวกรองหน้าอื่นมาใช้ซ้ำได้
+   ------------------------------------------------------------ */
+.filter-grid {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* ช่องตัวกรอง: ป้ายอยู่เหนือ control ชิดซ้าย ระยะห่างกระชับ */
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  flex: 0 1 240px;
+}
+.filter-field > span {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.filter-field > select,
+.filter-field > input {
+  height: var(--control-h);
+  min-height: var(--control-h);
+  width: 100%;
+  border-radius: var(--radius-field);
+}
+
+/* แถว checkbox ทั้งแถวคือ control เดียว กดที่ข้อความก็ติ๊กได้ (label ห่อ input อยู่แล้ว)
+   ความสูงเท่ากับ control อื่นเพื่อให้ baseline ตรงกันทั้งแถว */
+.filter-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--control-h);
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+.filter-check:hover { border-color: var(--border-strong); background: var(--surface-2); }
+
+/* คง checkbox จริงไว้ (ไม่ทำ div ปลอม) แต่ปรับขนาดและสีให้เข้าชุดกับระบบ */
+.filter-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  flex: none;
+  margin: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+.filter-check:has(input:checked) {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  font-weight: 600;
+}
+/* วงแหวนโฟกัสอยู่ที่ทั้งแถว เพราะทั้งแถวคือ control เดียว */
+.filter-check:focus-within {
+  outline: none;
+  border-color: var(--input-focus);
+  box-shadow: var(--focus-ring);
+}
+
+/* แผงตัวกรองไม่ควรสูงเกินเนื้อหาที่มีอยู่จริง */
+.purchase-order-page .s2-card:has(.filter-grid) .s2-card-body { padding-block: var(--space-4); }
+
+@media (max-width: 640px) {
+  .filter-grid { align-items: stretch; gap: var(--space-3); }
+  .filter-field { flex: 1 1 100%; }
+  .filter-check { width: 100%; justify-content: flex-start; }
+}

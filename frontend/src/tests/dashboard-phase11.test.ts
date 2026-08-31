@@ -201,8 +201,25 @@ describe('Phase 11 — ความซื่อตรงของข้อมู
   it('เวลาอัปเดตล่าสุดมาจากเวลาที่ query สำเร็จจริง ไม่ใช่เวลา render', () => {
     const hook = read('hooks/useDashboardData.ts');
     expect(hook).toContain('dataUpdatedAt');
-    expect(page).toContain('d.lastUpdatedAt > 0');
-    expect(page).toContain('new Date(d.lastUpdatedAt)');
+    // PHASE 36B — เดิมผูกกับ d.lastUpdatedAt ตัวเดียว ตอนนี้รวมเวลาของ summary/activity ด้วย
+    // เจตนาเดิมยังอยู่ครบ: ค่าต้องมาจาก dataUpdatedAt ของ query ที่สำเร็จจริง ไม่ใช่เวลาตอน render
+    expect(page).toContain('const lastUpdatedAt = Math.max(');
+    expect(page).toContain('summary.dataUpdatedAt');
+    expect(page).toContain('lastUpdatedAt > 0');
+    expect(page).toContain('new Date(lastUpdatedAt)');
+    expect(page).not.toContain('new Date().getTime()');
+  });
+
+  it('PHASE 36B — ปุ่มรีเฟรชต้องดึงข้อมูลใหม่ครบทุกแหล่งของหน้านี้', () => {
+    // ก่อนแก้: refetchAll() วนเฉพาะ query ใน useDashboardData
+    // ทำให้การ์ดที่มาจาก summary (Cost Insight / มูลค่าสต็อก / การผลิต / จัดซื้อ) ไม่ถูกดึงใหม่
+    expect(page).toContain('const refreshAll =');
+    expect(page).toContain('d.refetchAll()');
+    expect(page).toContain('summary.refetch()');
+    expect(page).toContain('activity.refetch()');
+    expect(page).toContain('onClick={refreshAll}');
+    // สถานะกำลังโหลดต้องสะท้อนทุกแหล่ง ไม่งั้นปุ่มกดซ้ำได้ระหว่างยังดึงไม่เสร็จ
+    expect(page).toContain('summary.isFetching');
   });
 
   it('ยังใช้ contract เดิม ไม่เพิ่ม endpoint ใหม่ให้แดชบอร์ด', () => {

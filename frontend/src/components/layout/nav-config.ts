@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Boxes, UtensilsCrossed, Calculator, CircleDollarSign,
   Truck, Factory, Warehouse, ArrowLeftRight, ClipboardCheck,
   BarChart3, UsersRound, History, Settings, Sprout, Package,
-  Database, ChartColumnBig, ShieldCheck, UserRoundPlus, Scale, type LucideIcon,
+  Database, ChartColumnBig, ShieldCheck, UserRoundPlus, Scale, PackageSearch, type LucideIcon,
 } from 'lucide-react';
 
 export type ModuleStatus = 'ready' | 'in-progress' | 'planned';
@@ -81,8 +81,16 @@ export const MODULES: Record<string, ModuleMeta> = {
   },
   '/production': {
     label: 'การผลิต', description: 'สร้างใบสั่งผลิต เบิกวัตถุดิบ และบันทึกผลผลิต',
-    icon: Factory, status: 'planned', group: 'คลังและการผลิต',
+    icon: Factory, status: 'ready', group: 'คลังและการผลิต',
     plannedFeatures: ['สร้างใบสั่งผลิตจากสูตร', 'เบิกวัตถุดิบตาม BOM', 'บันทึกผลผลิตและของเสีย', 'ติดตามสถานะการผลิต'],
+  },
+  '/purchase-planning': {
+    label: 'วางแผนจัดซื้อ', description: 'คำนวณความต้องการวัตถุดิบและส่วนขาดจากแผนการผลิตโดยไม่จองสต็อก',
+    icon: ClipboardCheck, status: 'ready', group: 'คลังและการผลิต',
+  },
+  '/purchase-orders': {
+    label: 'ใบสั่งซื้อ', description: 'ข้อผูกพันการจัดซื้อ ติดตามการรับบางส่วนและผลต่างจากของที่มาถึงจริง',
+    icon: ClipboardCheck, status: 'ready', group: 'คลังและการผลิต',
   },
   '/inventory': {
     label: 'คลังสินค้า', description: 'ดูยอดคงเหลือตามคลัง ล็อต และตำแหน่งจัดเก็บแบบเรียลไทม์',
@@ -114,13 +122,19 @@ export const MODULES: Record<string, ModuleMeta> = {
 };
 
 /**
- * Information Architecture (PART C) — โฟกัสแกนหลัก: food costing + menu + pricing + sales
- * โซน "คลังและการผลิต" แบบโรงงานถูกถอดออกจาก main nav แล้ว (โค้ด/route เดิมยังคงอยู่เพื่อ backward-compat)
+ * Information Architecture — PHASE 34
+ *
+ * เดิมกลุ่ม "คลังสินค้าและปฏิบัติการ" รวมไว้ 15 เมนูในกลุ่มเดียว ทำให้แถบข้างยาวจนหาเมนูไม่เจอ
+ * เฟสนี้จัดกลุ่มใหม่ตามสายงานจริง (ต้นทุน / ขาย / คลัง / จัดซื้อ / ผลิต / รายงาน / ระบบ)
+ * โดยยังใช้ path และเงื่อนไขสิทธิ์ชุดเดิมทุกรายการ ไม่มีเมนูใดถูกตัดออกหรือเพิ่มเข้ามา
  */
 export const NAV_GROUPS: NavGroup[] = [
-  { label: 'ภาพรวม', items: [{ path: '/dashboard', label: 'ภาพรวม', icon: LayoutDashboard, requiredPermission: 'DASHBOARD_VIEW' }] },
   {
-    label: 'จัดการเมนูและต้นทุน',
+    label: 'ภาพรวม',
+    items: [{ path: '/dashboard', label: 'ภาพรวม', icon: LayoutDashboard, requiredPermission: 'DASHBOARD_VIEW' }],
+  },
+  {
+    label: 'ต้นทุนและสูตร',
     items: [
       { path: '/ingredients', label: 'วัตถุดิบ', icon: Sprout },
       { path: '/packaging', label: 'บรรจุภัณฑ์', icon: Package },
@@ -129,40 +143,59 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '/units/conversions', label: 'สูตรแปลงหน่วย', icon: Scale, requiredAnyPermission: ['INGREDIENT_CREATE', 'INGREDIENT_EDIT', 'PACKAGING_CREATE', 'PACKAGING_EDIT'] },
       { path: '/costing', label: 'คำนวณต้นทุน', icon: Calculator },
       { path: '/pricing', label: 'ราคาขายและกำไร', icon: CircleDollarSign },
+      { path: '/analytics/profit-simulator', label: 'จำลองต้นทุนและกำไร', icon: ChartColumnBig, requiredAnyPermission: ['COSTING_VIEW', 'RECIPE_VIEW', 'PRICING_VIEW'] },
+      { path: '/analytics/cost-variance', label: 'วิเคราะห์ความเปลี่ยนแปลงต้นทุน', icon: ChartColumnBig, requiredAnyPermission: ['COSTING_VIEW', 'RECIPE_VIEW', 'PRODUCTION_VIEW'] },
     ],
   },
   {
-    // Phase 7 — ข้อมูลตั้งต้นที่ต้องมีก่อนเริ่มคีย์สูตร/รับของ
-    label: 'ข้อมูลตั้งต้น',
+    label: 'การขายและลูกค้า',
     items: [
-      { path: '/units', label: 'หน่วย', icon: Scale, requiredAnyPermission: ['INGREDIENT_CREATE', 'INGREDIENT_EDIT', 'PACKAGING_CREATE', 'PACKAGING_EDIT'] },
-      // สิทธิ์ตรงกับที่ GET /business/operations/lookups ยอมให้เข้า เพื่อไม่ให้กดแล้วเจอ 403
-      { path: '/suppliers', label: 'ผู้จำหน่าย', icon: Truck, requiredAnyPermission: ['RECEIVING_CREATE', 'STOCK_ISSUE_CREATE', 'ORDER_VIEW'] },
-      { path: '/warehouses', label: 'คลัง', icon: Warehouse, requiredAnyPermission: ['RECEIVING_CREATE', 'STOCK_ISSUE_CREATE', 'ORDER_VIEW'] },
-    ],
-  },
-  {
-    label: 'ข้อมูลและยอดขาย',
-    items: [
+      { path: '/orders', label: 'ออเดอร์', icon: ClipboardCheck, requiredPermission: 'ORDER_VIEW' },
+      { path: '/customers', label: 'ลูกค้า', icon: UsersRound, requiredPermission: 'CUSTOMER_VIEW' },
       { path: '/catalog', label: 'คลังข้อมูล', icon: Database },
       { path: '/sales', label: 'สรุปการขาย / KPI เมนู', icon: ChartColumnBig },
     ],
   },
   {
-    label: 'ออเดอร์และปฏิบัติการ',
+    label: 'สินค้าและคลัง',
     items: [
-      { path: '/orders', label: 'ออเดอร์', icon: ClipboardCheck, requiredPermission: 'ORDER_VIEW' },
-      { path: '/customers', label: 'ลูกค้า', icon: UsersRound, requiredPermission: 'CUSTOMER_VIEW' },
-      { path: '/receiving', label: 'รับของเข้า', icon: Truck, requiredPermission: 'RECEIVING_VIEW' },
+      { path: '/units', label: 'หน่วย', icon: Scale, requiredAnyPermission: ['INGREDIENT_CREATE', 'INGREDIENT_EDIT', 'PACKAGING_CREATE', 'PACKAGING_EDIT'] },
+      // สิทธิ์ตรงกับที่ GET /business/operations/lookups ยอมให้เข้า เพื่อไม่ให้กดแล้วเจอ 403
+      { path: '/warehouses', label: 'คลัง', icon: Warehouse, requiredAnyPermission: ['RECEIVING_CREATE', 'STOCK_ISSUE_CREATE', 'ORDER_VIEW'] },
+      { path: '/inventory', label: 'สต็อกคงเหลือ', icon: Warehouse, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
+      { path: '/inventory/lots', label: 'Lot และวันหมดอายุ', icon: PackageSearch, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
+      { path: '/inventory/movements', label: 'ประวัติสต็อก', icon: History, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
       { path: '/stock-issues', label: 'เบิกให้ครัวกลาง', icon: Boxes, requiredPermission: 'STOCK_ISSUE_VIEW' },
       { path: '/stock-transfers', label: 'โอนย้ายระหว่างคลัง', icon: ArrowLeftRight, requiredAnyPermission: ['STOCK_TRANSFER_VIEW', 'STOCK_VIEW'] },
-      { path: '/inventory', label: 'สต็อกคงเหลือ', icon: Warehouse, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
-      { path: '/inventory/movements', label: 'ประวัติสต็อก', icon: History, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
       { path: '/inventory/adjustments', label: 'ปรับปรุงสต็อก', icon: ArrowLeftRight, requiredPermission: 'INVENTORY_ADJUST' },
     ],
   },
   {
+    label: 'จัดซื้อ',
+    items: [
+      { path: '/purchase-planning', label: 'วางแผนจัดซื้อ', icon: ClipboardCheck, requiredAnyPermission: ['PURCHASE_PLAN_VIEW', 'PURCHASE_PLAN_CREATE', 'PURCHASE_PLAN_EDIT'] },
+      { path: '/purchase-orders', label: 'ใบสั่งซื้อ', icon: ClipboardCheck, requiredAnyPermission: ['PURCHASE_ORDER_VIEW', 'PURCHASE_ORDER_CREATE', 'PURCHASE_ORDER_EDIT'] },
+      { path: '/receiving', label: 'รับของเข้า', icon: Truck, requiredPermission: 'RECEIVING_VIEW' },
+      { path: '/suppliers', label: 'ผู้จำหน่าย', icon: Truck, requiredAnyPermission: ['RECEIVING_CREATE', 'STOCK_ISSUE_CREATE', 'ORDER_VIEW'] },
+      { path: '/supplier-analytics', label: 'วิเคราะห์ผู้จำหน่าย', icon: ChartColumnBig, requiredAnyPermission: ['RECEIVING_VIEW', 'PURCHASE_ORDER_VIEW'] },
+    ],
+  },
+  {
+    label: 'การผลิต',
+    items: [
+      { path: '/production', label: 'การผลิต', icon: Factory, requiredAnyPermission: ['PRODUCTION_VIEW', 'PRODUCTION_CREATE'] },
+    ],
+  },
+  {
+    label: 'รายงานและวิเคราะห์',
+    items: [
+      { path: '/inventory/valuation', label: 'มูลค่าสต็อก', icon: Scale, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
+      { path: '/inventory/valuation/history', label: 'ประวัติมูลค่าสต็อก', icon: History, requiredAnyPermission: ['INVENTORY_VIEW', 'STOCK_VIEW'] },
+    ],
+  },
+  {
     // Phase 9 — แยกงานดูแลผู้ใช้ออกจากงานความปลอดภัย/ตรวจสอบ ให้หาเจอง่ายขึ้น
+    // เฟส 34 คงการแยกสามกลุ่มนี้ไว้ตามเดิม เพราะเป็นการตัดสินใจเชิง IA ที่มีเหตุผลอยู่แล้ว
     label: 'การจัดการผู้ใช้',
     items: [
       // สิทธิ์ตรงกับที่ GET /users ยอมให้เข้า จึงไม่กดแล้วเจอ 403
@@ -186,6 +219,56 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
 ];
+
+/* ============================================================
+   PHASE 34 — หัวข้อกลุ่มที่ใช้ร่วมกันระหว่าง "แถบข้าง" กับ "breadcrumb บนหัวเว็บ"
+   เดิมหัวเว็บ hardcode ให้ทุกหน้าที่อยู่ใน navigationKeyByPath แสดงกลุ่มว่า "ระบบ"
+   ทำให้หน้าอย่างภาพรวม/วัตถุดิบ/ออเดอร์ ขึ้น breadcrumb ผิดกลุ่มไปหมด
+   ตอนนี้ทั้งสองที่อ่านจาก NAV_GROUPS ชุดเดียวกัน จึงตรงกันเสมอ
+   ============================================================ */
+
+export const NAV_GROUP_I18N_KEY: Record<string, string> = {
+  'ภาพรวม': 'overview',
+  'จัดการเมนูและต้นทุน': 'menuCost',
+  'ข้อมูลและยอดขาย': 'dataSales',
+  'ออเดอร์และปฏิบัติการ': 'orderOperations',
+  'ต้นทุนและสูตร': 'grpCost',
+  'การขายและลูกค้า': 'grpSalesCustomer',
+  'สินค้าและคลัง': 'grpStock',
+  'จัดซื้อ': 'grpPurchasing',
+  'การผลิต': 'production',
+  'รายงานและวิเคราะห์': 'grpReports',
+  'การจัดการผู้ใช้': 'grpUserAdmin',
+  'สิทธิ์และความปลอดภัย': 'grpSecurity',
+  'การตรวจสอบระบบ': 'grpAudit',
+  'ระบบ': 'system',
+};
+
+/** แปลหัวข้อกลุ่มเป็นภาษาปัจจุบัน กลุ่มที่ยังไม่มีคำแปลให้ใช้ชื่อไทยเดิม */
+export function navGroupHeading(label: string, nav: Record<string, string>): string {
+  const key = NAV_GROUP_I18N_KEY[label];
+  return (key && nav[key]) || label;
+}
+
+/**
+ * หากลุ่มที่ path นี้สังกัดอยู่จริงใน NAV_GROUPS
+ * ใช้ prefix ที่ยาวที่สุดที่ตรง เพื่อให้ /inventory/lots ไปเข้ากลุ่มของ /inventory/lots
+ * ไม่ใช่ของ /inventory ที่สั้นกว่า
+ */
+export function navGroupLabelForPath(pathname: string): string | undefined {
+  let best: string | undefined;
+  let bestLength = -1;
+  for (const group of NAV_GROUPS) {
+    for (const item of group.items) {
+      const isMatch = pathname === item.path || pathname.startsWith(`${item.path}/`);
+      if (isMatch && item.path.length > bestLength) {
+        bestLength = item.path.length;
+        best = group.label;
+      }
+    }
+  }
+  return best;
+}
 
 /** สถานะโมดูล (ป้ายภาษาไทย) สำหรับ badge */
 export const STATUS_LABEL: Record<ModuleStatus, string> = {

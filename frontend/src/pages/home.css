@@ -529,3 +529,815 @@
   /* สลับภาษาย้ายเข้าไปในเมนู เพื่อให้ปุ่มเข้าสู่ระบบยังกดได้ใน 1 แตะ */
   .hp-header .language-switcher { display: none; }
 }
+
+/* ============================================================
+   PHASE 41 — ส่วนท้ายหน้าสาธารณะ (4 คอลัมน์ + ข้อมูลติดต่อจริง)
+   เดิมมีแค่ 3 คอลัมน์ที่เป็นลิงก์ล้วน ไม่มีช่องทางติดต่อเลย
+   ============================================================ */
+.hp-footer-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1.1fr 1.2fr;
+  gap: 40px 32px;
+  align-items: start;
+}
+
+.hp-footer-col h5 {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #f2f6fb;
+}
+
+/* ป้ายกำกับกลุ่มย่อย (โทรศัพท์ / เว็บไซต์ / ที่อยู่) ให้เบากว่าหัวคอลัมน์ */
+.hp-foot-label {
+  margin: 18px 0 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: rgba(226, 236, 247, .55);
+}
+.hp-footer-col > .hp-foot-label:first-of-type { margin-top: 0; }
+
+/* เบอร์โทรเรียงเป็นบล็อกแนวตั้ง: ชื่อผู้ติดต่อบน เบอร์ล่าง
+   ห้ามวางสามเบอร์ต่อกันในบรรทัดเดียว */
+.hp-phones { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.hp-phones li { display: flex; flex-direction: column; gap: 2px; }
+
+.hp-phone-who {
+  font-size: 12px;
+  color: rgba(226, 236, 247, .6);
+}
+.hp-phone-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+  color: #f2f6fb;
+  text-decoration: none;
+  width: max-content;
+}
+.hp-phone-num svg { width: 14px; height: 14px; flex: none; color: var(--gold-soft); }
+.hp-phone-num:hover { color: var(--gold-soft); }
+.hp-phone-num:focus-visible { outline: 2px solid var(--gold-soft); outline-offset: 3px; border-radius: 4px; }
+
+.hp-foot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #f2f6fb;
+  text-decoration: none;
+  width: max-content;
+}
+.hp-foot-link svg { width: 15px; height: 15px; flex: none; color: var(--gold-soft); }
+.hp-foot-link:hover { color: var(--gold-soft); text-decoration: underline; }
+
+.hp-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-style: normal;
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(226, 236, 247, .82);
+}
+.hp-address svg { width: 15px; height: 15px; flex: none; margin-top: 5px; color: var(--gold-soft); }
+.hp-address > span { display: flex; flex-direction: column; }
+
+/* LINE OA ให้เด่นแบบสุภาพ ไม่ใช่ป้ายสีจัด */
+.hp-line-oa {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid rgba(198, 161, 91, .42);
+  border-radius: 999px;
+  background: rgba(198, 161, 91, .10);
+  font-size: 14px;
+  font-weight: 600;
+  color: #f6efdd;
+  width: max-content;
+}
+.hp-line-oa svg { width: 15px; height: 15px; flex: none; color: var(--gold-soft); }
+
+@media (max-width: 1080px) {
+  .hp-footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 34px 28px; }
+}
+@media (max-width: 640px) {
+  .hp-footer-grid { grid-template-columns: minmax(0, 1fr); gap: 30px; }
+  .hp-line-oa, .hp-phone-num, .hp-foot-link { width: auto; }
+}
+
+/* ============================================================
+   PHASE 42 — ป๊อปอัป QR ของ LINE
+   ============================================================ */
+.hp-line-oa {
+  border: 1px solid rgba(198, 161, 91, .42);
+  background: rgba(198, 161, 91, .10);
+  color: #f6efdd;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background .16s ease, border-color .16s ease;
+}
+.hp-line-oa:hover { background: rgba(198, 161, 91, .2); border-color: var(--gold-soft); }
+.hp-line-oa:focus-visible { outline: 2px solid var(--gold-soft); outline-offset: 3px; }
+
+.line-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 16, 30, .62);
+  backdrop-filter: blur(4px);
+}
+
+.line-modal {
+  position: relative;
+  width: min(94vw, 400px);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 32px 28px 28px;
+  border-radius: var(--radius-card);
+  background: #fff;
+  box-shadow: var(--shadow-pop);
+  text-align: center;
+}
+
+.line-modal-close {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 12px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-field);
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.line-modal-close:hover { background: var(--surface-2); color: var(--text); }
+.line-modal-close:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.line-modal-close svg { width: 18px; height: 18px; }
+
+.line-modal-head h2 { margin: 0; font-size: 20px; font-weight: 700; color: var(--heading); }
+.line-modal-head p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--text-muted); }
+
+/* QR เป็นพระเอกของกล่องนี้ */
+.line-modal-qr {
+  display: grid;
+  place-items: center;
+  width: 216px;
+  height: 216px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: #fff;
+}
+.line-modal-qr img { width: 100%; height: 100%; object-fit: contain; }
+
+.line-qr-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-subtle);
+}
+.line-qr-fallback svg { width: 44px; height: 44px; color: var(--border-strong); }
+
+.line-modal-id {
+  margin: 0;
+  font-family: var(--font-num);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--heading);
+}
+.line-modal-hint { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--text-subtle); }
+
+.line-modal-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: var(--control-h);
+  margin-top: 4px;
+  border-radius: var(--radius-field);
+  background: var(--navy);
+  color: var(--text-inverse);
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.line-modal-add:hover { background: var(--navy-soft); }
+.line-modal-add:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ---------- PHASE 43 — LINE modal polish (QR จริงแล้ว) ---------- */
+.line-modal { width: min(94vw, 420px); gap: 12px; padding: 34px 30px 26px; }
+
+/* ตราสัญลักษณ์เล็ก ๆ ใช้เขียว LINE เป็นสีเน้นอย่างจำกัด
+   ไม่ให้ทับกับตัวตนหลักสีเนวี่ของ S2A */
+.line-modal-mark {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: rgba(6, 199, 85, .12);
+  color: #06c755;
+}
+.line-modal-mark svg { width: 24px; height: 24px; }
+
+.line-modal-head h2 { font-size: 21px; letter-spacing: -.01em; }
+.line-modal-head p { max-width: 30ch; margin-inline: auto; }
+
+/* QR เป็นจุดสนใจหลัก — 240px อยู่ในช่วง 220–260 ที่กำหนด
+   ไม่มี filter/overlay ใด ๆ ทับ และคง aspect ratio เดิม */
+.line-modal-qr {
+  /* 244 - padding 10*2 - border 2 = QR แสดงผลราว 222px อยู่ในช่วง 220–260 ที่กำหนด */
+  width: 244px;
+  height: 244px;
+  padding: 10px;
+  border-color: var(--border);
+  box-shadow: var(--shadow-flat);
+}
+.line-modal-qr img { image-rendering: auto; }
+
+.line-modal-id { font-size: 19px; letter-spacing: .01em; }
+
+.line-modal-add {
+  gap: 8px;
+  background: #06c755;
+  border: 1px solid #06c755;
+  color: #fff;
+}
+.line-modal-add:hover { background: #05b04b; border-color: #05b04b; }
+.line-modal-add svg { width: 17px; height: 17px; }
+
+.line-modal-mobile-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-subtle);
+}
+
+@media (max-width: 420px) {
+  .line-modal-qr { width: 200px; height: 200px; }
+}
+
+/* ---------- PHASE 43 — ปรับสมดุลส่วนท้าย ----------
+   วัดจริงที่ 1440: ขอบบนของทั้งสี่คอลัมน์ตรงกันแล้ว (align-items:start)
+   แต่ความสูงต่างกันถึง 302px (แบรนด์ 111 / ติดต่อ 413)
+   และแถบล่างยังไม่มีเส้นคั่นด้านบนตามที่กำหนด */
+
+/* คอลัมน์ติดต่อ: กระชับจังหวะแนวตั้งลง โดยยังอ่านเป็นกลุ่มได้ */
+.hp-footer-contact .hp-foot-label { margin: 14px 0 7px; }
+.hp-footer-contact .hp-phones { gap: 9px; }
+.hp-footer-contact .hp-phone-num { font-size: 14.5px; }
+
+.hp-footer-office .hp-foot-label { margin: 14px 0 7px; }
+.hp-footer-office .hp-address { line-height: 1.6; }
+
+/* แถบล่าง: เส้นคั่นบาง ๆ ด้านบน และวาง ซ้าย / กลาง / ขวา บนเส้นฐานเดียว */
+.hp-footer-bottom {
+  margin-top: 36px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, .10);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+.hp-footer-bottom > :first-child { justify-self: start; }
+.hp-footer-bottom > .tag { justify-self: center; }
+.hp-footer-bottom > :last-child { justify-self: end; }
+
+@media (max-width: 760px) {
+  .hp-footer-bottom {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    text-align: center;
+    gap: 10px;
+  }
+  .hp-footer-bottom > :first-child,
+  .hp-footer-bottom > :last-child { justify-self: center; }
+}
+
+/* ---------- PHASE 43 — แถบคุณค่าใต้ hero ----------
+   ตั้งใจให้เป็นแถบเตี้ย ไม่ใช่การ์ดใหญ่ เพื่อคั่นจังหวะระหว่าง hero
+   กับส่วนฟีเจอร์ที่เนื้อหาหนักกว่า */
+.hp-value-strip {
+  padding: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.hp-value-strip ul {
+  list-style: none;
+  margin: 0;
+  padding: 26px 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px 28px;
+}
+.hp-value-strip li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.hp-vs-ic {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  background: var(--blue-100);
+  color: var(--blue);
+}
+.hp-vs-ic svg { width: 19px; height: 19px; }
+.hp-value-strip li div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hp-value-strip strong { font-size: 14.5px; font-weight: 700; color: var(--heading); }
+.hp-value-strip span { font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+
+/* คั่นระหว่างบล็อกด้วยเส้นบาง ๆ ให้อ่านเป็นสี่ส่วนชัดขึ้น */
+.hp-value-strip li + li { border-inline-start: 1px solid var(--border); padding-inline-start: 28px; }
+
+@media (max-width: 1024px) {
+  .hp-value-strip ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hp-value-strip li + li { border-inline-start: 0; padding-inline-start: 0; }
+  .hp-value-strip li:nth-child(even) { border-inline-start: 1px solid var(--border); padding-inline-start: 28px; }
+}
+@media (max-width: 600px) {
+  .hp-value-strip ul { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .hp-value-strip li:nth-child(even) { border-inline-start: 0; padding-inline-start: 0; }
+}
+
+/* ============================================================
+   PHASE 44 — ส่วนท้าย: การ์ดข้อมูลติดต่อ + คุมความกว้าง
+   เดิมเบอร์โทรเป็นข้อความสองบรรทัดลอย ๆ กับไอคอนทองเล็ก ๆ
+   ทำให้กวาดสายตาหายาก เปลี่ยนเป็นแถวที่กดได้ทั้งแถว
+   ============================================================ */
+
+/* เนื้อหาส่วนท้ายไม่ควรยืดเต็มจอกว้าง ๆ */
+.hp-footer .hp-container { max-width: 1240px; }
+
+.hp-contact-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+
+.hp-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: var(--radius-field);
+  background: rgba(255, 255, 255, .04);
+  text-decoration: none;
+  transition: background .16s ease, border-color .16s ease;
+}
+.hp-contact-item:hover { background: rgba(255, 255, 255, .08); border-color: rgba(198, 161, 91, .38); }
+.hp-contact-item:focus-visible { outline: 2px solid var(--gold-soft); outline-offset: 2px; }
+
+.hp-contact-ic {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+  background: rgba(198, 161, 91, .14);
+  color: var(--gold-soft);
+}
+.hp-contact-ic svg { width: 16px; height: 16px; }
+.hp-contact-ic.is-line { background: rgba(6, 199, 85, .16); color: #3ddc84; }
+
+.hp-contact-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+/* ป้ายกำกับเบากว่า ตัวเลขเด่นกว่า ตามลำดับความสำคัญ */
+.hp-contact-label { font-size: 11.5px; color: rgba(226, 236, 247, .58); }
+.hp-contact-value {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+  color: #f2f6fb;
+}
+
+/* บล็อก LINE */
+.hp-line-block { display: grid; gap: 10px; }
+.hp-line-id {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid rgba(6, 199, 85, .28);
+  border-radius: var(--radius-field);
+  background: rgba(6, 199, 85, .07);
+  cursor: pointer;
+  font: inherit;
+  text-align: start;
+}
+.hp-line-id:hover { background: rgba(6, 199, 85, .13); border-color: rgba(6, 199, 85, .5); }
+.hp-line-id:focus-visible { outline: 2px solid #3ddc84; outline-offset: 2px; }
+
+.hp-line-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-field);
+  background: #06c755;
+  color: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hp-line-cta:hover { background: #05b04b; }
+.hp-line-cta:focus-visible { outline: 2px solid #3ddc84; outline-offset: 2px; }
+
+/* แถบล่างกระชับตามที่กำหนด (56–64px) */
+.hp-footer-bottom { margin-top: 30px; padding-top: 18px; padding-bottom: 18px; }
+
+/* ============================================================
+   PHASE 45 — แถวติดต่อแบบกระชับ (แทนการ์ดใหญ่)
+   การ์ดเดิมสูงเกินไปจนคอลัมน์ติดต่อยาวกว่าคอลัมน์อื่นมาก
+   เปลี่ยนเป็นแถวเดียวจบ: ไอคอน + ป้ายกำกับ + เบอร์ บนบรรทัดเดียว
+   ============================================================ */
+.hp-contact-list { gap: 2px; }
+
+.hp-contact-item {
+  /* แถวเดียวแนวนอน สูง 42px ตามช่วง 40–44 ที่กำหนด */
+  display: grid;
+  grid-template-columns: 26px minmax(0, auto) 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+.hp-contact-item:hover { background: rgba(255, 255, 255, .06); border-color: transparent; }
+
+/* ไอคอนเล็กลง ไม่ต้องมีกรอบชิปหนา ๆ อีก */
+.hp-contact-ic {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(198, 161, 91, .12);
+}
+.hp-contact-ic svg { width: 14px; height: 14px; }
+.hp-contact-ic.is-line { background: rgba(6, 199, 85, .14); }
+
+/* ป้ายกำกับกับค่าอยู่บรรทัดเดียวกัน ไม่ซ้อนกันแนวตั้งแล้ว */
+.hp-contact-body { display: contents; }
+.hp-contact-label {
+  font-size: 12.5px;
+  color: rgba(226, 236, 247, .62);
+  white-space: nowrap;
+}
+.hp-contact-value {
+  font-size: 14.5px;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+/* คอลัมน์ตามสัดส่วนที่กำหนด: แบรนด์กว้างสุด เมนูแคบสุด */
+.hp-footer-grid { grid-template-columns: 28% 16% 28% 28%; gap: 32px 24px; }
+
+/* บล็อก LINE ให้เข้าชุดกับแถวที่กระชับขึ้น */
+.hp-line-id { padding: 8px 10px; gap: 10px; }
+.hp-line-cta { height: 38px; font-size: 13px; }
+
+@media (max-width: 1080px) {
+  .hp-footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .hp-footer-grid { grid-template-columns: minmax(0, 1fr); }
+  /* จอแคบ: ป้ายกับเบอร์ซ้อนกันได้ แต่ห้ามติดกันจนอ่านไม่ออก */
+  .hp-contact-item { grid-template-columns: 26px minmax(0, 1fr); row-gap: 0; padding: 6px 8px; min-height: 0; }
+  .hp-contact-label { grid-column: 2; font-size: 12px; }
+  .hp-contact-value { grid-column: 2; justify-self: start; }
+}
+
+/* กฎเดิม `.hp-footer-col a, .hp-footer-col span { display:block; margin-bottom:11px }`
+   มี specificity (0,1,1) สูงกว่า `.hp-contact-item` (0,1,0)
+   จึงบังคับ display:block ทับ grid ของเรา และใส่ margin ให้ span ทุกตัว
+   ทำให้แถวสูง 90px แทนที่จะเป็น 42px — ต้องจับคู่ specificity ให้เท่ากัน */
+.hp-footer-col .hp-contact-item {
+  display: grid;
+  grid-template-columns: 26px minmax(0, auto) 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  margin-bottom: 0;
+}
+.hp-footer-col .hp-contact-body { display: contents; }
+.hp-footer-col .hp-contact-ic,
+.hp-footer-col .hp-contact-label,
+.hp-footer-col .hp-contact-value { margin-bottom: 0; }
+.hp-footer-col .hp-contact-label { display: block; }
+.hp-footer-col .hp-contact-value { display: block; justify-self: end; }
+.hp-footer-col .hp-contact-ic { display: grid; }
+
+/* บล็อก LINE ก็โดนกฎเดียวกัน */
+.hp-footer-col .hp-line-id { display: flex; margin-bottom: 0; }
+.hp-footer-col .hp-line-cta { display: inline-flex; margin-bottom: 0; }
+.hp-footer-col .hp-line-block span { margin-bottom: 0; }
+
+@media (max-width: 640px) {
+  .hp-footer-col .hp-contact-item { grid-template-columns: 26px minmax(0, 1fr); min-height: 0; padding: 6px 8px; }
+  .hp-footer-col .hp-contact-label { grid-column: 2; }
+  .hp-footer-col .hp-contact-value { grid-column: 2; justify-self: start; }
+}
+
+/* ============================================================
+   PHASE 46 — ส่วนท้าย: เบอร์ซ้าย ชื่อขวา + บีบให้กระชับ
+   ============================================================ */
+
+/* กริดใหม่: ไอคอน | เบอร์ (กินที่เหลือ) | ชื่อผู้ติดต่อ (ชิดขวา) */
+.hp-footer-col .hp-contact-item {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  padding-block: 7px;
+  padding-inline: 8px;
+}
+/* แถวเว็บไซต์ไม่มีคอลัมน์ชื่อ ให้ค่ากินความกว้างที่เหลือ */
+.hp-footer-col .hp-contact-item.is-wide { grid-template-columns: 28px minmax(0, 1fr); }
+
+.hp-footer-col .hp-contact-value {
+  justify-self: start;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #f2f6fb;
+}
+/* ชื่อผู้ติดต่อเบากว่าเบอร์ แต่ยังอ่านออก */
+.hp-footer-col .hp-contact-label {
+  justify-self: end;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(226, 236, 247, .58);
+  white-space: nowrap;
+}
+
+.hp-contact-ic { width: 28px; height: 28px; }
+
+/* ---------- กริดส่วนท้ายให้แน่นขึ้น ----------
+   คอลัมน์ติดต่อกับสำนักงานอยู่ชิดกันมากขึ้น อ่านเป็นโซนข้อมูลติดต่อเดียวกัน */
+.hp-footer .hp-container { max-width: 1200px; }
+.hp-footer-grid { grid-template-columns: 25% 15% 30% 30%; gap: 28px 36px; }
+
+/* ---------- ที่อยู่กระชับ ---------- */
+.hp-footer-office .hp-address { line-height: 1.65; font-size: 13.5px; gap: 9px; }
+.hp-footer-office .hp-address svg { margin-top: 4px; }
+
+/* ---------- บล็อก LINE ---------- */
+.hp-line-block { gap: 8px; }
+.hp-footer-col .hp-line-id { padding: 7px 10px; }
+.hp-footer-col .hp-line-cta { height: 40px; font-size: 13px; }
+
+/* ---------- บรรทัดรองของคอลัมน์แบรนด์ ---------- */
+.hp-brand-tags {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  letter-spacing: .04em;
+  color: rgba(226, 236, 247, .5);
+}
+
+/* ---------- จังหวะแนวตั้งของส่วนท้าย ---------- */
+.hp-footer { padding-block: 50px 0; }
+.hp-footer-bottom { margin-top: 26px; padding-block: 17px; }
+
+@media (max-width: 1080px) {
+  .hp-footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 32px; }
+}
+@media (max-width: 640px) {
+  .hp-footer-grid { grid-template-columns: minmax(0, 1fr); }
+  /* จอแคบ: เบอร์บรรทัดบน ชื่อบรรทัดล่าง ห้ามให้เบอร์ตัดกลาง */
+  .hp-footer-col .hp-contact-item,
+  .hp-footer-col .hp-contact-item.is-wide { grid-template-columns: 28px minmax(0, 1fr); }
+  .hp-footer-col .hp-contact-value { grid-column: 2; white-space: nowrap; }
+  .hp-footer-col .hp-contact-label { grid-column: 2; justify-self: start; }
+}
+
+/* วัดแล้วแถวยังสูง 42px และส่วนท้ายรวม 505px — บีบให้เข้าเป้า 36–40 / 430–480 */
+.hp-contact-ic { width: 26px; height: 26px; }
+.hp-footer-col .hp-contact-item { grid-template-columns: 26px minmax(0, 1fr) auto; padding-block: 6px; }
+.hp-footer-col .hp-contact-item.is-wide { grid-template-columns: 26px minmax(0, 1fr); }
+
+/* คอลัมน์สำนักงานเป็นตัวกำหนดความสูงรวม จึงบีบระยะภายในลง */
+.hp-footer-office .hp-foot-label { margin: 12px 0 6px; }
+.hp-footer-contact .hp-foot-label { margin: 12px 0 6px; }
+.hp-footer-office .hp-address { line-height: 1.6; }
+.hp-line-block { gap: 7px; }
+.hp-footer-col .hp-line-cta { height: 38px; }
+
+.hp-footer { padding-block: 44px 0; }
+.hp-footer-bottom { margin-top: 22px; }
+.hp-footer-grid { row-gap: 24px; }
+
+/* 484px ยังเกินเป้า 480 อยู่ 4px — ลดระยะบนของส่วนท้ายอีกเล็กน้อย */
+.hp-footer { padding-block: 40px 0; }
+
+/* ============================================================
+   PHASE 47 — โครงส่วนท้ายใหม่: 3 โซน
+   เดิมเป็น 4 คอลัมน์เท่า ๆ กัน ทำให้ข้อมูลติดต่อกับสำนักงาน
+   อ่านเป็นคนละก้อนทั้งที่เป็นเรื่องเดียวกัน
+   ตอนนี้: แบรนด์ 30% | เมนู 18% | ศูนย์ติดต่อ 52% (แบ่งภายในสองฝั่ง)
+   ============================================================ */
+.hp-footer-grid {
+  grid-template-columns: 30% 18% minmax(0, 1fr);
+  gap: 24px 32px;
+  align-items: start;
+}
+
+/* ---------- โซน 3: ศูนย์ติดต่อ ----------
+   มีพื้นหลังอ่อนกว่าพื้นส่วนท้ายเล็กน้อย จึงอ่านเป็นแผงเดียว
+   ไม่ใช่การ์ดหนา ๆ แค่ยกพื้นขึ้นมานิดเดียว */
+.hp-contact-hub {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, .035);
+}
+
+/* เส้นทองบางคั่นระหว่างฝั่งโทรศัพท์กับฝั่งสำนักงาน */
+.hp-contact-hub .hp-hub-col + .hp-hub-col {
+  padding-inline-start: 22px;
+  margin-inline-start: 22px;
+  border-inline-start: 1px solid rgba(198, 161, 91, .22);
+}
+
+.hp-contact-hub h5 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: rgba(242, 246, 251, .92);
+}
+
+/* แถวติดต่อในแผงไม่ต้องมีพื้นหลังของตัวเองแล้ว เพราะแผงเป็นตัวจัดกลุ่ม */
+.hp-contact-hub .hp-contact-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 0;
+  padding: 5px 4px;
+  margin-bottom: 0;
+  border-radius: var(--radius-sm);
+}
+.hp-contact-hub .hp-contact-item.is-wide { grid-template-columns: 24px minmax(0, 1fr); }
+.hp-contact-hub .hp-contact-item:hover { background: rgba(255, 255, 255, .06); }
+.hp-contact-hub .hp-contact-ic { width: 24px; height: 24px; border-radius: 7px; }
+.hp-contact-hub .hp-contact-ic svg { width: 13px; height: 13px; }
+.hp-contact-hub .hp-contact-value { font-size: 14px; justify-self: start; }
+.hp-contact-hub .hp-contact-label { font-size: 12px; justify-self: end; }
+.hp-contact-hub .hp-contact-list { gap: 0; }
+
+/* ที่อยู่กระชับ ไม่ต้องมีป้าย "ที่อยู่" แยกอีกบรรทัด */
+.hp-contact-hub .hp-address { font-size: 13px; line-height: 1.6; gap: 8px; margin-bottom: 12px; }
+.hp-contact-hub .hp-address svg { width: 14px; height: 14px; margin-top: 3px; }
+.hp-contact-hub .hp-foot-label { margin: 0 0 7px; font-size: 10.5px; }
+
+.hp-contact-hub .hp-line-block { gap: 6px; }
+.hp-contact-hub .hp-line-id { padding: 6px 9px; gap: 9px; }
+.hp-contact-hub .hp-line-cta { height: 38px; font-size: 12.5px; }
+
+/* ---------- จังหวะแนวตั้งที่กระชับกว่าเดิม ---------- */
+.hp-footer { padding-block: 38px 0; }
+.hp-footer-bottom { margin-top: 20px; padding-block: 15px; }
+
+.hp-footer-about p { margin-block: 10px 0; line-height: 1.65; }
+.hp-brand-tags { margin-top: 10px; }
+
+@media (max-width: 1080px) {
+  .hp-footer-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  /* ศูนย์ติดต่อกินเต็มแถวเมื่อพื้นที่แคบลง แต่ยังแบ่งสองฝั่งอยู่ */
+  .hp-contact-hub { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .hp-footer-grid { grid-template-columns: minmax(0, 1fr); }
+  .hp-contact-hub { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .hp-contact-hub .hp-hub-col + .hp-hub-col {
+    padding-inline-start: 0;
+    margin-inline-start: 0;
+    border-inline-start: 0;
+    padding-top: 16px;
+    margin-top: 16px;
+    border-top: 1px solid rgba(198, 161, 91, .22);
+  }
+}
+@media (max-width: 480px) {
+  .hp-contact-hub .hp-contact-item,
+  .hp-contact-hub .hp-contact-item.is-wide { grid-template-columns: 24px minmax(0, 1fr); }
+  .hp-contact-hub .hp-contact-value { grid-column: 2; white-space: nowrap; }
+  .hp-contact-hub .hp-contact-label { grid-column: 2; justify-self: start; }
+}
+
+/* แถวติดต่อวัดได้ 34px — ต่ำกว่าเป้า 36–38 เล็กน้อย เพิ่มระยะในแนวตั้งอีกนิด */
+.hp-contact-hub .hp-contact-item { padding-block: 6px; }
+
+/* ============================================================
+   PHASE 48 — กลับไปใช้ส่วนท้ายแบบเปิด (ไม่มีกรอบแผง)
+   แต่ยังเก็บแถวโทรศัพท์แบบกระชับ เบอร์ซ้าย/ชื่อขวา ไว้เหมือนเดิม
+
+   ใช้ display:contents กับตัวห่อ .hp-contact-hub เพื่อยุบมันออกจากผัง
+   ลูกทั้งสอง (.hp-hub-col) จึงกลายเป็นคอลัมน์ตรงของกริดส่วนท้าย
+   ได้ 4 คอลัมน์เปิดโล่งโดยไม่ต้องรื้อโครง JSX
+   ============================================================ */
+.hp-contact-hub {
+  display: contents;
+  /* พื้นหลัง กรอบ มุมมน และระยะขอบของแผงหายไปเองเมื่อเป็น contents */
+}
+
+/* เส้นทองที่เคยคั่นสองฝั่งในแผง ไม่ต้องใช้แล้วในผังแบบเปิด */
+.hp-contact-hub .hp-hub-col + .hp-hub-col {
+  padding-inline-start: 0;
+  margin-inline-start: 0;
+  border-inline-start: 0;
+}
+
+/* 4 คอลัมน์เปิด — คอลัมน์สำนักงานกว้างที่สุดตามที่ต้องการ */
+.hp-footer-grid {
+  grid-template-columns: 24% 14% 26% minmax(300px, 36%);
+  gap: 26px 32px;
+}
+
+/* ที่อยู่ได้ความกว้างเต็มคอลัมน์ ไม่ถูกบีบให้ตัดบรรทัดเร็วเกินไป */
+.hp-contact-hub .hp-address { max-width: none; }
+.hp-contact-hub .hp-address > span { display: flex; flex-direction: column; }
+
+/* บล็อก LINE กว้างเท่าคอลัมน์ จึงชิดขอบเดียวกับที่อยู่ */
+.hp-contact-hub .hp-line-block { width: 100%; }
+.hp-contact-hub .hp-line-id,
+.hp-contact-hub .hp-line-cta { width: 100%; }
+
+@media (max-width: 1080px) {
+  .hp-footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 28px; }
+}
+@media (max-width: 720px) {
+  .hp-footer-grid { grid-template-columns: minmax(0, 1fr); }
+  /* ผังเปิดแล้ว ไม่ต้องมีเส้นคั่นแนวนอนระหว่างสองฝั่งอีก */
+  .hp-contact-hub .hp-hub-col + .hp-hub-col { padding-top: 0; margin-top: 0; border-top: 0; }
+}
+
+/* ล้างสไตล์แผงออกให้ชัดเจน — ถึงแม้ display:contents จะไม่วาดกล่องอยู่แล้ว
+   แต่เก็บค่าไว้อาจทำให้เข้าใจผิดตอนอ่านโค้ด และจะกลับมาแสดงทันทีถ้ามีใครเปลี่ยน display */
+.hp-contact-hub {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+/* 376px ต่ำกว่าเป้า 390–430 เล็กน้อย คืนระยะหายใจให้ส่วนท้ายนิดหน่อย */
+.hp-footer { padding-block: 46px 0; }
+.hp-footer-bottom { margin-top: 24px; }
+
+/* ============================================================
+   PHASE 49 — ที่อยู่สำนักงานต้องใช้ความกว้างของคอลัมน์จริง
+   วัดได้: คอลัมน์ 319px / <address> 319px แต่ span ข้างในเหลือ 145px
+   เพราะเป็น flex item ที่ flex: 0 1 auto จึงหดเท่า max-content ของลูก
+   ============================================================ */
+.hp-contact-hub .hp-address > span {
+  /* ให้กินพื้นที่ที่เหลือทั้งหมดหลังไอคอน แทนที่จะหดตามเนื้อหา */
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  max-width: none;
+  /* เลิกบังคับเป็นคอลัมน์ — ปล่อยให้ข้อความไหลและตัดบรรทัดเองตามความกว้าง */
+  display: block;
+}
+/* ลูกแต่ละชิ้นเป็นข้อความไหล ไม่ใช่บล็อกที่บังคับขึ้นบรรทัดใหม่ */
+.hp-contact-hub .hp-address > span > span { display: inline; }
+
+.hp-contact-hub .hp-address {
+  align-items: flex-start;
+  font-size: 13.5px;
+  line-height: 1.65;
+}

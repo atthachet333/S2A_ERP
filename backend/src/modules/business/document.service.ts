@@ -19,7 +19,7 @@ import { documentImage } from './document-assets.js';
 export type DocumentType =
   | 'ORDER_SLIP' | 'KITCHEN_PREPARATION_SLIP' | 'STOCK_ISSUE_SLIP'
   | 'GOODS_RECEIPT_SLIP' | 'RECIPE_COST_SHEET' | 'SALES_REPORT'
-  | 'STOCK_ADJUSTMENT_SLIP' | 'STOCK_TRANSFER_SLIP';
+  | 'STOCK_ADJUSTMENT_SLIP' | 'STOCK_TRANSFER_SLIP' | 'PRODUCTION_RUN_SLIP' | 'PURCHASE_PLAN' | 'PURCHASE_ORDER';
 
 export type DocumentLine = {
   name: string;
@@ -32,6 +32,9 @@ export type DocumentLine = {
   before?: string | number;
   change?: string | number;
   after?: string | number;
+  expected?: string | number;
+  actual?: string | number;
+  variance?: string | number;
   reason?: string;
 };
 
@@ -69,6 +72,9 @@ const TITLES: Record<DocumentType, { en: string; th: string }> = {
   STOCK_ADJUSTMENT_SLIP: { en: 'STOCK ADJUSTMENT', th: 'ใบปรับปรุงสต็อก' },
   // PHASE 18 — ใบโอนย้ายไม่มีตัวเลขการเงิน จึงใช้ชุดคอลัมน์แบบไม่มีราคาที่มีอยู่แล้ว
   STOCK_TRANSFER_SLIP: { en: 'STOCK TRANSFER', th: 'ใบโอนย้ายระหว่างคลัง' },
+  PRODUCTION_RUN_SLIP: { en: 'PRODUCTION RUN', th: 'ใบผลิตสินค้า' },
+  PURCHASE_PLAN: { en: 'PURCHASE PLAN', th: 'ใบวางแผนจัดซื้อ' },
+  PURCHASE_ORDER: { en: 'PURCHASE ORDER', th: 'ใบสั่งซื้อ' },
 };
 
 /* ---------- โทนสีเอกสาร ---------- */
@@ -159,6 +165,13 @@ export function columnsFor(type: DocumentType, lines: DocumentLine[]): Col[] {
       { key: 'before', label: 'ก่อน', width: 54, align: 'right', format: 'qty' },
       { key: 'change', label: 'เปลี่ยน', width: 54, align: 'right', format: 'qty' },
       { key: 'after', label: 'หลัง', width: 54, align: 'right', format: 'qty' },
+      unit]);
+  }
+  if (type === 'PRODUCTION_RUN_SLIP') {
+    return sized([no, name,
+      { key: 'expected', label: 'คาดหมาย', width: 58, align: 'right', format: 'qty' },
+      { key: 'actual', label: 'ใช้จริง', width: 58, align: 'right', format: 'qty' },
+      { key: 'variance', label: 'ผลต่าง', width: 54, align: 'right', format: 'qty' },
       unit]);
   }
   // เอกสารที่ไม่มีราคา (ใบเบิก / ใบเตรียมครัว) ไม่ต้องมีคอลัมน์เงิน

@@ -201,6 +201,7 @@ export default async function itemRoutes(app: FastifyInstance) {
 
   app.post('/', { preHandler: CREATE }, async (req, reply) => {
     const body = upsertSchema.parse(req.body);
+    if (body.isExpiryTracked && !body.isLotTracked) return reply.status(400).send(fail('LOT_POLICY_INVALID', 'การติดตามวันหมดอายุต้องเปิดการติดตาม Lot ด้วย'));
     const dup = await prisma.item.findUnique({ where: { code: body.code } });
     if (dup) return reply.status(409).send(fail('CONFLICT', `มีรหัส ${body.code} อยู่แล้ว`));
 
@@ -245,6 +246,13 @@ export default async function itemRoutes(app: FastifyInstance) {
     const body = upsertSchema.partial().parse(req.body);
     const existing = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId: req.user.companyId! } });
     if (!existing) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
+    const nextLotTracked = body.isLotTracked ?? existing.isLotTracked;
+    const nextExpiryTracked = body.isExpiryTracked ?? existing.isExpiryTracked;
+    if (nextExpiryTracked && !nextLotTracked) return reply.status(400).send(fail('LOT_POLICY_INVALID', 'การติดตามวันหมดอายุต้องเปิดการติดตาม Lot ด้วย'));
+    if (!existing.isLotTracked && nextLotTracked) {
+      const legacy = await prisma.stockBalance.aggregate({ where: { itemId: id, lotId: null }, _sum: { onHand: true, reserved: true } });
+      if (num(legacy._sum.onHand) !== 0 || num(legacy._sum.reserved) !== 0) return reply.status(409).send(fail('LEGACY_STOCK_REQUIRES_ALLOCATION', 'ต้องทำให้สต็อกเดิมที่ไม่มี Lot เป็นศูนย์หรือจัดสรรผ่านขั้นตอนเฉพาะก่อนเปิดการติดตาม Lot'));
+    }
     if (body.code && body.code !== existing.code) {
       const dup = await prisma.item.findUnique({ where: { code: body.code } });
       if (dup) return reply.status(409).send(fail('CONFLICT', `มีรหัส ${body.code} อยู่แล้ว`));

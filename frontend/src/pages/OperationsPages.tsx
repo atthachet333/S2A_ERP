@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, Check, CheckCircle2, ClipboardCheck, FileDown, PackageCheck, Plus, Search, Trash2, Truck, Warehouse } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, Check, CheckCircle2, ClipboardCheck, FileDown, PackageCheck, Plus, Search, ShoppingCart, Trash2, Truck, Warehouse } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/components/ui/Toast';
@@ -103,25 +103,26 @@ function MasterCreateModal({ state, units, onClose, onCreated }: {
 type WarehouseOption = { id: string; code: string; name: string };
 type Supplier = { id: string; code: string; name: string };
 type Stock = { warehouseId: string; onHand: string; reserved: string };
-type Item = { id: string; code: string; name: string; type: string; imageUrl?: string; lastCost: string; purchaseToBaseFactor: string; baseUnit: { code: string; name: string }; purchaseUnit?: { code: string; name: string }; stockBalances: Stock[] };
+type Item = { id: string; code: string; name: string; type: string; imageUrl?: string; lastCost: string; purchaseToBaseFactor: string; isLotTracked?:boolean; isExpiryTracked?:boolean; baseUnit: { code: string; name: string }; purchaseUnit?: { code: string; name: string }; stockBalances: Stock[] };
 type Order = { id: string; orderNo: string; deliveryDate: string; deliveryTime?: string; status: string; customer: { name: string }; items: { menuNameSnapshot: string; quantity: string }[] };
 type Lookups = { warehouses: WarehouseOption[]; suppliers: Supplier[]; items: Item[]; orders: Order[] };
 type Receipt = { id: string; receiptNo: string; receiptDate: string; status: string; createdById?: string; supplier?: { name: string }; warehouse: { name: string }; items: { id: string; quantity: string; unitPrice: string; totalCost: string; lotNo?: string; expiryDate?: string; item: { name: string; code: string } }[] };
 type Issue = { id: string; issueNo: string; issueDate: string; issuedAt?: string; status: string; order?: { orderNo: string; customer: { name: string } }; createdBy: { fullName: string }; items: { id: string; issuedQty: string; unit: string }[] };
-type ReceiptLine = { key: string; itemId: string; quantity: number; unitPrice: number; lotNo: string; expiryDate: string };
+type ReceiptLine = { key: string; itemId: string; purchaseOrderItemId?: string; quantity: number; unitPrice: number; lotNo: string; manufactureDate: string; expiryDate: string; orderedQty?: number; previouslyReceivedQty?: number; remainingQty?: number; purchaseUnitCode?: string };
 
 const qtyText = (v: number) => Number(v).toLocaleString('en-US', { maximumFractionDigits: 4 });
 const costText = (v: number) => Number(v).toLocaleString('en-US', { maximumFractionDigits: 4 });
 const money = (value: number | string) => `฿${Number(value).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const today = () => new Date().toISOString().slice(0, 10);
-const freshReceiptLine = (): ReceiptLine => ({ key: crypto.randomUUID(), itemId: '', quantity: 1, unitPrice: 0, lotNo: '', expiryDate: '' });
+const freshReceiptLine = (): ReceiptLine => ({ key: crypto.randomUUID(), itemId: '', quantity: 1, unitPrice: 0, lotNo: '', manufactureDate: '', expiryDate: '' });
 const openDocument = async (path:string) => { const blob=await apiClient.blob(path, 'pdf'); const url=URL.createObjectURL(blob); window.open(url,'_blank','noopener,noreferrer'); window.setTimeout(()=>URL.revokeObjectURL(url),60000); };
 
 export function ReceivingPage() {
   const {toast}=useToast();
   const { user } = useAuth(); const { messages } = useI18n(); const rt = messages.receiving;
   const canCreate = Boolean(user?.roles.includes('SUPER_ADMIN') || user?.permissions.includes('RECEIVING_CREATE'));
-  const navigate = useNavigate(); const { pathname } = useLocation();
+  const navigate = useNavigate(); const { pathname, search } = useLocation();
+  const requestedPurchaseOrderId = new URLSearchParams(search).get('purchaseOrderId') ?? '';
   const editingId = /\/receiving\/([^/]+)\/edit$/.exec(pathname)?.[1] ?? '';
   const creating = pathname.endsWith('/new') || Boolean(editingId);
   const [receipts, setReceipts] = useState<Receipt[]>([]); const [lookups, setLookups] = useState<Lookups>(); const [units, setUnits] = useState<UnitOption[]>([]); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [query, setQuery] = useState('');
@@ -156,6 +157,7 @@ export function ReceivingPage() {
   };
   const [lines, setLines] = useState<ReceiptLine[]>([freshReceiptLine()]);
   const [warehouseId, setWarehouseId] = useState(''); const [supplierId, setSupplierId] = useState('');
+  const [purchaseOrderId, setPurchaseOrderId] = useState(''); const [purchaseOrderNo, setPurchaseOrderNo] = useState('');
   const [create, setCreate] = useState<CreateState | null>(null);
   const load = async () => { try { const [history, options, unitList] = await Promise.all([apiClient.get<Receipt[]>(`/business/receiving?${filterQuery()}`), apiClient.get<Lookups>('/business/operations/lookups'), apiClient.get<UnitOption[]>('/units')]); setReceipts(history); setLookups(options); setUnits(unitList.filter((u) => u.isActive)); } catch (reason) { setError(reason instanceof Error ? reason.message : 'โหลดข้อมูลงานรับของไม่สำเร็จ'); } };
   // โหลดใหม่เมื่อ filter เปลี่ยน (debounce คำค้นเล็กน้อยเพื่อไม่ยิงทุกตัวอักษร)
@@ -166,6 +168,14 @@ export function ReceivingPage() {
   // ผู้จำหน่าย/คลังถูกแก้หรือปิดใช้งานจากหน้า master → โหลด lookups ใหม่
   useMasterDataRefresh(load);
 
+  useEffect(() => {
+    if (!requestedPurchaseOrderId || editingId) return;
+    void apiClient.get<{purchaseOrderId:string;poNo:string;supplierId:string;warehouseId:string;items:{itemId:string;purchaseOrderItemId:string;quantity:number;unitPrice:number;purchaseUnitCode:string;orderedQty:number;previouslyReceivedQty:number;remainingQty:number}[]}>(`/business/purchase-orders/${requestedPurchaseOrderId}/receiving-prefill`).then((prefill) => {
+      setPurchaseOrderId(prefill.purchaseOrderId); setPurchaseOrderNo(prefill.poNo); setSupplierId(prefill.supplierId); setWarehouseId(prefill.warehouseId);
+      setLines(prefill.items.map((line) => ({ key: crypto.randomUUID(), ...line, lotNo:'', manufactureDate:'', expiryDate:'' })));
+    }).catch((reason:Error)=>setError(reason.message));
+  }, [requestedPurchaseOrderId, editingId]);
+
   // โหมดแก้ไขร่าง: โหลดเอกสารเดิมมาใส่ฟอร์ม (เลข GR เดิมคงอยู่ ไม่สร้างใบใหม่)
   const [editDoc, setEditDoc] = useState<{ receiptNo: string; status: string; supplierDocNo?: string | null; note?: string | null } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -173,11 +183,11 @@ export function ReceivingPage() {
     if (!editingId) { setEditDoc(null); return; }
     const run = async () => {
       try {
-        const d = await apiClient.get<{ receiptNo: string; status: string; warehouseId: string; supplierId?: string | null; supplierDocNo?: string | null; note?: string | null; items: { itemId: string; quantity: string; unitPrice: string; lotNo?: string | null; expiryDate?: string | null }[] }>(`/business/receiving/${editingId}`);
+        const d = await apiClient.get<{ receiptNo: string; status: string; warehouseId: string; supplierId?: string | null; purchaseOrderId?:string|null;purchaseOrder?:{poNo:string}|null;supplierDocNo?: string | null; note?: string | null; items: { itemId: string; purchaseOrderItemId?:string|null;quantity: string; unitPrice: string; lotNo?: string | null; manufactureDate?: string | null; expiryDate?: string | null }[] }>(`/business/receiving/${editingId}`);
         setEditDoc({ receiptNo: d.receiptNo, status: d.status, supplierDocNo: d.supplierDocNo, note: d.note });
         if (d.status !== 'DRAFT') { setError('เอกสารนี้ยืนยันแล้ว จึงแก้ไขไม่ได้'); return; }
-        setWarehouseId(d.warehouseId); setSupplierId(d.supplierId ?? '');
-        setLines(d.items.map((l) => ({ key: crypto.randomUUID(), itemId: l.itemId, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice), lotNo: l.lotNo ?? '', expiryDate: l.expiryDate ? String(l.expiryDate).slice(0, 10) : '' })));
+        setWarehouseId(d.warehouseId); setSupplierId(d.supplierId ?? ''); setPurchaseOrderId(d.purchaseOrderId??''); setPurchaseOrderNo(d.purchaseOrder?.poNo??'');
+        setLines(d.items.map((l) => ({ key: crypto.randomUUID(), itemId: l.itemId, purchaseOrderItemId:l.purchaseOrderItemId??undefined,quantity: Number(l.quantity), unitPrice: Number(l.unitPrice), lotNo: l.lotNo ?? '', manufactureDate: l.manufactureDate ? String(l.manufactureDate).slice(0, 10) : '', expiryDate: l.expiryDate ? String(l.expiryDate).slice(0, 10) : '' })));
       } catch (reason) { setError(reason instanceof Error ? reason.message : 'โหลดร่างไม่สำเร็จ'); }
     };
     void run();
@@ -199,22 +209,24 @@ export function ReceivingPage() {
     if (!lines.length || !lines.every((l) => l.itemId && l.quantity > 0)) { setError('กรอกรายการและจำนวนให้ครบก่อน'); return; }
     setBusy(true); setError('');
     const data = new FormData(formRef.current!);
+    const hasOverReceive = lines.some((line) => line.remainingQty != null && line.quantity > line.remainingQty);
     try {
       const created = editingId
         ? await apiClient.patch<{ receiptNo: string }>(`/business/receiving/${editingId}`, {
-          warehouseId, supplierId: supplierId || undefined,
+          warehouseId, supplierId: supplierId || undefined, purchaseOrderId: purchaseOrderId || undefined,
           supplierDocNo: (data.get('supplierDocNo') as string) || undefined,
           receiptDate: data.get('receiptDate'), note: data.get('note') || undefined,
-          items: lines.map(({ itemId, quantity, unitPrice, lotNo, expiryDate }) => ({ itemId, quantity, unitPrice, lotNo: lotNo || undefined, expiryDate: expiryDate || undefined })),
+          items: lines.map(({ itemId, purchaseOrderItemId, quantity, unitPrice, lotNo, manufactureDate, expiryDate }) => ({ itemId, purchaseOrderItemId, quantity, unitPrice, lotNo: lotNo || undefined, manufactureDate: manufactureDate || undefined, expiryDate: expiryDate || undefined })),
         })
         : await apiClient.post<{ receiptNo: string }>('/business/receiving', {
-        warehouseId, supplierId: supplierId || undefined,
+        warehouseId, supplierId: supplierId || undefined, purchaseOrderId: purchaseOrderId || undefined,
         supplierDocNo: (data.get('supplierDocNo') as string) || undefined,
         receiptDate: data.get('receiptDate'), note: data.get('note') || undefined,
         confirm,
-        items: lines.map(({ itemId, quantity, unitPrice, lotNo, expiryDate }) => ({ itemId, quantity, unitPrice, lotNo: lotNo || undefined, expiryDate: expiryDate || undefined })),
+        overReceiveAcknowledged: confirm && hasOverReceive,
+        items: lines.map(({ itemId, purchaseOrderItemId, quantity, unitPrice, lotNo, manufactureDate, expiryDate }) => ({ itemId, purchaseOrderItemId, quantity, unitPrice, lotNo: lotNo || undefined, manufactureDate: manufactureDate || undefined, expiryDate: expiryDate || undefined })),
       });
-      if (editingId && confirm) await apiClient.post(`/business/receiving/${editingId}/confirm`, {});
+      if (editingId && confirm) await apiClient.post(`/business/receiving/${editingId}/confirm`, { overReceiveAcknowledged: hasOverReceive });
       await load();
       toast({
         title: confirm ? `ยืนยันรับของ ${created.receiptNo} แล้ว` : `บันทึกร่าง ${created.receiptNo} แล้ว`,
@@ -245,6 +257,7 @@ export function ReceivingPage() {
         actions={<Link className="btn" to="/receiving">กลับหน้ารายการ</Link>}
       />
       {error && <div className="rb-callout warn" role="alert"><AlertTriangle aria-hidden /><div><strong>{error}</strong></div></div>}
+      {purchaseOrderId && <div className="rb-callout info"><ShoppingCart aria-hidden /><div><strong>รับจากใบสั่งซื้อ {purchaseOrderNo}</strong><p>จำนวนและราคาด้านล่างเป็นค่าเริ่มต้นจาก PO แก้ไขตามของที่มาถึงจริงได้ ระบบจะแสดงผลต่างโดยไม่แก้ราคา PO</p></div></div>}
 
       <form className="ops-workspace" ref={formRef} onSubmit={(e) => e.preventDefault()}>
         <div className="ops-workspace-main">
@@ -305,6 +318,7 @@ export function ReceivingPage() {
                       createLabel={canCreate ? rt.addItem : undefined}
                       onCreate={canCreate ? ((q) => setCreate({ kind: 'item', prefill: q, lineKey: line.key })) : undefined} ariaLabel={rt.selectItem} />
                     {item && <small className="rr-sub">{item.code} · หน่วยฐาน {item.baseUnit.code}</small>}
+                    {line.purchaseOrderItemId && <small className="rr-sub">สั่ง {qtyText(line.orderedQty??0)} · รับก่อนหน้า {qtyText(line.previouslyReceivedQty??0)} · คงเหลือ {qtyText(line.remainingQty??0)} {line.purchaseUnitCode}</small>}
                   </div>
 
                   <label className="rr-qty">จำนวน
@@ -344,6 +358,7 @@ export function ReceivingPage() {
 
                   <div className="rr-lot">
                     <label>Lot<input placeholder="Lot" value={line.lotNo} onChange={(e) => updateLine(line.key, 'lotNo', e.target.value)} /></label>
+                    <label>วันผลิต<input type="date" value={line.manufactureDate} onChange={(e) => updateLine(line.key, 'manufactureDate', e.target.value)} /></label>
                     <label>วันหมดอายุ<input type="date" value={line.expiryDate} onChange={(e) => updateLine(line.key, 'expiryDate', e.target.value)} /></label>
                   </div>
                 </article>;
@@ -394,6 +409,7 @@ export function ReceivingPage() {
             <div><dt>มูลค่ารวม</dt><dd>{money(t.totalValue)}</dd></div>
           </dl>
           <p className="op-confirm-impact"><ArrowDownToLine aria-hidden width={15} />เมื่อยืนยัน ระบบจะ<b>เพิ่มสต็อกจริง</b> และเอกสารนี้จะไม่สามารถแก้ไขรายการโดยตรงได้</p>
+          {lines.some((line)=>line.remainingQty!=null&&line.quantity>line.remainingQty!)&&<p className="op-confirm-impact danger"><AlertTriangle aria-hidden width={15}/>มีรายการรับเกิน PO การกดยืนยันคือการยอมรับปริมาณส่วนเกินอย่างชัดเจน</p>}
         </div>}
       />
       {create && <MasterCreateModal state={create} units={units} onClose={() => setCreate(null)} onCreated={onCreated} />}
@@ -508,15 +524,15 @@ export function StockIssuePage() {
     if (!issueEditingId) { setIssueEditDoc(null); return; }
     const run = async () => {
       try {
-        const d = await apiClient.get<{ issueNo: string; status: string; warehouseId: string; note?: string | null; items: { itemId: string; issuedQty: string; requiredQty: string; unit: string; item?: { code: string; name: string } | null }[] }>(`/business/stock-issues/${issueEditingId}`);
+        const d = await apiClient.get<{ issueNo: string; status: string; warehouseId: string; note?: string | null; items: { itemId: string; issuedQty: string; requiredQty: string; unit: string; item?: { code: string; name: string } | null; lotAllocations?:{lotId:string;quantity:string;lot?:{lotNo:string;expiryDate?:string|null}}[] }[] }>(`/business/stock-issues/${issueEditingId}`);
         setIssueEditDoc({ issueNo: d.issueNo, status: d.status });
         if (d.status !== 'DRAFT') { setError('ใบเบิกนี้ยืนยันแล้ว จึงแก้ไขไม่ได้'); return; }
         setWarehouseId(d.warehouseId); setNote(d.note ?? '');
-        setLines(d.items.map((l) => ({ key: crypto.randomUUID(), itemId: l.itemId, name: l.item?.name ?? '', code: l.item?.code ?? '', unit: l.unit, requiredQty: Number(l.requiredQty), issuedQty: Number(l.issuedQty) })));
+        setLines(d.items.map((l) => ({ key: crypto.randomUUID(), itemId: l.itemId, name: l.item?.name ?? '', code: l.item?.code ?? '', unit: l.unit, requiredQty: Number(l.requiredQty), issuedQty: Number(l.issuedQty), isLotTracked:(lookups?.items.find(i=>i.id===l.itemId)?.isLotTracked??false), allocations:l.lotAllocations?.map(a=>({lotId:a.lotId,quantity:Number(a.quantity),lotNo:a.lot?.lotNo,expiryDate:a.lot?.expiryDate}))??[] })));
       } catch (reason) { setError(reason instanceof Error ? reason.message : 'โหลดร่างไม่สำเร็จ'); }
     };
     void run();
-  }, [issueEditingId]);  
+  }, [issueEditingId, lookups?.items]);  
 
   // สินค้าพร้อมเบิกของคลังที่เลือก — มาจาก stock จริงของคลังนั้น
   const issuable = useMemo(() => issuableItems(lookups?.items ?? [], warehouseId), [lookups?.items, warehouseId]);
@@ -533,7 +549,14 @@ export function StockIssuePage() {
     if (!result.ok) { setFocusKey(result.existingKey); toast({ title: 'มีรายการนี้อยู่แล้ว', description: `${item.name} อยู่ในใบเบิกนี้แล้ว`, variant: 'warning' }); return; }
     setLines(result.lines); setPickerTerm('');
   };
-  const patchLine = (key: string, qty: number) => setLines((v) => v.map((l) => (l.key === key ? { ...l, issuedQty: qty } : l)));
+  const patchLine = (key: string, qty: number) => setLines((v) => v.map((l) => (l.key === key ? { ...l, issuedQty: qty, ...(l.isLotTracked?{allocations:[]}: {}) } : l)));
+  const suggestLots = async (key:string) => {
+    const line=lines.find(row=>row.key===key);if(!line||!warehouseId||line.issuedQty<=0)return;
+    try{const [suggestion,lots]=await Promise.all([
+      apiClient.post<{allocations:{lotId:string;quantity:number}[];shortageQty:number}>('/business/inventory/lots/suggest',{warehouseId,itemId:line.itemId,quantity:line.issuedQty}),
+      apiClient.get<{rows:{lotId:string;lotNo:string;expiryDate:string|null;available:number}[]}>(`/business/inventory/lots?warehouseId=${warehouseId}&itemId=${line.itemId}`),
+    ]);const lotOf=new Map(lots.rows.map(row=>[row.lotId,row]));setLines(v=>v.map(row=>row.key===key?{...row,allocations:suggestion.allocations.map(a=>({...a,...lotOf.get(a.lotId)}))}:row));if(suggestion.shortageQty>0)setError(`Lot ที่ใช้ได้ไม่พอ ${suggestion.shortageQty} ${line.unit}`)}catch(reason){setError(reason instanceof Error?reason.message:'แนะนำ FEFO ไม่สำเร็จ')}
+  };
   const removeLine = (key: string) => setLines((v) => v.filter((l) => l.key !== key));
 
   /** helper (ไม่บังคับ): เติมรายการที่ต้องใช้จากออเดอร์ แล้วผู้ใช้ยังแก้ได้ก่อนยืนยัน */
@@ -681,6 +704,7 @@ export function StockIssuePage() {
                   {issue === 'OVER_AVAILABLE' && <p className="issue-row-error" role="alert">
                     <AlertTriangle aria-hidden width={14} />จำนวนเบิกเกินจำนวนที่พร้อมใช้ {(Number(line.issuedQty || 0) - avail).toLocaleString()} {line.unit}
                   </p>}
+                  {line.isLotTracked&&<div className="rr-lot"><button type="button" className="btn" onClick={()=>void suggestLots(line.key)}>FEFO Suggested</button>{line.allocations?.map(a=><label key={a.lotId}>Lot {a.lotNo??a.lotId}<small>{a.expiryDate?`หมดอายุ ${String(a.expiryDate).slice(0,10)}`:'ไม่มีวันหมดอายุ'} · พร้อมใช้ {a.available??'—'}</small><input type="number" min="0" step="0.0001" value={a.quantity} onChange={e=>setLines(v=>v.map(row=>row.key===line.key?{...row,allocations:row.allocations?.map(x=>x.lotId===a.lotId?{...x,quantity:Number(e.target.value)}:x)}:row))}/></label>)}</div>}
                 </div>;
               })}
               {lines.length === 0 && <p className="issue-none">ยังไม่มีรายการ — ค้นหาแล้วกด “เพิ่มรายการ” ด้านบน</p>}

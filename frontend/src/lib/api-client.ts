@@ -160,6 +160,15 @@ export const apiClient = {
     URL.revokeObjectURL(url);
     return { name, size: blob.size, contentType };
   },
+  downloadPost: async (path: string, body: unknown, opts: { expect: 'xlsx' | 'pdf'; fallbackName: string }) => {
+    const token = sessionStore.accessToken();
+    const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+    if (!res.ok) throw new ApiClientError('DOWNLOAD_FAILED', 'ดาวน์โหลดไฟล์ไม่สำเร็จ', res.status);
+    const contentType = (res.headers.get('Content-Type') ?? '').toLowerCase();
+    if (!contentType.includes(EXPECTED_MIME[opts.expect])) throw new ApiClientError('DOWNLOAD_NOT_BINARY', 'เซิร์ฟเวอร์ไม่ได้ส่งไฟล์กลับมา', res.status);
+    const blob = await res.blob(); if (blob.size === 0) throw new ApiClientError('DOWNLOAD_EMPTY', 'ไฟล์ที่ได้รับว่างเปล่า', res.status);
+    const name = filenameFromDisposition(res.headers.get('Content-Disposition')) ?? opts.fallbackName, url = URL.createObjectURL(blob), a = document.createElement('a'); a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);return{name,size:blob.size,contentType};
+  },
 };
 
 const EXPECTED_MIME: Record<'xlsx' | 'pdf', string> = {

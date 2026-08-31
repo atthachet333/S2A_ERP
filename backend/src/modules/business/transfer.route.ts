@@ -8,6 +8,7 @@ import {
   applyMovement, InsufficientStockError, lockBalancePairs, nextDocumentNo, reverseDocument,
 } from '../../lib/inventory-ledger.js';
 import { withDocumentNumberRetry, withStockLockRetry } from '../../lib/tx-retry.js';
+import { LotPolicyError, validateLotAllocations } from '../../lib/inventory-lot.js';
 
 /**
  * PHASE 18 — โอนย้ายสินค้าระหว่างคลัง
@@ -25,6 +26,7 @@ const lineSchema = z.object({
   itemId: z.string().min(1),
   quantity: z.coerce.number().positive(),
   lotNo: z.string().max(60).optional().nullable(),
+  lotId: z.string().min(1).optional().nullable(),
 });
 
 const createSchema = z.object({
@@ -66,6 +68,7 @@ function transferWhere(companyId: string, q: z.infer<typeof filterSchema>): Pris
 
 /** ข้อผิดพลาดทางธุรกิจ → รหัสและข้อความที่ผู้ใช้อ่านรู้เรื่อง (ที่ไม่รู้จักต้องโยนต่อ ไม่กลบ) */
 function transferErrorReply(reply: FastifyReply, error: unknown) {
+  if (error instanceof LotPolicyError) return reply.status(409).send(fail(error.code, error.message, error.details));
   if (error instanceof InsufficientStockError) {
     return reply.status(409).send(fail('INSUFFICIENT_STOCK', error.message));
   }
@@ -90,7 +93,7 @@ function transferErrorReply(reply: FastifyReply, error: unknown) {
 const DETAIL_INCLUDE = {
   fromWarehouse: { select: { id: true, code: true, name: true } },
   toWarehouse: { select: { id: true, code: true, name: true } },
-  items: { include: { item: { select: { id: true, code: true, name: true, baseUnit: { select: { code: true } } } } } },
+  items: { include: { item: { select: { id: true, code: true, name: true, baseUnit: { select: { code: true } } } }, lot: true } },
 } satisfies Prisma.StockTransferInclude;
 
 /** transaction ที่ออกเลขเอกสารและขยับสต็อกสองคลัง */
@@ -113,7 +116,7 @@ async function validateWithin(tx: Tx, companyId: string, fromWarehouseId: string
 
   const items = await tx.item.findMany({
     where: { id: { in: itemIds }, companyId, deletedAt: null },
-    select: { id: true, lastCost: true, baseUnit: { select: { code: true } } },
+    select: { id: true, lastCost: true, isLotTracked: true, baseUnit: { select: { code: true } } },
   });
   if (items.length !== itemIds.length) throw new Error('ITEM_NOT_IN_COMPANY');
   return new Map(items.map((item) => [item.id, item]));
@@ -126,23 +129,27 @@ async function validateWithin(tx: Tx, companyId: string, fromWarehouseId: string
 async function moveStockWithin(
   tx: Tx, companyId: string, userId: string,
   doc: { id: string; transferNo: string; fromWarehouseId: string; toWarehouseId: string; note: string | null },
-  lines: { itemId: string; quantity: number }[],
-  itemOf: Map<string, { lastCost: Prisma.Decimal | null; baseUnit: { code: string } | null }>,
+  lines: { itemId: string; quantity: number; lotId?: string | null }[],
+  itemOf: Map<string, { lastCost: Prisma.Decimal | null; isLotTracked: boolean; baseUnit: { code: string } | null }>,
 ) {
   // ล็อกทั้งสองคลังด้วยลำดับสากลเดียว ใบ A→B และ B→A จึงต่อคิวกันแทนที่จะวนตาย
   await lockBalancePairs(tx, lines.flatMap((line) => ([
-    { itemId: line.itemId, warehouseId: doc.fromWarehouseId },
-    { itemId: line.itemId, warehouseId: doc.toWarehouseId },
+    { itemId: line.itemId, warehouseId: doc.fromWarehouseId, lotId: line.lotId },
+    { itemId: line.itemId, warehouseId: doc.toWarehouseId, lotId: line.lotId },
   ])));
 
   for (const line of lines) {
     const item = itemOf.get(line.itemId);
+    if (item?.isLotTracked) {
+      if (!line.lotId) throw new LotPolicyError('LOT_REQUIRED', 'สินค้าที่ติดตาม Lot ต้องเลือก Lot ต้นทาง');
+      await validateLotAllocations(tx, { companyId, warehouseId: doc.fromWarehouseId, itemId: line.itemId, requiredQty: line.quantity, allocations: [{ lotId: line.lotId, quantity: line.quantity }] });
+    } else if (line.lotId) throw new LotPolicyError('LOT_NOT_ENABLED', 'สินค้านี้ไม่ได้เปิดการติดตาม Lot');
     /* ต้นทุนอ้างอิงเดียวกันทั้งสองขา — การโอนย้ายไม่สร้างต้นทุนใหม่และไม่แก้ต้นทุนสินค้า
        หน่วยเขียนเป็นรหัสหน่วยที่อ่านออก ไม่ใช่ id (บทเรียนจาก PHASE 13B) */
     const unitCost = num(item?.lastCost);
     const unit = item?.baseUnit?.code ?? null;
     const shared = {
-      companyId, itemId: line.itemId, unit, unitCost,
+      companyId, itemId: line.itemId, lotId: line.lotId ?? undefined, unit, unitCost,
       refType: 'STOCK_TRANSFER', refId: doc.id, refNo: doc.transferNo,
       note: doc.note, createdById: userId,
     };
@@ -193,7 +200,7 @@ export default async function transferRoutes(app: FastifyInstance) {
             transferDate: body.transferDate, note: body.note ?? null,
             status: body.confirm ? 'CONFIRMED' : 'DRAFT',
             createdById: req.user.sub,
-            items: { create: body.items.map((l) => ({ itemId: l.itemId, quantity: new Prisma.Decimal(l.quantity), lotNo: l.lotNo ?? null })) },
+            items: { create: body.items.map((l) => ({ itemId: l.itemId, quantity: new Prisma.Decimal(l.quantity), lotNo: l.lotNo ?? null, lotId: l.lotId ?? null })) },
           },
           include: DETAIL_INCLUDE,
         });
@@ -241,7 +248,7 @@ export default async function transferRoutes(app: FastifyInstance) {
             fromWarehouseId, toWarehouseId,
             ...(body.transferDate ? { transferDate: body.transferDate } : {}),
             note: body.note ?? null,
-            ...(items.length ? { items: { create: items.map((l) => ({ itemId: l.itemId, quantity: new Prisma.Decimal(l.quantity), lotNo: l.lotNo ?? null })) } } : {}),
+            ...(items.length ? { items: { create: items.map((l) => ({ itemId: l.itemId, quantity: new Prisma.Decimal(l.quantity), lotNo: l.lotNo ?? null, lotId: l.lotId ?? null })) } } : {}),
           },
           include: DETAIL_INCLUDE,
         });
@@ -265,7 +272,7 @@ export default async function transferRoutes(app: FastifyInstance) {
         if (doc.status !== 'DRAFT') throw new Error(`ALREADY_${doc.status}`);
 
         const itemOf = await validateWithin(tx, companyId, doc.fromWarehouseId, doc.toWarehouseId, doc.items.map((l) => l.itemId));
-        await moveStockWithin(tx, companyId, req.user.sub, doc, doc.items.map((l) => ({ itemId: l.itemId, quantity: num(l.quantity) })), itemOf);
+        await moveStockWithin(tx, companyId, req.user.sub, doc, doc.items.map((l) => ({ itemId: l.itemId, quantity: num(l.quantity), lotId: l.lotId })), itemOf);
 
         const saved = await tx.stockTransfer.update({ where: { id: doc.id }, data: { status: 'CONFIRMED' }, include: DETAIL_INCLUDE });
         await tx.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'STOCK_TRANSFER_CONFIRMED', entity: 'StockTransfer', entityId: doc.id, after: { transferNo: doc.transferNo, lines: doc.items.length } } });

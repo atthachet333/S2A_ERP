@@ -26,12 +26,23 @@ import './styles/costing-pricing.css';
 import './styles/dashboard.css';
 import './styles/operations.css';
 import './styles/operations-workspace.css';
+import './styles/production.css';
+import './styles/purchase-planning.css';
+import './styles/purchase-orders.css';
+import './styles/analytics.css';
+import './styles/phase32-5.css';
 import './styles/adjustment.css';
 import './styles/inventory-inspector.css';
 import './styles/master-data.css';
 import './styles/orders.css';
 import './styles/admin.css';
 import './styles/consistency.css';
+// PHASE 34 — แถบข้างจัดกลุ่มใหม่ + หัวข้อกลุ่มพับได้ (ต้องอยู่ท้ายสุดเพื่อทับกฎเดิม)
+import './styles/shell-nav.css';
+// PHASE 34 — สกินใหม่ของ ปุ่ม/การ์ด/ตาราง/ฟอร์ม/ป้ายสถานะ (ท้ายสุด)
+import './styles/phase34-reskin.css';
+// PHASE 37 - auth pages share one shell and style set
+import './styles/auth.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

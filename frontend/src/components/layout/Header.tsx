@@ -5,17 +5,13 @@ import { Bell, Building2, CheckCheck, ChevronDown, ChevronRight, CircleAlert, Ke
 import { useAuth } from '@/auth/AuthContext';
 import { useTheme } from '@/theme/ThemeContext';
 import { MODULES } from './nav-config';
-import { formatDate, navigationKeyByPath, useI18n } from '@/i18n/i18n';
+import { resolvePageIdentity } from './page-identity';
+import { formatDate, useI18n } from '@/i18n/i18n';
 import Avatar from '@/components/ui/Avatar';
 import SystemStatus from '@/components/ui/SystemStatus';
 import { apiClient } from '@/lib/api-client';
 
 type Notification = { id: string; title: string; message: string; severity: string; actionUrl?: string | null; readAt?: string | null; createdAt: string };
-
-const PAGE_TITLES: Record<string, { title: string; group: string }> = {
-  '/profile': { title: 'โปรไฟล์ของฉัน', group: 'บัญชีผู้ใช้' },
-  '/unauthorized': { title: 'ไม่มีสิทธิ์เข้าถึง', group: 'ระบบ' },
-};
 
 export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
   onToggleSidebar: () => void;
@@ -34,12 +30,9 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
   const [scrolled, setScrolled] = useState(() => window.scrollY > 20 || document.documentElement.scrollTop > 20);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const moduleMeta = MODULES[pathname];
-  const fallback = PAGE_TITLES[pathname];
-  const navigationKey = navigationKeyByPath[pathname as keyof typeof navigationKeyByPath];
-  const title = navigationKey ? nav[navigationKey] : moduleMeta?.label ?? fallback?.title ?? 'S2 Accounting Consultant';
-  const PageIcon = moduleMeta?.icon;
-  const group = navigationKey ? nav.system : moduleMeta?.group ?? fallback?.group ?? nav.overview;
+  const PageIcon = MODULES[pathname]?.icon;
+  /* หัวเว็บเป็นเจ้าของ breadcrumb + ชื่อหน้า ใช้ตัวคิดชุดเดียวกับ PageHeader */
+  const { title, group } = resolvePageIdentity(pathname, nav as unknown as Record<string, string>);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -95,11 +88,15 @@ export default function Header({ onToggleSidebar, onOpenDrawer, onLogout }: {
         <button className="icon-btn only-mobile" onClick={onOpenDrawer} aria-label={nav.system}><Menu /></button>
         {PageIcon && <span className="header-page-icon"><PageIcon aria-hidden /></span>}
         <div className="header-title">
-          {/* breadcrumb แสดงเฉพาะกลุ่มต้นทาง ไม่ซ้ำกับ h1 ที่เป็นชื่อหน้าอยู่แล้ว */}
-          <nav className="breadcrumb" aria-label="เส้นทาง">
-            <span>{group}</span>
-            <ChevronRight aria-hidden />
-          </nav>
+          {/* breadcrumb แสดงเฉพาะกลุ่มต้นทาง ไม่ซ้ำกับ h1 ที่เป็นชื่อหน้าอยู่แล้ว
+              บางหน้าชื่อกลุ่มกับชื่อหน้าเป็นคำเดียวกัน (เช่น ภาพรวม, การผลิต)
+              ถ้ายังแสดงจะได้ "ภาพรวม > ภาพรวม" ซ้อนกันสองบรรทัด จึงซ่อนไปเลย */}
+          {group !== title && (
+            <nav className="breadcrumb" aria-label="เส้นทาง">
+              <span>{group}</span>
+              <ChevronRight aria-hidden />
+            </nav>
+          )}
           <h1>{title}</h1>
         </div>
       </div>

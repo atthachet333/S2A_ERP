@@ -73,6 +73,14 @@ enum DocumentStatus {
   REVERSED
 }
 
+enum PurchaseOrderStatus {
+  DRAFT
+  CONFIRMED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
 enum SalesOrderStatus {
   DRAFT
   CONFIRMED
@@ -209,6 +217,7 @@ model Company {
   customers               Customer[]
   salesOrders             SalesOrder[]
   stockIssues             StockIssue[]
+  inventoryLots           InventoryLot[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
 
@@ -316,6 +325,7 @@ model Unit {
   conversionsTo       UnitConversion[]   @relation("ConvTo")
   recipeIngredients   RecipeIngredient[]
   recipeVersionsYield RecipeVersion[]    @relation("YieldUnit")
+  extractionLines     GoodsReceiptExtractionLine[] @relation("ExtractionMatchedUnit")
 
   @@map("units")
 }
@@ -396,8 +406,10 @@ model Item {
   productionMaterials ProductionMaterial[]
   productionWastes    ProductionWaste[]
   goodsReceiptItems   GoodsReceiptItem[]
+  purchaseOrderItems  PurchaseOrderItem[]
   transferItems       StockTransferItem[]
   adjustmentItems     StockAdjustmentItem[]
+  extractionLines     GoodsReceiptExtractionLine[] @relation("ExtractionMatchedItem")
   sellingPrices       SellingPrice[]
 
   @@index([type])
@@ -439,6 +451,8 @@ model Supplier {
   deletedAt DateTime?
 
   goodsReceipts GoodsReceipt[]
+  purchaseOrders PurchaseOrder[]
+  extractionMatches GoodsReceiptExtraction[] @relation("ExtractionMatchedSupplier")
 
   @@map("suppliers")
 }
@@ -464,6 +478,8 @@ model Warehouse {
   transfersFrom                StockTransfer[]     @relation("TransferFrom")
   transfersTo                  StockTransfer[]     @relation("TransferTo")
   adjustments                  StockAdjustment[]
+  purchasePlans                PurchasePlan[]
+  purchaseOrders               PurchaseOrder[]
 
   @@map("warehouses")
 }
@@ -492,21 +508,40 @@ model WarehouseLocation {
 // ============================================================
 model InventoryLot {
   id              String             @id @default(cuid())
+  companyId       String
+  company         Company            @relation(fields: [companyId], references: [id])
   lotNo           String
   itemId          String
   item            Item               @relation(fields: [itemId], references: [id])
-  warehouseId     String
-  warehouse       Warehouse          @relation(fields: [warehouseId], references: [id])
+  warehouseId     String?
+  warehouse       Warehouse?         @relation(fields: [warehouseId], references: [id])
   locationId      String?
   location        WarehouseLocation? @relation(fields: [locationId], references: [id])
   manufactureDate DateTime?
+  receivedDate    DateTime           @default(now())
   expiryDate      DateTime?
+  sourceType      String
+  sourceReceiptId String?
+  sourceReceipt   GoodsReceipt?      @relation("LotSourceReceipt", fields: [sourceReceiptId], references: [id])
+  sourceProductionId String?
+  sourceProduction ProductionOrder?  @relation("LotSourceProduction", fields: [sourceProductionId], references: [id])
+  note            String?
+  createdById     String?
   createdAt       DateTime           @default(now())
 
-  stockBalances StockBalance[]
+  stockBalances                 StockBalance[]
+  stockLedgers                  StockLedger[]
+  receiptItems                  GoodsReceiptItem[]
+  productionOutputs             ProductionOutput[]
+  issueAllocations              StockIssueLotAllocation[]
+  productionMaterialAllocations ProductionMaterialLotAllocation[]
+  transferItems                 StockTransferItem[]
+  adjustmentItems               StockAdjustmentItem[]
 
-  @@unique([itemId, warehouseId, lotNo])
-  @@index([expiryDate])
+  @@unique([companyId, itemId, lotNo])
+  @@index([companyId, expiryDate])
+  @@index([sourceReceiptId])
+  @@index([sourceProductionId])
   @@map("inventory_lots")
 }
 
@@ -520,6 +555,10 @@ model StockBalance {
   location    WarehouseLocation? @relation(fields: [locationId], references: [id])
   lotId       String?
   lot         InventoryLot?      @relation(fields: [lotId], references: [id])
+  // MariaDB UNIQUE treats NULL values as distinct. These generated normalized keys
+  // make the logical balance identity enforceable without inventing a historical lot.
+  locationKey String @default("")
+  lotKey      String @default("")
 
   onHand   Decimal @default(0) @db.Decimal(18, 4)
   reserved Decimal @default(0) @db.Decimal(18, 4)
@@ -528,7 +567,7 @@ model StockBalance {
   version   Int      @default(1)
   updatedAt DateTime @updatedAt
 
-  @@unique([itemId, warehouseId, locationId, lotId])
+  @@unique([itemId, warehouseId, locationKey, lotKey], map: "stock_balances_logical_key")
   @@index([itemId])
   @@index([warehouseId])
   @@map("stock_balances")
@@ -547,6 +586,7 @@ model StockLedger {
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
   locationId  String?
   lotId       String?
+  lot         InventoryLot? @relation(fields: [lotId], references: [id])
 
   qtyIn        Decimal @default(0) @db.Decimal(18, 4)
   qtyOut       Decimal @default(0) @db.Decimal(18, 4)
@@ -724,11 +764,20 @@ model ProductionOrder {
 
   productionDate DateTime?
   lotNo          String?
+  manufactureDate DateTime?
   expiryDate     DateTime?
   startedAt      DateTime?
   finishedAt     DateTime?
 
   actualCost Decimal @default(0) @db.Decimal(18, 4)
+  standardCost   Decimal @default(0) @db.Decimal(18, 4)
+  actualUnitCost Decimal @default(0) @db.Decimal(18, 6)
+  note           String?
+  confirmedAt    DateTime?
+  confirmedById  String?
+  reversedAt     DateTime?
+  reversedById   String?
+  reversalReason String?
 
   version     Int      @default(1)
   createdAt   DateTime @default(now())
@@ -739,10 +788,156 @@ model ProductionOrder {
   materials ProductionMaterial[]
   outputs   ProductionOutput[]
   wastes    ProductionWaste[]
+  sourceLots InventoryLot[] @relation("LotSourceProduction")
 
   @@index([status])
   @@index([productId])
+  @@index([companyId, status])
+  @@index([recipeVersionId])
   @@map("production_orders")
+}
+
+// ============================================================
+// PURCHASE PLANNING — advisory snapshots only; never reserves or moves stock
+// ============================================================
+model PurchasePlan {
+  id          String    @id @default(cuid())
+  companyId   String
+  planNo      String    @unique
+  status      String    @default("DRAFT") // DRAFT | READY | CANCELLED
+  planDate    DateTime
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  note        String?
+  version     Int       @default(1)
+  readyAt     DateTime?
+  cancelledAt DateTime?
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  targets     PurchasePlanTarget[]
+  requirements PurchasePlanRequirement[]
+  purchaseOrders PurchaseOrder[]
+
+  @@index([companyId, status, planDate])
+  @@index([warehouseId])
+  @@map("purchase_plans")
+}
+
+model PurchasePlanTarget {
+  id                String       @id @default(cuid())
+  purchasePlanId    String
+  purchasePlan      PurchasePlan @relation(fields: [purchasePlanId], references: [id], onDelete: Cascade)
+  recipeId          String
+  recipeVersionId   String
+  productId         String
+  recipeCode        String
+  recipeName        String
+  recipeVersionNo   Int
+  productCode       String
+  productName       String
+  plannedQty        Decimal      @db.Decimal(18, 4)
+  yieldMode         String
+  outputUnitCode    String
+
+  @@index([purchasePlanId])
+  @@map("purchase_plan_targets")
+}
+
+model PurchasePlanRequirement {
+  id                   String       @id @default(cuid())
+  purchasePlanId       String
+  purchasePlan         PurchasePlan @relation(fields: [purchasePlanId], references: [id], onDelete: Cascade)
+  itemId               String
+  itemCode             String
+  itemName             String
+  categoryId           String?
+  categoryName         String?
+  requiredQty          Decimal      @db.Decimal(18, 4)
+  onHandQty            Decimal      @db.Decimal(18, 4)
+  reservedQty          Decimal      @db.Decimal(18, 4)
+  availableQty         Decimal      @db.Decimal(18, 4)
+  shortageQty          Decimal      @db.Decimal(18, 4)
+  baseUnitCode         String
+  purchaseUnitCode     String?
+  purchaseToBaseFactor Decimal?     @db.Decimal(18, 6)
+  purchaseQty          Decimal?     @db.Decimal(18, 4)
+  lastBaseUnitPrice    Decimal?     @db.Decimal(18, 4)
+  lastPurchasePrice    Decimal?     @db.Decimal(18, 4)
+  estimatedCost        Decimal?     @db.Decimal(18, 4)
+  latestSupplierId     String?
+  latestSupplierName   String?
+  selectedSupplierId   String?
+  selectedSupplierName String?
+  sources              Json
+  purchaseOrderItems   PurchaseOrderItem[]
+
+  @@unique([purchasePlanId, itemId])
+  @@index([purchasePlanId, shortageQty])
+  @@map("purchase_plan_requirements")
+}
+
+// Procurement commitment snapshot. Confirming a PO never moves stock or changes item cost.
+model PurchaseOrder {
+  id                 String              @id @default(cuid())
+  companyId          String
+  poNo               String              @unique
+  status             PurchaseOrderStatus @default(DRAFT)
+  orderDate          DateTime
+  expectedDeliveryAt DateTime?
+  supplierId         String
+  supplier           Supplier            @relation(fields: [supplierId], references: [id])
+  warehouseId        String
+  warehouse           Warehouse           @relation(fields: [warehouseId], references: [id])
+  purchasePlanId     String?
+  purchasePlan       PurchasePlan?       @relation(fields: [purchasePlanId], references: [id])
+  subtotal           Decimal             @default(0) @db.Decimal(18, 4)
+  discount           Decimal             @default(0) @db.Decimal(18, 4)
+  tax                Decimal             @default(0) @db.Decimal(18, 4)
+  grandTotal         Decimal             @default(0) @db.Decimal(18, 4)
+  note               String?
+  cancellationReason String?
+  confirmedAt        DateTime?
+  cancelledAt        DateTime?
+  version            Int                 @default(1)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  createdById        String?
+  updatedById        String?
+  items              PurchaseOrderItem[]
+  goodsReceipts      GoodsReceipt[]
+
+  @@index([companyId, status, expectedDeliveryAt])
+  @@index([supplierId, status])
+  @@index([purchasePlanId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id                        String                   @id @default(cuid())
+  purchaseOrderId           String
+  purchaseOrder             PurchaseOrder            @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  itemId                    String
+  item                      Item                     @relation(fields: [itemId], references: [id])
+  purchasePlanRequirementId String?
+  purchasePlanRequirement   PurchasePlanRequirement? @relation(fields: [purchasePlanRequirementId], references: [id])
+  itemCode                  String
+  itemName                  String
+  purchaseUnitId            String?
+  purchaseUnitCode          String
+  purchaseToBaseFactor      Decimal                  @db.Decimal(18, 6)
+  orderedQty                Decimal                  @db.Decimal(18, 4)
+  orderedBaseQty            Decimal                  @db.Decimal(18, 4)
+  unitPrice                 Decimal                  @db.Decimal(18, 4)
+  lineSubtotal              Decimal                  @db.Decimal(18, 4)
+  note                      String?
+  goodsReceiptItems         GoodsReceiptItem[]
+
+  @@index([purchaseOrderId])
+  @@index([purchasePlanRequirementId])
+  @@index([itemId])
+  @@map("purchase_order_items")
 }
 
 model ProductionMaterial {
@@ -753,8 +948,12 @@ model ProductionMaterial {
   item              Item            @relation(fields: [itemId], references: [id])
   plannedQty        Decimal         @default(0) @db.Decimal(18, 4)
   actualQty         Decimal         @default(0) @db.Decimal(18, 4)
+  unitCode          String?
+  plannedUnitCost   Decimal         @default(0) @db.Decimal(18, 4)
+  plannedTotalCost  Decimal         @default(0) @db.Decimal(18, 4)
   unitCost          Decimal         @default(0) @db.Decimal(18, 4)
   totalCost         Decimal         @default(0) @db.Decimal(18, 4)
+  lotAllocations    ProductionMaterialLotAllocation[]
 
   @@index([productionOrderId])
   @@map("production_materials")
@@ -767,12 +966,17 @@ model ProductionOutput {
   itemId            String
   item              Item            @relation(fields: [itemId], references: [id])
   quantity          Decimal         @db.Decimal(18, 4)
+  unitCode          String?
   lotNo             String?
+  inventoryLotId    String?
+  inventoryLot      InventoryLot?   @relation(fields: [inventoryLotId], references: [id])
+  manufactureDate   DateTime?
   expiryDate        DateTime?
   unitCost          Decimal         @default(0) @db.Decimal(18, 4)
   createdAt         DateTime        @default(now())
 
   @@index([productionOrderId])
+  @@index([inventoryLotId])
   @@map("production_outputs")
 }
 
@@ -783,7 +987,13 @@ model ProductionWaste {
   itemId            String?
   item              Item?           @relation(fields: [itemId], references: [id])
   quantity          Decimal         @db.Decimal(18, 4)
-  reason            String?
+  unitCode          String?
+  reason            String
+  note              String?
+  unitCost          Decimal?        @db.Decimal(18, 4)
+  totalCost         Decimal?        @db.Decimal(18, 4)
+  recordedById      String?
+  recordedAt        DateTime        @default(now())
   createdAt         DateTime        @default(now())
 
   @@index([productionOrderId])
@@ -806,6 +1016,8 @@ model GoodsReceipt {
   note        String?
   // additive/nullable — เอกสารฝั่งผู้ขายและเวลาเปลี่ยนสถานะ
   supplierDocNo String?
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
   confirmedAt   DateTime?
   reversedAt    DateTime?
 
@@ -815,8 +1027,11 @@ model GoodsReceipt {
 
   items       GoodsReceiptItem[]
   attachments GoodsReceiptAttachment[]
+  extractions GoodsReceiptExtraction[]
+  sourceLots  InventoryLot[] @relation("LotSourceReceipt")
 
   @@index([status])
+  @@index([purchaseOrderId, status])
   @@map("goods_receipts")
 }
 
@@ -838,9 +1053,78 @@ model GoodsReceiptAttachment {
   sizeBytes      Int
   uploadedAt     DateTime     @default(now())
   uploadedById   String?
+  extractions    GoodsReceiptExtraction[]
 
   @@index([goodsReceiptId])
   @@map("goods_receipt_attachments")
+}
+
+/**
+ * PHASE 23 — ผลอ่านเอกสารเป็นชั้นกลางสำหรับให้มนุษย์ตรวจทาน
+ * ห้ามถือเป็นข้อมูลรับเข้าจริงจนกว่าจะ apply ไปยัง GoodsReceipt DRAFT อย่างชัดเจน
+ */
+model GoodsReceiptExtraction {
+  id                     String                 @id @default(cuid())
+  companyId              String
+  goodsReceiptId         String
+  goodsReceipt           GoodsReceipt           @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  attachmentId           String
+  attachment             GoodsReceiptAttachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  version                Int
+  status                 String                 @default("PENDING")
+  quality                String?
+  supplierName           String?
+  supplierTaxId          String?
+  supplierDocumentNo     String?
+  documentDate           DateTime?
+  currency               String?
+  matchedSupplierId      String?
+  matchedSupplier        Supplier?              @relation("ExtractionMatchedSupplier", fields: [matchedSupplierId], references: [id])
+  subtotal               Decimal?               @db.Decimal(18, 4)
+  discount               Decimal?               @db.Decimal(18, 4)
+  vat                    Decimal?               @db.Decimal(18, 4)
+  grandTotal             Decimal?               @db.Decimal(18, 4)
+  warnings               Json?
+  rawText                 String?                @db.LongText
+  failureCode             String?
+  failureMessage          String?
+  sourceReceiptUpdatedAt  DateTime
+  extractedAt             DateTime?
+  appliedAt               DateTime?
+  createdById             String?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  lines                   GoodsReceiptExtractionLine[]
+
+  @@unique([attachmentId, version])
+  @@index([goodsReceiptId, createdAt])
+  @@index([companyId, status])
+  @@map("goods_receipt_extractions")
+}
+
+model GoodsReceiptExtractionLine {
+  id                 String                 @id @default(cuid())
+  extractionId       String
+  extraction         GoodsReceiptExtraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+  position           Int
+  rawDescription     String
+  extractedItemCode  String?
+  quantity           Decimal?               @db.Decimal(18, 4)
+  unitText            String?
+  unitPrice           Decimal?               @db.Decimal(18, 4)
+  lineTotal           Decimal?               @db.Decimal(18, 4)
+  matchedItemId       String?
+  matchedItem         Item?                  @relation("ExtractionMatchedItem", fields: [matchedItemId], references: [id])
+  matchedUnitId       String?
+  matchedUnit         Unit?                  @relation("ExtractionMatchedUnit", fields: [matchedUnitId], references: [id])
+  matchStatus         String                 @default("UNMATCHED")
+  warnings            Json?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@unique([extractionId, position])
+  @@index([matchedItemId])
+  @@map("goods_receipt_extraction_lines")
 }
 
 model GoodsReceiptItem {
@@ -849,10 +1133,16 @@ model GoodsReceiptItem {
   goodsReceipt    GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
   itemId          String
   item            Item         @relation(fields: [itemId], references: [id])
+  purchaseOrderItemId String?
+  purchaseOrderItem   PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id])
   lotNo           String?
+  inventoryLotId  String?
+  inventoryLot    InventoryLot? @relation(fields: [inventoryLotId], references: [id])
   manufactureDate DateTime?
   expiryDate      DateTime?
   quantity        Decimal      @db.Decimal(18, 4)
+  purchaseUnitCode String?
+  purchaseToBaseFactor Decimal? @db.Decimal(18, 6)
   unitPrice       Decimal      @db.Decimal(18, 4)
   discount        Decimal      @default(0) @db.Decimal(18, 4)
   taxAmount       Decimal      @default(0) @db.Decimal(18, 4)
@@ -860,6 +1150,8 @@ model GoodsReceiptItem {
   totalCost       Decimal      @default(0) @db.Decimal(18, 4)
 
   @@index([goodsReceiptId])
+  @@index([purchaseOrderItemId])
+  @@index([inventoryLotId])
   @@map("goods_receipt_items")
 }
 
@@ -893,9 +1185,12 @@ model StockTransferItem {
   itemId          String
   item            Item          @relation(fields: [itemId], references: [id])
   lotNo           String?
+  lotId           String?
+  lot             InventoryLot? @relation(fields: [lotId], references: [id])
   quantity        Decimal       @db.Decimal(18, 4)
 
   @@index([stockTransferId])
+  @@index([lotId])
   @@map("stock_transfer_items")
 }
 
@@ -925,11 +1220,14 @@ model StockAdjustmentItem {
   itemId            String
   item              Item            @relation(fields: [itemId], references: [id])
   lotNo             String?
+  lotId              String?
+  lot                InventoryLot? @relation(fields: [lotId], references: [id])
   systemQty         Decimal         @default(0) @db.Decimal(18, 4)
   countedQty        Decimal         @default(0) @db.Decimal(18, 4)
   diffQty           Decimal         @default(0) @db.Decimal(18, 4)
 
   @@index([stockAdjustmentId])
+  @@index([lotId])
   @@map("stock_adjustment_items")
 }
 
@@ -1070,9 +1368,38 @@ model StockIssueItem {
   unit         String
   baseQty      Decimal    @db.Decimal(18, 4)
   note         String?
+  lotAllocations StockIssueLotAllocation[]
 
   @@index([stockIssueId])
   @@map("stock_issue_items")
+}
+
+model StockIssueLotAllocation {
+  id               String         @id @default(cuid())
+  stockIssueItemId String
+  stockIssueItem   StockIssueItem @relation(fields: [stockIssueItemId], references: [id], onDelete: Cascade)
+  lotId            String
+  lot              InventoryLot   @relation(fields: [lotId], references: [id])
+  quantity         Decimal        @db.Decimal(18, 4)
+  createdAt        DateTime       @default(now())
+
+  @@unique([stockIssueItemId, lotId], map: "issue_lot_alloc_unique")
+  @@index([lotId])
+  @@map("stock_issue_lot_allocations")
+}
+
+model ProductionMaterialLotAllocation {
+  id                   String             @id @default(cuid())
+  productionMaterialId String
+  productionMaterial   ProductionMaterial @relation(fields: [productionMaterialId], references: [id], onDelete: Cascade)
+  lotId                String             
+  lot                  InventoryLot       @relation(fields: [lotId], references: [id])
+  quantity             Decimal            @db.Decimal(18, 4)
+  createdAt            DateTime           @default(now())
+
+  @@unique([productionMaterialId, lotId], map: "prod_mat_lot_alloc_unique")
+  @@index([lotId])
+  @@map("production_material_lot_allocations")
 }
 
 model Notification {
@@ -1107,6 +1434,61 @@ model NotificationPreference {
 
   @@unique([companyId, userId, channel, eventType])
   @@map("notification_preferences")
+}
+
+model InventoryValuationSnapshot {
+  id                      String   @id @default(cuid())
+  companyId               String
+  snapshotAt              DateTime @default(now())
+  businessDate            DateTime @db.Date
+  source                  String
+  knownInventoryValue     Decimal  @db.Decimal(20, 4)
+  knownBalanceCount       Int
+  unknownCostBalanceCount Int
+  negativeStockCount      Int
+  valuationCompleteness   Decimal  @db.Decimal(9, 4)
+  createdAt               DateTime @default(now())
+  createdById             String?
+  lines                   InventoryValuationSnapshotLine[]
+
+  @@unique([companyId, businessDate], map: "valuation_snapshot_company_date")
+  @@index([companyId, snapshotAt])
+  @@map("inventory_valuation_snapshots")
+}
+
+model InventoryValuationSnapshotLine {
+  id                 String                     @id @default(cuid())
+  snapshotId         String
+  snapshot           InventoryValuationSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  itemId             String
+  itemCode           String
+  itemName           String
+  warehouseId        String
+  warehouseCode      String
+  warehouseName      String
+  lotId              String?
+  lotNo              String?
+  locationId         String?
+  onHand             Decimal                    @db.Decimal(18, 4)
+  reserved           Decimal                    @db.Decimal(18, 4)
+  baseUnitId         String
+  baseUnitCode       String
+  recognizedUnitCost Decimal?                   @db.Decimal(18, 6)
+  costStatus         String
+  estimatedValue     Decimal?                   @db.Decimal(20, 4)
+  costSource         String
+  itemType           String
+  categoryId         String?
+  categoryName       String?
+  expiryDate         DateTime?
+  expiryStatus       String?
+  daysRemaining      Int?
+  createdAt          DateTime                   @default(now())
+
+  @@index([snapshotId, warehouseId])
+  @@index([snapshotId, itemType])
+  @@index([snapshotId, itemId])
+  @@map("inventory_valuation_snapshot_lines")
 }
 
 // ============================================================

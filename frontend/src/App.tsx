@@ -21,6 +21,24 @@ const StockAdjustmentPage = lazy(() => import('@/pages/InventoryPages').then((m)
 const ReceivingDetailPage = lazy(() => import('@/pages/OperationDetailPages').then((m) => ({ default: m.ReceivingDetailPage })));
 const StockIssueDetailPage = lazy(() => import('@/pages/OperationDetailPages').then((m) => ({ default: m.StockIssueDetailPage })));
 const StockTransferDetailPage = lazy(() => import('@/pages/StockTransferPages').then((m) => ({ default: m.StockTransferDetailPage })));
+const ProductionListPage = lazy(() => import('@/pages/ProductionPages').then((m) => ({ default: m.ProductionListPage })));
+const ProductionWorkspacePage = lazy(() => import('@/pages/ProductionPages').then((m) => ({ default: m.ProductionWorkspacePage })));
+const ProductionDetailPage = lazy(() => import('@/pages/ProductionPages').then((m) => ({ default: m.ProductionDetailPage })));
+const PurchasePlanningListPage = lazy(() => import('@/pages/PurchasePlanningPages').then((m) => ({ default: m.PurchasePlanningListPage })));
+const PurchasePlanningWorkspacePage = lazy(() => import('@/pages/PurchasePlanningPages').then((m) => ({ default: m.PurchasePlanningWorkspacePage })));
+const PurchaseOrderListPage = lazy(() => import('@/pages/PurchaseOrderPages').then((m) => ({ default: m.PurchaseOrderListPage })));
+const PurchaseOrderWorkspacePage = lazy(() => import('@/pages/PurchaseOrderPages').then((m) => ({ default: m.PurchaseOrderWorkspacePage })));
+const PurchaseOrderDetailPage = lazy(() => import('@/pages/PurchaseOrderPages').then((m) => ({ default: m.PurchaseOrderDetailPage })));
+const PurchasePlanOrderBridge = lazy(() => import('@/pages/PurchaseOrderPages').then((m) => ({ default: m.PurchasePlanOrderBridge })));
+const SupplierAnalyticsPage = lazy(() => import('@/pages/AnalyticsPages').then((m) => ({ default: m.SupplierAnalyticsPage })));
+const SupplierAnalyticsDetailPage = lazy(() => import('@/pages/AnalyticsPages').then((m) => ({ default: m.SupplierAnalyticsDetailPage })));
+const InventoryValuationPage = lazy(() => import('@/pages/InventoryValuationPage'));
+const InventoryLotsPage = lazy(() => import('@/pages/InventoryLotsPage'));
+const InventoryLotDetailPage = lazy(() => import('@/pages/InventoryLotsPage').then((m) => ({ default: m.InventoryLotDetailPage })));
+const InventoryValuationHistoryPage=lazy(()=>import('@/pages/InventoryValuationHistoryPage'));
+const InventoryValuationSnapshotDetailPage=lazy(()=>import('@/pages/InventoryValuationHistoryPage').then(m=>({default:m.InventoryValuationSnapshotDetailPage})));
+const CostVariancePage=lazy(()=>import('@/pages/CostVariancePage'));
+const ProfitSimulatorPage=lazy(()=>import('@/pages/ProfitSimulatorPage'));
 import FoodCostingPage from '@/pages/catalog/FoodCostingPage';
 import MenuPage from '@/pages/catalog/MenuPage';
 const RecipeBuilderPage = lazy(() => import('@/pages/catalog/RecipeBuilderPage'));
@@ -53,7 +71,7 @@ import { useI18n } from '@/i18n/i18n';
 
 /** เมนูที่ยังไม่มีระบบจริง — เปิด Placeholder page ที่ออกแบบไว้ */
 const PLACEHOLDER_PATHS = [
-  '/production', '/transfers', '/stock-count',
+  '/transfers', '/stock-count',
   '/reports',
 ];
 
@@ -93,7 +111,24 @@ export default function App() {
           <Route path="/stock-transfers/new" element={<StockTransferPage />} />
           <Route path="/stock-transfers/:id/edit" element={<StockTransferPage />} />
           <Route path="/stock-transfers/:id" element={<StockTransferDetailPage />} />
+          <Route path="/production" element={<ProductionListPage />} />
+          <Route path="/production/new" element={<ProductionWorkspacePage />} />
+          <Route path="/production/:id/edit" element={<ProductionWorkspacePage />} />
+          <Route path="/production/:id" element={<ProductionDetailPage />} />
+          <Route path="/purchase-planning" element={<PurchasePlanningListPage />} />
+          <Route path="/purchase-planning/new" element={<PurchasePlanningWorkspacePage />} />
+          <Route path="/purchase-planning/:id/edit" element={<PurchasePlanningWorkspacePage />} />
+          <Route path="/purchase-planning/:id" element={<PurchasePlanOrderBridge />} />
+          <Route path="/purchase-orders" element={<PurchaseOrderListPage />} />
+          <Route path="/purchase-orders/new" element={<PurchaseOrderWorkspacePage />} />
+          <Route path="/purchase-orders/:id/edit" element={<PurchaseOrderWorkspacePage />} />
+          <Route path="/purchase-orders/:id" element={<PurchaseOrderDetailPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/inventory/valuation" element={<InventoryValuationPage />} />
+          <Route path="/inventory/valuation/history" element={<InventoryValuationHistoryPage />} />
+          <Route path="/inventory/valuation/history/:id" element={<InventoryValuationSnapshotDetailPage />} />
+          <Route path="/inventory/lots" element={<InventoryLotsPage />} />
+          <Route path="/inventory/lots/:id" element={<InventoryLotDetailPage />} />
           <Route path="/inventory/movements" element={<MovementHistoryPage />} />
           <Route path="/inventory/adjustments" element={<StockAdjustmentPage />} />
           <Route path="/settings" element={<CompanySettingsPage />} />
@@ -128,6 +163,10 @@ export default function App() {
           <Route path="/categories" element={<CatalogMastersPage section="categories" />} />
           {/* ข้อมูลตั้งต้นคู่ค้า/คลัง (Phase 7) */}
           <Route path="/suppliers" element={<PartnerMastersPage section="suppliers" />} />
+          <Route path="/supplier-analytics" element={<SupplierAnalyticsPage />} />
+          <Route path="/supplier-analytics/:id" element={<SupplierAnalyticsDetailPage />} />
+          <Route path="/analytics/cost-variance" element={<CostVariancePage />} />
+          <Route path="/analytics/profit-simulator" element={<ProfitSimulatorPage />} />
           <Route path="/warehouses" element={<PartnerMastersPage section="warehouses" />} />
           <Route path="/menus" element={<FoodCostingPage section="menus" />} />
           <Route path="/menus/new" element={<MenuPage mode="form" />} />

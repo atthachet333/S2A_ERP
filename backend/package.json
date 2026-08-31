@@ -28,6 +28,13 @@
     "prisma:studio": "prisma studio",
     "test:integration": "vitest run --config vitest.config.ts",
     "test:all": "npm run test:unit && npm run test:integration"
+    ,"snapshot:inventory": "node --import tsx scripts/snapshot-inventory.mjs",
+    "audit:inventory": "node scripts/audit-system.mjs --target=production",
+    "audit:test": "node scripts/audit-system.mjs --target=test",
+    "db:test:status": "node scripts/db-safety.mjs --target=test --action=status",
+    "db:test:migrate": "node scripts/db-safety.mjs --target=test --action=migrate",
+    "db:prod:status": "node scripts/db-safety.mjs --target=production --action=status",
+    "db:prod:migrate": "node scripts/db-safety.mjs --target=production --action=migrate"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
@@ -40,6 +47,7 @@
     "exceljs": "^4.4.0",
     "fastify": "^5.1.0",
     "fastify-plugin": "^5.0.1",
+    "pdfjs-dist": "^5.7.284",
     "pdfkit": "^0.19.1",
     "pino": "^9.5.0",
     "zod": "^3.24.1"

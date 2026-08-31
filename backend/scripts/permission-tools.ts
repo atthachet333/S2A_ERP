@@ -18,7 +18,7 @@ import { PERMISSION_DEFINITIONS, bootstrapGrantsFor } from '../prisma/permission
 
 dotenv.config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
 
-const EXPECTED_DATABASE = 's2a_erp';
+const EXPECTED_DATABASE = 's2a_erp_main';
 
 function databaseNameFromUrl(url: string | undefined): string {
   if (!url) throw new Error('ไม่พบ DATABASE_URL ใน .env');

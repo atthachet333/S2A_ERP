@@ -1,0 +1,1 @@
+This controlled fixture intentionally contains no invoice table or useful fields.

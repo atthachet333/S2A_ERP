@@ -13,6 +13,8 @@ import ExcelJS from 'exceljs';
 import { notificationChannels } from '../notifications/channel.service.js';
 import { renderBusinessPdf, type BusinessDocument, type DocumentType } from './document.service.js';
 import { toDocumentCompany } from './company-identity.js';
+import { recomputePurchaseOrderStatus, validateReceiptOverage } from '../purchase-orders/purchase-order.service.js';
+import { assertLotPolicy, ensureInventoryLot, LotPolicyError, validateLotAllocations } from '../../lib/inventory-lot.js';
 
 /** ระดับราคาที่ยอมรับ — ชุดเดียวกับที่ costing.route.ts ใช้กับ SellingPrice.priceType
     ไม่มี enum ใน schema จึงบังคับที่ชั้น route แบบเดียวกับของเดิม */
@@ -125,6 +127,9 @@ async function expandRecipeDemand(
 
 /** แปลง error ของใบเบิกให้เป็น response ที่อ่านรู้เรื่อง (คงพฤติกรรม insufficient stock เดิม) */
 function issueErrorReply(reply: import('fastify').FastifyReply, error: unknown) {
+  if (error instanceof LotPolicyError) {
+    return reply.status(409).send(fail(error.code, error.message, error.details));
+  }
   if (error instanceof InsufficientStockError) {
     return reply.status(409).send(fail('INSUFFICIENT_STOCK', error.message));
   }
@@ -207,14 +212,24 @@ async function confirmReceiptWithin(tx: Prisma.TransactionClient, receiptId: str
   await lockBalancesInOrder(tx, doc.warehouseId, doc.items.map((line) => line.itemId));
 
   for (const line of doc.items) {
-    const factor = num(line.item.purchaseToBaseFactor);
+    // PO-linked receipts keep the confirmed purchase-unit factor snapshot; legacy receipts fall back to the item master.
+    const factor = line.purchaseToBaseFactor == null ? num(line.item.purchaseToBaseFactor) : num(line.purchaseToBaseFactor);
     const unitPrice = num(line.unitPrice);
     // ปริมาณที่รับระบุเป็นหน่วยซื้อ → แปลงเป็นหน่วยฐานก่อนเข้าสต็อก
     const baseQty = num(line.quantity) * (factor > 0 ? factor : 1);
     const baseCost = receiptBaseUnitCost(unitPrice, factor);
+    if (!line.item.isLotTracked && (line.lotNo || line.manufactureDate || line.expiryDate)) throw new LotPolicyError('LOT_TRACKING_NOT_ENABLED', 'ต้องเปิดการติดตาม Lot ที่ข้อมูลสินค้าก่อนระบุ Lot ในใบรับของ');
+    const lotNo = assertLotPolicy(line.item, line.lotNo, line.manufactureDate, line.expiryDate);
+    const lot = lotNo ? await ensureInventoryLot(tx, {
+      companyId, itemId: line.itemId, warehouseId: doc.warehouseId, lotNo,
+      manufactureDate: line.manufactureDate, expiryDate: line.expiryDate,
+      receivedDate: doc.receiptDate, sourceType: 'GOODS_RECEIPT', sourceReceiptId: doc.id, createdById: userId,
+    }) : null;
+    if (lot) await tx.goodsReceiptItem.update({ where: { id: line.id }, data: { inventoryLotId: lot.id } });
 
     await applyMovement(tx, {
       companyId, warehouseId: doc.warehouseId, itemId: line.itemId,
+      lotId: lot?.id,
       movementType: 'PURCHASE_RECEIPT', changeQty: baseQty,
       // PHASE 13B — เดิมเขียน baseUnitId (cuid) ลงคอลัมน์ unit ของบัญชีเดินสต็อก
       unit: line.item.baseUnit?.code ?? null,
@@ -237,6 +252,7 @@ async function confirmReceiptWithin(tx: Prisma.TransactionClient, receiptId: str
 /** แปลง error ของใบรับของให้เป็น response ที่อ่านรู้เรื่อง */
 function receivingErrorReply(reply: import('fastify').FastifyReply, error: unknown) {
   if (error instanceof InsufficientStockError) return reply.status(409).send(fail('INSUFFICIENT_STOCK', error.message));
+  if (error instanceof LotPolicyError) return reply.status(409).send(fail(error.code, error.message, error.details));
   const message = error instanceof Error ? error.message : 'RECEIVING_FAILED';
   const map: Record<string, [number, string]> = {
     WAREHOUSE_NOT_FOUND: [404, 'ไม่พบคลังในบริษัทปัจจุบัน'],
@@ -247,9 +263,16 @@ function receivingErrorReply(reply: import('fastify').FastifyReply, error: unkno
     ALREADY_REVERSED: [409, 'ใบรับของนี้ถูกกลับรายการแล้ว'],
     ALREADY_CANCELLED: [409, 'ใบรับของนี้ถูกยกเลิกแล้ว'],
     ADJUSTMENT_NOT_FOUND: [404, 'ไม่พบรายการปรับปรุงสต็อกนี้'],
+    PURCHASE_ORDER_NOT_FOUND: [404, 'ไม่พบใบสั่งซื้อในบริษัทปัจจุบัน'],
+    PURCHASE_ORDER_NOT_RECEIVABLE: [409, 'ใบสั่งซื้อนี้ไม่อยู่ในสถานะที่รับของได้'],
+    PURCHASE_ORDER_MISMATCH: [400, 'ผู้ขาย คลัง หรือรายการรับของไม่ตรงกับใบสั่งซื้อ'],
   };
   const hit = map[message];
   if (hit) return reply.status(hit[0]).send(fail(message, hit[1]));
+  if (message.startsWith('OVER_RECEIVE_ACK_REQUIRED:')) {
+    const details = JSON.parse(message.slice('OVER_RECEIVE_ACK_REQUIRED:'.length)) as unknown;
+    return reply.status(409).send(fail('OVER_RECEIVE_ACK_REQUIRED', 'ปริมาณรับเกินใบสั่งซื้อ ต้องยืนยันการรับเกินอย่างชัดเจน', details));
+  }
   if (message.startsWith('FORBIDDEN_CONFIRM:')) return reply.status(403).send(fail('FORBIDDEN', `ต้องมีสิทธิ์ ${message.split(':')[1]} จึงจะยืนยันเอกสารได้`));
   throw error;
 }
@@ -405,12 +428,12 @@ export default async function businessRoutes(app: FastifyInstance) {
     return reply.header('Content-Type','application/pdf').header('Content-Disposition',contentDisposition('inline', fileName)).send(pdf);
   });
 
-  app.get('/operations/lookups', { preHandler: requirePermission('RECEIVING_CREATE', 'STOCK_ISSUE_CREATE', 'ORDER_VIEW') }, async (req) => {
+  app.get('/operations/lookups', { preHandler: requirePermission('RECEIVING_CREATE', 'INVENTORY_ADJUST', 'STOCK_ISSUE_CREATE', 'ORDER_VIEW') }, async (req) => {
     const companyId = req.user.companyId!;
     const [warehouses, suppliers, items, orders] = await Promise.all([
       prisma.warehouse.findMany({ where: { companyId, isActive: true, deletedAt: null }, select: { id: true, code: true, name: true }, orderBy: { name: 'asc' } }),
       prisma.supplier.findMany({ where: { companyId, isActive: true, deletedAt: null }, select: { id: true, code: true, name: true }, orderBy: { name: 'asc' } }),
-      prisma.item.findMany({ where: { companyId, isActive: true, deletedAt: null }, select: { id: true, code: true, name: true, type: true, imageUrl: true, lastCost: true, purchaseToBaseFactor: true, baseUnit: { select: { code: true, name: true } }, purchaseUnit: { select: { code: true, name: true } }, stockBalances: { select: { warehouseId: true, onHand: true, reserved: true } } }, orderBy: { name: 'asc' } }),
+      prisma.item.findMany({ where: { companyId, isActive: true, deletedAt: null }, select: { id: true, code: true, name: true, type: true, imageUrl: true, lastCost: true, purchaseToBaseFactor: true, isLotTracked: true, isExpiryTracked: true, baseUnit: { select: { code: true, name: true } }, purchaseUnit: { select: { code: true, name: true } }, stockBalances: { select: { warehouseId: true, onHand: true, reserved: true } } }, orderBy: { name: 'asc' } }),
       prisma.salesOrder.findMany({ where: { companyId, status: { in: ['CONFIRMED', 'SENT_TO_PREP', 'PICKING'] } }, select: { id: true, orderNo: true, deliveryDate: true, deliveryTime: true, status: true, customer: { select: { name: true } }, items: { select: { menuNameSnapshot: true, quantity: true } } }, orderBy: { deliveryDate: 'asc' }, take: 100 }),
     ]);
     return ok({ warehouses, suppliers, items, orders });
@@ -667,24 +690,24 @@ export default async function businessRoutes(app: FastifyInstance) {
     const rows = await prisma.goodsReceipt.findMany({
       where: receivingWhere(req.user.companyId!, q),
       orderBy: { receiptDate: 'desc' },
-      include: { supplier: true, warehouse: true, items: { include: { item: true } } },
+      include: { supplier: true, warehouse: true, purchaseOrder: { select: { id: true, poNo: true, status: true } }, items: { include: { item: true, purchaseOrderItem: true } } },
     });
     return ok(rows);
   });
 
   app.get('/receiving/:id', { preHandler: requirePermission('RECEIVING_VIEW', 'RECEIVING_CREATE') }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const receipt = await prisma.goodsReceipt.findFirst({ where: { id, companyId: req.user.companyId! }, include: { supplier: true, warehouse: true, items: { include: { item: { include: { baseUnit: true, purchaseUnit: true } } } } } });
+    const receipt = await prisma.goodsReceipt.findFirst({ where: { id, companyId: req.user.companyId! }, include: { supplier: true, warehouse: true, purchaseOrder: { select: { id: true, poNo: true, status: true } }, items: { include: { item: { include: { baseUnit: true, purchaseUnit: true } }, purchaseOrderItem: true } } } });
     return receipt ? ok(receipt) : reply.status(404).send(fail('RECEIPT_NOT_FOUND', 'ไม่พบรายการรับของในบริษัทปัจจุบัน'));
   });
 
   app.get('/stock-issues', { preHandler: requirePermission('STOCK_ISSUE_VIEW', 'STOCK_ISSUE_CREATE') }, async (req) => ok(await prisma.stockIssue.findMany({
-    where: { companyId: req.user.companyId! }, include: { order: { select: { orderNo: true, customer: { select: { name: true } } } }, createdBy: { select: { fullName: true } }, items: true }, orderBy: [{ issueDate: 'desc' }, { createdAt: 'desc' }], take: 200,
+    where: { companyId: req.user.companyId! }, include: { order: { select: { orderNo: true, customer: { select: { name: true } } } }, createdBy: { select: { fullName: true } }, items: { include: { lotAllocations: true } } }, orderBy: [{ issueDate: 'desc' }, { createdAt: 'desc' }], take: 200,
   })));
 
   app.get('/stock-issues/:id', { preHandler: requirePermission('STOCK_ISSUE_VIEW', 'STOCK_ISSUE_CREATE') }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const issue = await prisma.stockIssue.findFirst({ where: { id, companyId: req.user.companyId! }, include: { order: { include: { customer: true } }, createdBy: { select: { fullName: true } }, items: true } });
+    const issue = await prisma.stockIssue.findFirst({ where: { id, companyId: req.user.companyId! }, include: { order: { include: { customer: true } }, createdBy: { select: { fullName: true } }, items: { include: { lotAllocations: { include: { lot: true } } } } } });
     if (!issue) return reply.status(404).send(fail('STOCK_ISSUE_NOT_FOUND', 'ไม่พบรายการเบิกของในบริษัทปัจจุบัน'));
     // เติมชื่อสินค้า/คลัง ให้หน้ารายละเอียดแสดงได้ครบโดยไม่ต้องยิงหลายรอบ
     const [warehouse, itemRows] = await Promise.all([
@@ -989,15 +1012,19 @@ export default async function businessRoutes(app: FastifyInstance) {
     const body = z.object({
       warehouseId: z.string().min(1),
       supplierId: z.string().optional(),
+      purchaseOrderId: z.string().optional(),
       supplierDocNo: z.string().max(60).optional(),
       receiptDate: z.coerce.date().default(() => new Date()),
       note: z.string().max(500).optional(),
       confirm: z.boolean().default(false),
+      overReceiveAcknowledged: z.boolean().default(false),
       items: z.array(z.object({
         itemId: z.string().min(1),
+        purchaseOrderItemId: z.string().optional(),
         quantity: z.coerce.number().positive(),
         unitPrice: z.coerce.number().min(0),
         lotNo: z.string().optional(),
+        manufactureDate: z.coerce.date().optional(),
         expiryDate: z.coerce.date().optional(),
       })).min(1),
     }).parse(req.body);
@@ -1012,21 +1039,32 @@ export default async function businessRoutes(app: FastifyInstance) {
         if (!warehouse) throw new Error('WAREHOUSE_NOT_FOUND');
 
         const itemIds = [...new Set(body.items.map((l) => l.itemId))];
-        const items = await tx.item.findMany({ where: { id: { in: itemIds }, companyId, deletedAt: null } });
+        const items = await tx.item.findMany({ where: { id: { in: itemIds }, companyId, deletedAt: null }, include: { baseUnit: true, purchaseUnit: true } });
         if (items.length !== itemIds.length) throw new Error('ITEM_NOT_IN_COMPANY');
+        const itemOf = new Map(items.map((item) => [item.id, item]));
+        const po = body.purchaseOrderId ? await tx.purchaseOrder.findFirst({ where: { id: body.purchaseOrderId, companyId }, include: { items: true } }) : null;
+        if (body.purchaseOrderId && !po) throw new Error('PURCHASE_ORDER_NOT_FOUND');
+        if (po && (!['CONFIRMED','PARTIALLY_RECEIVED'].includes(po.status) || po.supplierId !== body.supplierId || po.warehouseId !== body.warehouseId)) throw new Error('PURCHASE_ORDER_MISMATCH');
+        const poLineOf = new Map(po?.items.map((line) => [line.id, line]) ?? []);
+        const savedLines = body.items.map((line) => {
+          const item = itemOf.get(line.itemId)!; const poLine = line.purchaseOrderItemId ? poLineOf.get(line.purchaseOrderItemId) : null;
+          if (po && (!poLine || poLine.itemId !== line.itemId)) throw new Error('PURCHASE_ORDER_MISMATCH');
+          return { ...line, purchaseOrderItemId: poLine?.id ?? null, purchaseUnitCode: poLine?.purchaseUnitCode ?? item.purchaseUnit?.code ?? item.baseUnit.code, purchaseToBaseFactor: poLine?.purchaseToBaseFactor ?? item.purchaseToBaseFactor, totalCost: new Prisma.Decimal(line.quantity).mul(line.unitPrice) };
+        });
         const created = await tx.goodsReceipt.create({
           data: {
             companyId, receiptNo, warehouseId: body.warehouseId, supplierId: body.supplierId,
+            purchaseOrderId: body.purchaseOrderId ?? null,
             supplierDocNo: body.supplierDocNo, receiptDate: body.receiptDate, note: body.note,
             status: body.confirm ? 'CONFIRMED' : 'DRAFT',
             confirmedAt: body.confirm ? new Date() : null,
             createdById: req.user.sub,
-            items: { create: body.items.map((l) => ({ ...l, totalCost: new Prisma.Decimal(l.quantity).mul(l.unitPrice) })) },
+            items: { create: savedLines },
           },
           include: { items: true },
         });
 
-        if (body.confirm) { assertCanConfirm(req, 'RECEIVING_CONFIRM'); await confirmReceiptWithin(tx, created.id, companyId, req.user.sub); }
+        if (body.confirm) { assertCanConfirm(req, 'RECEIVING_CONFIRM'); await validateReceiptOverage(tx, created.id, body.overReceiveAcknowledged); await confirmReceiptWithin(tx, created.id, companyId, req.user.sub); if (created.purchaseOrderId) await recomputePurchaseOrderStatus(tx, created.purchaseOrderId); }
 
         await tx.auditLog.create({ data: { userId: req.user.sub, companyId, action: body.confirm ? 'GOODS_RECEIPT_CONFIRMED' : 'GOODS_RECEIPT_CREATED', entity: 'GoodsReceipt', entityId: created.id, after: { receiptNo: created.receiptNo, warehouseId: body.warehouseId, supplierId: body.supplierId ?? null, status: body.confirm ? 'CONFIRMED' : 'DRAFT' } } });
         return created;
@@ -1046,14 +1084,17 @@ export default async function businessRoutes(app: FastifyInstance) {
     const body = z.object({
       warehouseId: z.string().min(1),
       supplierId: z.string().optional().nullable(),
+      purchaseOrderId: z.string().optional().nullable(),
       supplierDocNo: z.string().max(60).optional().nullable(),
       receiptDate: z.coerce.date().optional(),
       note: z.string().max(500).optional().nullable(),
       items: z.array(z.object({
         itemId: z.string().min(1),
+        purchaseOrderItemId: z.string().optional().nullable(),
         quantity: z.coerce.number().positive(),
         unitPrice: z.coerce.number().min(0),
         lotNo: z.string().optional(),
+        manufactureDate: z.coerce.date().optional(),
         expiryDate: z.coerce.date().optional(),
       })).min(1),
     }).parse(req.body);
@@ -1068,8 +1109,14 @@ export default async function businessRoutes(app: FastifyInstance) {
         const warehouse = await tx.warehouse.findFirst({ where: { id: body.warehouseId, companyId } });
         if (!warehouse) throw new Error('WAREHOUSE_NOT_FOUND');
         const itemIds = [...new Set(body.items.map((l) => l.itemId))];
-        const found = await tx.item.count({ where: { id: { in: itemIds }, companyId, deletedAt: null } });
-        if (found !== itemIds.length) throw new Error('ITEM_NOT_IN_COMPANY');
+        const found = await tx.item.findMany({ where: { id: { in: itemIds }, companyId, deletedAt: null }, include: { baseUnit: true, purchaseUnit: true } });
+        if (found.length !== itemIds.length) throw new Error('ITEM_NOT_IN_COMPANY');
+        const itemOf = new Map(found.map((item) => [item.id, item]));
+        const po = body.purchaseOrderId ? await tx.purchaseOrder.findFirst({ where: { id: body.purchaseOrderId, companyId }, include: { items: true } }) : null;
+        if (body.purchaseOrderId && !po) throw new Error('PURCHASE_ORDER_NOT_FOUND');
+        if (po && (!['CONFIRMED','PARTIALLY_RECEIVED'].includes(po.status) || po.supplierId !== body.supplierId || po.warehouseId !== body.warehouseId)) throw new Error('PURCHASE_ORDER_MISMATCH');
+        const poLineOf = new Map(po?.items.map((line) => [line.id, line]) ?? []);
+        const savedLines = body.items.map((line) => { const item = itemOf.get(line.itemId)!; const poLine = line.purchaseOrderItemId ? poLineOf.get(line.purchaseOrderItemId) : null; if (po && (!poLine || poLine.itemId !== line.itemId)) throw new Error('PURCHASE_ORDER_MISMATCH'); return { ...line, purchaseOrderItemId: poLine?.id ?? null, purchaseUnitCode: poLine?.purchaseUnitCode ?? item.purchaseUnit?.code ?? item.baseUnit.code, purchaseToBaseFactor: poLine?.purchaseToBaseFactor ?? item.purchaseToBaseFactor, totalCost: new Prisma.Decimal(line.quantity).mul(line.unitPrice) }; });
 
         // แทนที่บรรทัดทั้งชุด (ร่างยังไม่มี ledger จึงไม่กระทบสต็อก) · receiptNo คงเดิมเสมอ
         await tx.goodsReceiptItem.deleteMany({ where: { goodsReceiptId: doc.id } });
@@ -1078,10 +1125,11 @@ export default async function businessRoutes(app: FastifyInstance) {
           data: {
             warehouseId: body.warehouseId,
             supplierId: body.supplierId ?? null,
+            purchaseOrderId: body.purchaseOrderId ?? null,
             supplierDocNo: body.supplierDocNo ?? null,
             ...(body.receiptDate ? { receiptDate: body.receiptDate } : {}),
             note: body.note ?? null,
-            items: { create: body.items.map((l) => ({ ...l, totalCost: new Prisma.Decimal(l.quantity).mul(l.unitPrice) })) },
+            items: { create: savedLines },
           },
           include: { items: true },
         });
@@ -1110,6 +1158,7 @@ export default async function businessRoutes(app: FastifyInstance) {
         unit: z.string().min(1),
         baseQty: z.coerce.number().positive(),
         note: z.string().optional(),
+        allocations: z.array(z.object({ lotId: z.string().min(1), quantity: z.coerce.number().positive() })).default([]),
       })).min(1),
     }).parse(req.body);
     const companyId = req.user.companyId!;
@@ -1133,9 +1182,9 @@ export default async function businessRoutes(app: FastifyInstance) {
             warehouseId: body.warehouseId,
             orderId: body.orderId ?? null,
             note: body.note ?? null,
-            items: { create: body.items },
+            items: { create: body.items.map(({ allocations, ...line }) => ({ ...line, lotAllocations: { create: allocations } })) },
           },
-          include: { items: true },
+          include: { items: { include: { lotAllocations: true } } },
         });
         await tx.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'STOCK_ISSUE_UPDATED', entity: 'StockIssue', entityId: doc.id, after: { issueNo: doc.issueNo, lines: body.items.length } } });
         return saved;
@@ -1149,14 +1198,17 @@ export default async function businessRoutes(app: FastifyInstance) {
   /** ยืนยันใบรับของที่เป็นร่าง เพิ่มสต็อกจริง + อัปเดตต้นทุน (กันยืนยันซ้ำด้วยการตรวจสถานะ) */
   app.post('/receiving/:id/confirm', { preHandler: requirePermission('RECEIVING_CONFIRM') }, async (req, reply) => {
     const { id } = req.params as { id: string };
+    const { overReceiveAcknowledged } = z.object({ overReceiveAcknowledged: z.boolean().default(false) }).parse(req.body ?? {});
     const companyId = req.user.companyId!;
     try {
       const receipt = await stockTransaction(async (tx) => {
         const doc = await tx.goodsReceipt.findFirst({ where: { id, companyId } });
         if (!doc) throw new Error('RECEIPT_NOT_FOUND');
         if (doc.status !== 'DRAFT') throw new Error(`ALREADY_${doc.status}`);
+        await validateReceiptOverage(tx, doc.id, overReceiveAcknowledged);
         await confirmReceiptWithin(tx, doc.id, companyId, req.user.sub);
         const updated = await tx.goodsReceipt.update({ where: { id: doc.id }, data: { status: 'CONFIRMED', confirmedAt: new Date() }, include: { items: true } });
+        if (doc.purchaseOrderId) await recomputePurchaseOrderStatus(tx, doc.purchaseOrderId);
         await tx.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'GOODS_RECEIPT_CONFIRMED', entity: 'GoodsReceipt', entityId: doc.id, after: { receiptNo: doc.receiptNo, warehouseId: doc.warehouseId } } });
         return updated;
       });
@@ -1181,6 +1233,7 @@ export default async function businessRoutes(app: FastifyInstance) {
         const restored = await reverseDocument(tx, 'GOODS_RECEIPT', doc.id, req.user.sub);
         if (restored === 0) throw new Error('ALREADY_REVERSED');
         const updated = await tx.goodsReceipt.update({ where: { id: doc.id }, data: { status: 'REVERSED', reversedAt: new Date() } });
+        if (doc.purchaseOrderId) await recomputePurchaseOrderStatus(tx, doc.purchaseOrderId);
         await tx.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'GOODS_RECEIPT_REVERSED', entity: 'GoodsReceipt', entityId: doc.id, after: { receiptNo: doc.receiptNo, restoredLines: restored, reason: body.reason ?? null } } });
         return updated;
       });
@@ -1312,12 +1365,13 @@ export default async function businessRoutes(app: FastifyInstance) {
         unit: z.string().min(1),
         baseQty: z.coerce.number().positive(),
         note: z.string().optional(),
+        allocations: z.array(z.object({ lotId: z.string().min(1), quantity: z.coerce.number().positive() })).default([]),
       })).min(1),
     }).parse(req.body);
     const companyId = req.user.companyId!;
 
     // idempotency: ยิงซ้ำหรือ refresh ต้องได้เอกสารเดิม ไม่สร้างใหม่และไม่ตัดสต็อกซ้ำ
-    const existing = await prisma.stockIssue.findFirst({ where: { companyId, idempotencyKey: body.idempotencyKey }, include: { items: true } });
+    const existing = await prisma.stockIssue.findFirst({ where: { companyId, idempotencyKey: body.idempotencyKey }, include: { items: { include: { lotAllocations: true } } } });
     if (existing) return ok(existing);
 
     try {
@@ -1330,7 +1384,7 @@ export default async function businessRoutes(app: FastifyInstance) {
         if (body.orderId && !await tx.salesOrder.findFirst({ where: { id: body.orderId, companyId } })) throw new Error('ORDER_NOT_FOUND');
 
         const itemIds = [...new Set(body.items.map((l) => l.itemId))];
-        const items = await tx.item.findMany({ where: { id: { in: itemIds }, companyId, deletedAt: null }, select: { id: true, lastCost: true } });
+        const items = await tx.item.findMany({ where: { id: { in: itemIds }, companyId, deletedAt: null }, select: { id: true, lastCost: true, isLotTracked: true } });
         if (items.length !== itemIds.length) throw new Error('ITEM_NOT_IN_COMPANY');
         const costOf = new Map(items.map((it) => [it.id, num(it.lastCost)]));
         const created = await tx.stockIssue.create({
@@ -1339,9 +1393,9 @@ export default async function businessRoutes(app: FastifyInstance) {
             idempotencyKey: body.idempotencyKey, createdByUserId: req.user.sub,
             status: body.confirm ? 'ISSUED' : 'DRAFT',
             issuedAt: body.confirm ? new Date() : null,
-            items: { create: body.items },
+            items: { create: body.items.map(({ allocations, ...line }) => ({ ...line, lotAllocations: { create: allocations } })) },
           },
-          include: { items: true },
+          include: { items: { include: { lotAllocations: true } } },
         });
 
         if (body.confirm) {
@@ -1349,9 +1403,14 @@ export default async function businessRoutes(app: FastifyInstance) {
           await lockBalancesInOrder(tx, body.warehouseId, body.items.map((line) => line.itemId));
           // ตัดสต็อกทั้งใบแบบ atomic รายการใดไม่พอ ทั้งเอกสาร rollback
           for (const line of body.items) {
-            await applyMovement(tx, {
-              companyId, warehouseId: body.warehouseId, itemId: line.itemId,
-              movementType: 'PRODUCTION_ISSUE', changeQty: -line.baseQty, unit: line.unit,
+            const item = items.find((row) => row.id === line.itemId)!;
+            const allocations = item.isLotTracked
+              ? await validateLotAllocations(tx, { companyId, warehouseId: body.warehouseId, itemId: line.itemId, requiredQty: line.baseQty, allocations: line.allocations })
+              : line.allocations.length ? (() => { throw new LotPolicyError('LOT_NOT_ENABLED', 'สินค้านี้ไม่ได้เปิดการติดตาม Lot'); })() : [];
+            const movements = item.isLotTracked ? allocations : [{ lotId: undefined, quantity: line.baseQty }];
+            for (const allocation of movements) await applyMovement(tx, {
+              companyId, warehouseId: body.warehouseId, itemId: line.itemId, lotId: allocation.lotId,
+              movementType: 'PRODUCTION_ISSUE', changeQty: -allocation.quantity, unit: line.unit,
               refType: 'STOCK_ISSUE', refId: created.id, refNo: created.issueNo,
               unitCost: costOf.get(line.itemId) ?? 0, createdById: req.user.sub,
             });
@@ -1374,17 +1433,22 @@ export default async function businessRoutes(app: FastifyInstance) {
     const companyId = req.user.companyId!;
     try {
       const issue = await stockTransaction(async (tx) => {
-        const doc = await tx.stockIssue.findFirst({ where: { id, companyId }, include: { items: true } });
+        const doc = await tx.stockIssue.findFirst({ where: { id, companyId }, include: { items: { include: { lotAllocations: true } } } });
         if (!doc) throw new Error('ISSUE_NOT_FOUND');
         if (doc.status !== 'DRAFT') throw new Error(`ALREADY_${doc.status}`);
 
-        const costs = await tx.item.findMany({ where: { id: { in: doc.items.map((l) => l.itemId) } }, select: { id: true, lastCost: true } });
+        const costs = await tx.item.findMany({ where: { id: { in: doc.items.map((l) => l.itemId) } }, select: { id: true, lastCost: true, isLotTracked: true } });
         const costOf = new Map(costs.map((it) => [it.id, num(it.lastCost)]));
         await lockBalancesInOrder(tx, doc.warehouseId, doc.items.map((line) => line.itemId));
         for (const line of doc.items) {
-          await applyMovement(tx, {
-            companyId, warehouseId: doc.warehouseId, itemId: line.itemId,
-            movementType: 'PRODUCTION_ISSUE', changeQty: -num(line.baseQty), unit: line.unit,
+          const item = costs.find((row) => row.id === line.itemId)!;
+          const allocations = item.isLotTracked
+            ? await validateLotAllocations(tx, { companyId, warehouseId: doc.warehouseId, itemId: line.itemId, requiredQty: num(line.baseQty), allocations: line.lotAllocations.map((row) => ({ lotId: row.lotId, quantity: num(row.quantity) })) })
+            : line.lotAllocations.length ? (() => { throw new LotPolicyError('LOT_NOT_ENABLED', 'สินค้านี้ไม่ได้เปิดการติดตาม Lot'); })() : [];
+          const movements = item.isLotTracked ? allocations : [{ lotId: undefined, quantity: num(line.baseQty) }];
+          for (const allocation of movements) await applyMovement(tx, {
+            companyId, warehouseId: doc.warehouseId, itemId: line.itemId, lotId: allocation.lotId,
+            movementType: 'PRODUCTION_ISSUE', changeQty: -allocation.quantity, unit: line.unit,
             refType: 'STOCK_ISSUE', refId: doc.id, refNo: doc.issueNo,
             unitCost: costOf.get(line.itemId) ?? 0, createdById: req.user.sub,
           });
@@ -1512,6 +1576,8 @@ export default async function businessRoutes(app: FastifyInstance) {
         itemId: z.string().min(1),
         mode: z.enum(['INCREASE', 'DECREASE', 'SET']),
         quantity: z.coerce.number().min(0),
+        lotId: z.string().min(1).optional().nullable(), lotNo: z.string().trim().max(80).optional().nullable(),
+        manufactureDate: z.coerce.date().optional().nullable(), expiryDate: z.coerce.date().optional().nullable(),
       })).min(1),
     }).parse(req.body);
     const companyId = req.user.companyId!;
@@ -1538,9 +1604,21 @@ export default async function businessRoutes(app: FastifyInstance) {
 
         for (const line of body.items) {
           const item = itemOf.get(line.itemId)!;
+          let lotId = line.lotId ?? null;
+          if (item.isLotTracked) {
+            if (lotId) {
+              const lot = await tx.inventoryLot.findFirst({ where: { id: lotId, companyId, itemId: line.itemId } });
+              if (!lot) throw new LotPolicyError('LOT_NOT_AVAILABLE', 'Lot ไม่อยู่ในบริษัทหรือสินค้าที่เลือก');
+            } else {
+              if (line.mode !== 'INCREASE') throw new LotPolicyError('LOT_REQUIRED', 'การลดหรือตั้งยอดสินค้าที่ติดตาม Lot ต้องเลือก Lot เดิม');
+              const lotNo = assertLotPolicy(item, line.lotNo, line.manufactureDate, line.expiryDate);
+              const lot = await ensureInventoryLot(tx, { companyId, itemId: line.itemId, warehouseId: body.warehouseId, lotNo: lotNo!, manufactureDate: line.manufactureDate, expiryDate: line.expiryDate, sourceType: 'ADJUSTMENT', createdById: req.user.sub });
+              lotId = lot.id;
+            }
+          } else if (lotId || line.lotNo) throw new LotPolicyError('LOT_NOT_ENABLED', 'สินค้านี้ไม่ได้เปิดการติดตาม Lot');
           /* PHASE 17 — ต้องอ่านแบบล็อกแถว ไม่ใช่ findFirst
              โหมด SET คิดส่วนต่างจากยอดปัจจุบัน ถ้าอ่านจาก snapshot จะไปลบยอดที่คนอื่น commit ไปแล้วทิ้ง */
-          const balance = await lockBalance(tx, line.itemId, body.warehouseId);
+          const balance = await lockBalance(tx, line.itemId, body.warehouseId, lotId);
           const onHand = balance ? balance.onHand : 0;
           // SET = ตั้งยอดตามที่นับจริง → ส่วนต่างคำนวณจากยอดปัจจุบัน
           const change = line.mode === 'SET' ? line.quantity - onHand : line.mode === 'INCREASE' ? line.quantity : -line.quantity;
@@ -1549,6 +1627,7 @@ export default async function businessRoutes(app: FastifyInstance) {
           await tx.stockAdjustmentItem.create({
             data: {
               stockAdjustmentId: doc.id, itemId: line.itemId,
+              lotId,
               systemQty: new Prisma.Decimal(onHand),
               countedQty: new Prisma.Decimal(line.mode === 'SET' ? line.quantity : onHand + change),
               diffQty: new Prisma.Decimal(change),
@@ -1556,7 +1635,7 @@ export default async function businessRoutes(app: FastifyInstance) {
           });
 
           await applyMovement(tx, {
-            companyId, warehouseId: body.warehouseId, itemId: line.itemId,
+            companyId, warehouseId: body.warehouseId, itemId: line.itemId, lotId,
             movementType: change > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
             changeQty: change, unit: item.baseUnit?.code ?? null,
             refType: 'STOCK_ADJUSTMENT', refId: doc.id, refNo: doc.adjustmentNo,

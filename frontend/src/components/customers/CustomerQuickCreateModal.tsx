@@ -106,19 +106,38 @@ export default function CustomerQuickCreateModal({ prefillName, onClose, onCreat
           </div>
           <button type="button" className="icon-btn cm-close" onClick={onClose} aria-label={messages.common.close}><X aria-hidden width={16} /></button>
         </div>
-        <hr className="cust-divider" />
-        {serverError && <div className="alert" style={{ marginBottom: 12 }}>{serverError}</div>}
-        <div className="cust-grid">
-          {field('name', cf.nameLabel, cf.phName, User, { required: true, full: true })}
-          {field('contactName', cf.contact, cf.phContact, User)}
-          {field('phone', cf.phone, cf.phPhone, Phone, { type: 'tel' })}
-          {field('email', cf.email, cf.phEmail, Mail, { type: 'email' })}
-          {field('taxId', cf.taxId, cf.phTaxId, Receipt)}
-          {field('address', cf.shipping, cf.phShipping, MapPin, { full: true, textarea: true })}
-          {field('billingAddress', cf.billing, cf.phBilling, MapPin, { full: true, textarea: true })}
-          {field('lineId', cf.lineId, cf.phLine, MessageCircle)}
-          {field('branch', cf.branch, cf.phBranch, Building2)}
-          {field('note', cf.note, cf.phNote, StickyNote, { full: true, textarea: true })}
+        {/* เนื้อหาเลื่อนได้เฉพาะส่วนนี้ หัวและแถบปุ่มอยู่กับที่เสมอ */}
+        <div className="cust-modal-body">
+          {serverError && <div className="alert cust-server-error">{serverError}</div>}
+
+          <section className="cust-section">
+            <h4>{cf.sectionMain}</h4>
+            <div className="cust-grid">
+              {field('name', cf.nameLabel, cf.phName, User, { required: true, full: true })}
+              {field('contactName', cf.contact, cf.phContact, User)}
+              {field('phone', cf.phone, cf.phPhone, Phone, { type: 'tel' })}
+              {field('email', cf.email, cf.phEmail, Mail, { type: 'email' })}
+              {field('taxId', cf.taxId, cf.phTaxId, Receipt)}
+            </div>
+          </section>
+
+          <section className="cust-section">
+            <h4>{cf.sectionAddress}</h4>
+            {/* ที่อยู่สองช่องวางคู่กันบนจอกว้าง เดิมเป็นเต็มบรรทัดทั้งคู่ ทำให้ modal ยืดยาวเกินจำเป็น */}
+            <div className="cust-grid">
+              {field('address', cf.shipping, cf.phShipping, MapPin, { textarea: true })}
+              {field('billingAddress', cf.billing, cf.phBilling, MapPin, { textarea: true })}
+            </div>
+          </section>
+
+          <section className="cust-section">
+            <h4>{cf.sectionExtra}</h4>
+            <div className="cust-grid">
+              {field('lineId', cf.lineId, cf.phLine, MessageCircle)}
+              {field('branch', cf.branch, cf.phBranch, Building2)}
+              {field('note', cf.note, cf.phNote, StickyNote, { full: true, textarea: true })}
+            </div>
+          </section>
         </div>
         <div className="cust-modal-foot">
           <button type="button" className="btn" onClick={onClose} disabled={saving}>{messages.common.cancel}</button>

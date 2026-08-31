@@ -6,6 +6,7 @@
 export interface StockBalanceRow { warehouseId: string; onHand: string | number; reserved: string | number }
 export interface StockItem {
   id: string; code: string; name: string; type: string;
+  isLotTracked?: boolean; isExpiryTracked?: boolean;
   baseUnit?: { code: string; name: string } | null;
   stockBalances: StockBalanceRow[];
 }
@@ -13,6 +14,7 @@ export interface StockItem {
 /** สินค้าพร้อมเบิกในคลังหนึ่ง (พร้อมยอดที่ใช้ได้จริง) */
 export interface IssuableItem {
   id: string; code: string; name: string; type: string; unit: string;
+  isLotTracked: boolean; isExpiryTracked: boolean;
   onHand: number; reserved: number; available: number;
 }
 
@@ -35,7 +37,7 @@ export function issuableItems(items: StockItem[], warehouseId: string): Issuable
   return items
     .map((item) => {
       const s = stockInWarehouse(item, warehouseId);
-      return { id: item.id, code: item.code, name: item.name, type: item.type, unit: item.baseUnit?.code ?? '-', ...s };
+      return { id: item.id, code: item.code, name: item.name, type: item.type, unit: item.baseUnit?.code ?? '-', isLotTracked: Boolean(item.isLotTracked), isExpiryTracked: Boolean(item.isExpiryTracked), ...s };
     })
     .filter((x) => x.available > 0)
     .sort((a, b) => a.name.localeCompare(b.name, 'th'));
@@ -51,6 +53,7 @@ export function searchIssuable(list: IssuableItem[], term: string): IssuableItem
 export interface IssueLine {
   key: string; itemId: string; name: string; code: string; unit: string;
   requiredQty: number; issuedQty: number;
+  isLotTracked?: boolean; allocations?: { lotId:string; quantity:number; lotNo?:string; expiryDate?:string|null; available?:number }[];
 }
 
 export type AddResult =
@@ -63,7 +66,7 @@ export function addIssueLine(lines: IssueLine[], item: IssuableItem, keyFactory:
   if (dup) return { ok: false, reason: 'DUPLICATE', existingKey: dup.key, lines };
   return {
     ok: true,
-    lines: [...lines, { key: keyFactory(), itemId: item.id, name: item.name, code: item.code, unit: item.unit, requiredQty: 0, issuedQty: 0 }],
+    lines: [...lines, { key: keyFactory(), itemId: item.id, name: item.name, code: item.code, unit: item.unit, requiredQty: 0, issuedQty: 0, isLotTracked:item.isLotTracked, allocations:[] }],
   };
 }
 
@@ -120,6 +123,7 @@ export function buildIssuePayload(input: {
       issuedQty: n(l.issuedQty),
       unit: l.unit,
       baseQty: n(l.issuedQty),
+      ...(l.isLotTracked||l.allocations?.length?{allocations:l.allocations?.map(row=>({lotId:row.lotId,quantity:n(row.quantity)}))??[]}:{}),
     })),
   };
 }

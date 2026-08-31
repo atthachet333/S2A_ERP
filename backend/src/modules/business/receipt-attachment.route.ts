@@ -47,7 +47,7 @@ function detectFileType(buf: Buffer): keyof typeof EXT_BY_MIME | null {
   return null;
 }
 
-const attachmentDir = path.join(path.resolve(process.cwd(), env.UPLOAD_DIR), 'receipts');
+export const receiptAttachmentDir = path.join(path.resolve(process.cwd(), env.UPLOAD_DIR), 'receipts');
 const STORED_NAME_RE = /^[a-f0-9-]{36}\.(pdf|jpg|png|webp)$/;
 const CONTENT_TYPE: Record<string, string> = {
   pdf: 'application/pdf', jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
@@ -107,9 +107,9 @@ export default async function receiptAttachmentRoutes(app: FastifyInstance) {
 
     const ext = EXT_BY_MIME[detected];
     const storedName = `${randomUUID()}.${ext}`;
-    await mkdir(attachmentDir, { recursive: true });
+    await mkdir(receiptAttachmentDir, { recursive: true });
     // เขียนไฟล์ใหม่เสมอด้วยชื่อสุ่ม จึงไม่มีทางเขียนทับไฟล์เดิมของใบไหน
-    await writeFile(path.join(attachmentDir, storedName), buffer);
+    await writeFile(path.join(receiptAttachmentDir, storedName), buffer);
 
     const created = await prisma.goodsReceiptAttachment.create({
       data: {
@@ -162,8 +162,8 @@ export default async function receiptAttachmentRoutes(app: FastifyInstance) {
     });
     if (!attachment) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบไฟล์'));
 
-    const filePath = path.join(attachmentDir, storedName);
-    if (!filePath.startsWith(attachmentDir) || !existsSync(filePath)) {
+    const filePath = path.join(receiptAttachmentDir, storedName);
+    if (!filePath.startsWith(receiptAttachmentDir) || !existsSync(filePath)) {
       return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบไฟล์บนดิสก์'));
     }
 

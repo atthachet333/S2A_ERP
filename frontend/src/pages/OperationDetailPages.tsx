@@ -35,6 +35,7 @@ interface ReceiptDetail {
   id: string; receiptNo: string; status: string; receiptDate: string; note?: string | null;
   supplierDocNo?: string | null; confirmedAt?: string | null; reversedAt?: string | null; createdAt: string;
   supplier?: { name: string } | null; warehouse: { name: string; code: string };
+  purchaseOrder?: { id:string;poNo:string;status:string } | null;
   items: { id: string; quantity: string; unitPrice: string; totalCost: string; item: { code: string; name: string; type: string; baseUnit?: { code: string } | null } }[];
 }
 interface IssueDetail {
@@ -150,6 +151,7 @@ export function ReceivingDetailPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const canConfirm = Boolean(user?.roles.includes('SUPER_ADMIN') || user?.permissions.includes('RECEIVING_CONFIRM'));
+  const canManageReceiving = Boolean(user?.roles.includes('SUPER_ADMIN') || ['RECEIVING_CREATE', 'RECEIVING_EDIT'].some((permission) => user?.permissions.includes(permission)));
 
   const [doc, setDoc] = useState<ReceiptDetail>();
   const [error, setError] = useState('');
@@ -288,6 +290,7 @@ export function ReceivingDetailPage() {
           <div><dt>Supplier</dt><dd>{doc.supplier?.name ?? '—'}</dd></div>
           <div><dt>คลัง</dt><dd>{doc.warehouse.name}</dd></div>
           <div><dt>เลขที่เอกสาร Supplier</dt><dd>{doc.supplierDocNo || '—'}</dd></div>
+          <div><dt>ใบสั่งซื้อ</dt><dd>{doc.purchaseOrder?<Link to={`/purchase-orders/${doc.purchaseOrder.id}`}>{doc.purchaseOrder.poNo}</Link>:'—'}</dd></div>
           <div><dt>สถานะ</dt><dd><StatusBadge kind="receiving" status={doc.status} /></dd></div>
           <div className="wide"><dt>หมายเหตุ</dt><dd>{doc.note || '—'}</dd></div>
         </dl>
@@ -327,7 +330,7 @@ export function ReceivingDetailPage() {
       </ContentCard>
 
       <div className="no-print">
-        <OriginalDocumentSection receiptId={doc.id} canEdit={canEditAttachments(doc.status)} />
+        <OriginalDocumentSection receiptId={doc.id} canEdit={canEditAttachments(doc.status) && canManageReceiving} />
       </div>
 
       <ContentCard className="doc-card no-print" title={<><History aria-hidden width={17} />ไทม์ไลน์</>}>

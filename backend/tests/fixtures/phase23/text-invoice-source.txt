@@ -1,0 +1,11 @@
+Supplier: บริษัท ทดสอบวัตถุดิบ จำกัด
+Tax ID: 0105566123456
+Invoice No: INV-P23-001
+Date: 24/08/2026
+Currency: THB
+RM-RICE ข้าวหอมมะลิ 2 KG 47.50 95.00
+RM-SUGAR น้ำตาลทราย 3 KG 28.00 84.00
+Subtotal: 179.00
+Discount: 0.00
+VAT: 12.53
+Grand Total: 191.53

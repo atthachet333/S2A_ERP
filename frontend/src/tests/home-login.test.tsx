@@ -63,7 +63,7 @@ describe('Login', () => {
   it('แสดงฟอร์มเข้าสู่ระบบพร้อม subtitle ที่กระชับ', () => {
     renderWithProviders(<LoginExperience />, { route: '/login' });
     expect(screen.getByRole('heading', { name: 'เข้าสู่ระบบ' })).toBeInTheDocument();
-    expect(screen.getByText('เข้าสู่พื้นที่ทำงานของคุณ')).toBeInTheDocument();
+    expect(screen.getByText(/เข้าสู่พื้นที่ทำงานของคุณ/)).toBeInTheDocument();
   });
   it('มีลิงก์ลืมรหัสผ่าน', () => {
     renderWithProviders(<LoginExperience />, { route: '/login' });

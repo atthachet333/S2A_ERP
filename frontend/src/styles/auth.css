@@ -1,0 +1,913 @@
+/* ============================================================
+   S2A ERP — PHASE 37 · AUTH EXPERIENCE
+   ------------------------------------------------------------
+   หน้ากลุ่มเข้าสู่ระบบ/บัญชีทั้งหมดใช้โครงเดียวกัน:
+     ซ้าย  = แผงแบรนด์เนวี่ (ตกแต่งน้อย ไม่แย่งสายตาจากฟอร์ม)
+     ขวา   = การ์ดฟอร์มพื้นขาว อ่านง่าย เป็นงานหลักของหน้า
+
+   ใช้เฉพาะ token ที่ประกาศไว้แล้วใน tokens.css เท่านั้น
+   ไม่ประกาศ theme token ใหม่ และไม่แตะพาเลตที่มีเทสต์คุมอยู่
+   ============================================================ */
+
+.auth2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* ---------- แผงแบรนด์ ---------- */
+.auth2-brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-10);
+  padding: clamp(28px, 3vw, 44px);
+  overflow: hidden;
+  background: var(--navy);
+  color: #eef4fb;
+  isolation: isolate;
+}
+
+/* แสงนุ่ม ๆ สองจุด แทนไดอะแกรมเคลื่อนไหวของเดิม
+   ให้ความรู้สึกมีมิติแต่ไม่ดึงสายตา และไม่มีการเคลื่อนไหวต่อเนื่อง */
+.auth2-brand::before,
+.auth2-brand::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  z-index: -1;
+  pointer-events: none;
+}
+.auth2-brand::before {
+  inset-inline-start: -18%;
+  top: -12%;
+  width: 62%;
+  aspect-ratio: 1;
+  background: radial-gradient(circle, rgba(22, 119, 200, .40), transparent 68%);
+}
+.auth2-brand::after {
+  inset-inline-end: -22%;
+  bottom: -18%;
+  width: 58%;
+  aspect-ratio: 1;
+  background: radial-gradient(circle, rgba(198, 161, 91, .22), transparent 70%);
+}
+
+.auth2-brand-top { display: flex; align-items: center; gap: var(--space-3); }
+
+.auth2-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: var(--radius-field);
+  background: rgba(255, 255, 255, .10);
+  border: 1px solid rgba(255, 255, 255, .16);
+}
+.auth2-mark img { width: 34px; height: 34px; object-fit: contain; }
+
+.auth2-wordmark { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.auth2-wordmark strong { font-size: 14px; font-weight: 700; letter-spacing: .06em; }
+.auth2-wordmark span { font-size: 11px; letter-spacing: .18em; color: rgba(238, 244, 251, .62); }
+
+.auth2-brand-body { max-width: 30ch; }
+
+.auth2-eyebrow {
+  margin: 0 0 var(--space-3);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  color: var(--gold-soft);
+}
+
+.auth2-brand-title {
+  margin: 0;
+  font-size: clamp(28px, 2.6vw, 40px);
+  line-height: 1.25;
+  font-weight: 700;
+  color: #fff;
+}
+.auth2-brand-title strong { color: var(--gold-soft); font-weight: 700; }
+
+.auth2-brand-lead {
+  margin: var(--space-3) 0 0;
+  font-size: 15px;
+  line-height: 1.75;
+  color: rgba(238, 244, 251, .78);
+}
+
+.auth2-points {
+  list-style: none;
+  margin: var(--space-8) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.auth2-points li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 14px;
+  color: rgba(238, 244, 251, .84);
+}
+.auth2-points svg { width: 18px; height: 18px; flex: none; color: var(--gold-soft); }
+
+/* เส้นทองบาง ๆ ปิดท้ายแผง เป็น accent เดียวที่ตั้งใจให้เห็น */
+.auth2-brand-foot {
+  height: 3px;
+  width: 88px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--gold), transparent);
+}
+
+/* ---------- แผงฟอร์ม ---------- */
+.auth2-panel {
+  display: grid;
+  place-items: center;
+  padding: clamp(24px, 3vw, 48px);
+  background: var(--surface);
+}
+.auth2-panel-inner { width: 100%; max-width: 440px; }
+
+.auth2-card { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.auth2-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+/* โลโก้ในการ์ดโผล่เฉพาะตอนแผงแบรนด์ถูกซ่อน */
+.auth2-card-mark { display: none; }
+.auth2-card-mark img { width: 44px; height: 44px; object-fit: contain; }
+
+.auth2-card-head { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.auth2-kicker {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  color: var(--text-subtle);
+}
+
+.auth2-card-head h1 {
+  margin: 0;
+  font-size: clamp(26px, 2.2vw, 32px);
+  line-height: 1.3;
+  font-weight: 700;
+  color: var(--heading);
+}
+
+.auth2-sub { margin: 0; font-size: 15px; line-height: 1.65; color: var(--text-muted); }
+
+/* ---------- ฟิลด์ ---------- */
+.auth2-field { display: flex; flex-direction: column; gap: 7px; }
+
+.auth2-field > label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.auth2-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-field);
+  background: var(--input-bg);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.auth2-control:focus-within {
+  border-color: var(--input-focus);
+  box-shadow: var(--focus-ring);
+}
+
+.auth2-control-icon { width: 18px; height: 18px; flex: none; color: var(--text-subtle); }
+
+/* input ข้างในตั้งใจให้ไร้ขอบ เพราะกรอบนอกเป็นตัวคุมหน้าตาและพื้นที่กด */
+.auth2-control input {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+}
+.auth2-control input::placeholder { color: var(--input-placeholder); }
+
+.auth2-reveal {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.auth2-reveal:hover { background: var(--surface-2); color: var(--text); }
+.auth2-reveal:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.auth2-field.is-invalid .auth2-control { border-color: var(--danger); }
+.auth2-field.is-invalid .auth2-control:focus-within { box-shadow: var(--focus-ring-danger); }
+
+.auth2-hint { font-size: 12.5px; line-height: 1.55; color: var(--text-subtle); }
+.auth2-error { font-size: 12.5px; line-height: 1.55; color: var(--danger); font-weight: 600; }
+
+/* ---------- กลุ่มฟิลด์ ---------- */
+.auth2-section { border: 0; margin: 0; padding: 0; }
+.auth2-section > legend {
+  padding: 0;
+  margin-bottom: var(--space-3);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--heading);
+}
+.auth2-section-body { display: grid; gap: var(--space-4); }
+
+/* ---------- แจ้งเตือน ---------- */
+.auth2-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 12px 14px;
+  border-radius: var(--radius-field);
+  border-inline-start: 3px solid;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.auth2-alert--error { background: var(--danger-bg); color: var(--danger-fg); border-color: var(--danger); }
+.auth2-alert--success { background: var(--success-bg); color: var(--success-fg); border-color: var(--success); }
+.auth2-alert--info { background: var(--info-bg); color: var(--info-fg); border-color: var(--info); }
+
+/* ---------- ปุ่มหลัก ---------- */
+.auth2-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 48px;
+  padding: 0 20px;
+  border: 1px solid var(--navy);
+  border-radius: var(--radius-field);
+  background: var(--navy);
+  color: var(--text-inverse);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .16s ease, box-shadow .16s ease, transform .12s ease;
+}
+.auth2-submit:hover:not(:disabled) { background: var(--navy-soft); border-color: var(--navy-soft); }
+.auth2-submit:active:not(:disabled) { transform: translateY(1px); }
+.auth2-submit:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.auth2-submit:disabled { opacity: .55; cursor: not-allowed; }
+
+/* ---------- ลิงก์/ตัวเลือกรอง ---------- */
+.auth2-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.auth2-options label { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); cursor: pointer; }
+.auth2-options input[type="checkbox"] { width: 17px; height: 17px; min-height: 0; accent-color: var(--blue); }
+.auth2-options a { color: var(--blue); font-weight: 600; text-decoration: none; }
+.auth2-options a:hover { text-decoration: underline; }
+
+.auth2-card-foot {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.auth2-card-foot a { color: var(--blue); font-weight: 600; text-decoration: none; }
+.auth2-card-foot a:hover { text-decoration: underline; }
+
+/* ---------- การเคลื่อนไหวแบบสงบ ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .auth2-card { animation: auth2-rise .32s ease both; }
+}
+@keyframes auth2-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- ตอบสนองความกว้าง ----------
+   1366: แผงแบรนด์แคบลงเพื่อให้การ์ดฟอร์มยังได้พื้นที่เต็ม
+   ต่ำกว่า 960: ซ่อนแผงแบรนด์ เหลือฟอร์มอย่างเดียว ไม่ต้องเลื่อนแนวนอน */
+@media (max-width: 1440px) {
+  .auth2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (max-width: 1180px) {
+  .auth2 { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr); }
+  .auth2-points { margin-top: var(--space-5); }
+}
+@media (max-width: 960px) {
+  .auth2 { grid-template-columns: minmax(0, 1fr); }
+  .auth2-brand { display: none; }
+  .auth2-card-mark { display: block; }
+  .auth2-panel { padding: clamp(20px, 6vw, 40px) clamp(18px, 5vw, 32px); align-content: start; padding-top: clamp(28px, 8vh, 64px); }
+}
+
+/* จอเตี้ย (เช่น 1366x768) ลดระยะห่างแนวตั้งไม่ให้ปุ่มหลักตกขอบ */
+@media (max-height: 800px) {
+  .auth2-brand { gap: var(--space-6); }
+  .auth2-points { margin-top: var(--space-5); gap: var(--space-2); }
+  .auth2-card { gap: var(--space-4); }
+}
+
+/* ---------- form + secondary nav ---------- */
+.auth2-form { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.auth2-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.auth2-back:hover { color: var(--blue); }
+.auth2-back:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+
+/* ---------- status state (pending / complete / rejected) ---------- */
+.auth2-state { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.auth2-state-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-card);
+  background: var(--info-bg);
+  color: var(--info);
+}
+.auth2-state-icon svg { width: 26px; height: 26px; }
+.auth2-state-icon.is-success { background: var(--success-bg); color: var(--success); }
+.auth2-state-icon.is-warn { background: var(--warning-bg); color: var(--warning); }
+.auth2-state-icon.is-danger { background: var(--danger-bg); color: var(--danger); }
+
+.auth2-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 12px 14px;
+  border-radius: var(--radius-field);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+.auth2-note svg { width: 18px; height: 18px; flex: none; color: var(--text-subtle); margin-top: 2px; }
+
+/* ---------- password rules ---------- */
+.auth2-rules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-field);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.auth2-rules span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.auth2-rules svg { width: 15px; height: 15px; flex: none; color: var(--text-subtle); }
+.auth2-rules span.met { color: var(--success-fg); font-weight: 600; }
+.auth2-rules span.met svg { color: var(--success); }
+
+.auth2-strength { display: flex; flex-direction: column; gap: 8px; }
+.auth2-strength-head { display: flex; align-items: baseline; justify-content: space-between; font-size: 13px; color: var(--text-muted); }
+.auth2-strength-head strong { font-size: 13.5px; color: var(--text); }
+.auth2-strength-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.auth2-strength-bar i { height: 5px; border-radius: var(--radius-pill); background: var(--border); }
+.auth2-strength-bar.s1 i:nth-child(-n+1), .auth2-strength-bar.s2 i:nth-child(-n+2) { background: var(--danger); }
+.auth2-strength-bar.s3 i:nth-child(-n+3), .auth2-strength-bar.s4 i:nth-child(-n+4) { background: var(--warning); }
+.auth2-strength-bar.s5 i { background: var(--success); }
+
+/* ---------- account context (change password) ---------- */
+.auth2-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 12px 14px;
+  border-radius: var(--radius-field);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.auth2-account svg { width: 20px; height: 20px; flex: none; color: var(--blue); }
+.auth2-account strong { color: var(--text); }
+
+.auth2-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.auth2-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+  color: var(--navy);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.auth2-switch button:hover:not(:disabled) { background: var(--surface-2); }
+.auth2-switch button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.auth2-switch button:disabled { opacity: .55; cursor: not-allowed; }
+
+/* two-column fields on wider cards */
+.auth2-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+@media (max-width: 620px) { .auth2-grid2 { grid-template-columns: minmax(0, 1fr); } }
+
+/* ============================================================
+   PHASE 37 — bridge: register + legacy auth classes adopt the
+   new auth family look without rewriting their markup.
+
+   RegisterPage already groups its fields into numbered sections,
+   so the structure was fine; only the visual treatment differed.
+   Rewriting that form would risk its registration-contract tests
+   for no structural gain, so the shared look is applied here.
+   ============================================================ */
+
+/* field control — match .auth2-control */
+.console-input,
+.auth-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-field);
+  background: var(--input-bg);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.console-input:focus-within,
+.auth-input:focus-within {
+  border-color: var(--input-focus);
+  box-shadow: var(--focus-ring);
+}
+.console-input > svg,
+.auth-input > svg { width: 18px; height: 18px; flex: none; color: var(--text-subtle); }
+
+.console-input input,
+.auth-input input {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.console-input button,
+.auth-input button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.console-input button:hover,
+.auth-input button:hover { background: var(--surface-2); color: var(--text); }
+.console-input button:focus-visible,
+.auth-input button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* primary submit — match .auth2-submit (solid navy, not gradient) */
+.gateway-submit,
+.auth-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 48px;
+  padding: 0 20px;
+  border: 1px solid var(--navy);
+  border-radius: var(--radius-field);
+  background: var(--navy);
+  color: var(--text-inverse);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .16s ease, box-shadow .16s ease, transform .12s ease;
+}
+.gateway-submit:hover:not(:disabled),
+.auth-submit:hover:not(:disabled) { background: var(--navy-soft); border-color: var(--navy-soft); }
+.gateway-submit:focus-visible,
+.auth-submit:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.gateway-submit:disabled,
+.auth-submit:disabled { opacity: .55; cursor: not-allowed; }
+
+/* alerts inside legacy auth markup */
+.auth-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 12px 14px;
+  border-radius: var(--radius-field);
+  border-inline-start: 3px solid var(--danger);
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.auth-success {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 12px 14px;
+  border-radius: var(--radius-field);
+  border-inline-start: 3px solid var(--success);
+  background: var(--success-bg);
+  color: var(--success-fg);
+  font-size: 14px;
+}
+
+/* field-level validation text must be readable, not tiny grey */
+.field-error { font-size: 12.5px; line-height: 1.55; color: var(--danger); font-weight: 600; }
+.field-hint { font-size: 12.5px; line-height: 1.55; color: var(--text-subtle); }
+
+/* วัดจริงแล้วพบว่ากฎเดิมชนะเพราะ specificity สูงกว่า จึงต้องจับคู่ให้เท่ากัน:
+     .onboarding-fields .console-input{height:39px}  (0,2,0) ชนะ .console-input (0,1,0)
+     .gateway-submit.ready{background:linear-gradient(...)} (0,2,0) ชนะเช่นกัน
+   ปุ่มเดิมใช้ gradient ซึ่งเป็น background-image ทำให้ background-color อ่านค่าได้เป็น
+   โปร่งใส แม้จะเห็นเป็นสีอยู่ — ต้องเซ็ตทับด้วย shorthand เพื่อล้าง image ออกด้วย */
+.onboarding-fields .console-input,
+.onboarding-panel .console-input { height: 48px; margin-top: 6px; }
+
+.gateway-submit,
+.gateway-submit.ready,
+.onboarding-panel .gateway-submit {
+  height: 48px;
+  background: var(--navy);
+  border-color: var(--navy);
+  box-shadow: none;
+}
+.gateway-submit:hover:not(:disabled),
+.gateway-submit.ready:hover:not(:disabled) {
+  transform: none;
+  background: var(--navy-soft);
+  border-color: var(--navy-soft);
+  box-shadow: none;
+}
+/* เอฟเฟกต์แถบแสงวิ่งของปุ่มเดิมออก ให้สงบเข้าชุดกับหน้าอื่น */
+.gateway-submit::before,
+.gateway-submit::after { content: none; }
+
+/* ---------- PHASE 42 — brand panel tags + caption ---------- */
+.auth2-brand-tail { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.auth2-tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.auth2-tags li {
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .06);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: rgba(238, 244, 251, .82);
+}
+
+.auth2-caption {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(238, 244, 251, .58);
+}
+
+/* บรรทัดหมายเหตุความปลอดภัยใต้ปุ่มเข้าสู่ระบบ */
+.auth2-note-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-subtle);
+}
+.auth2-note-line svg { width: 15px; height: 15px; flex: none; color: var(--success); }
+
+/* พาดหัวยาวขึ้นแล้ว ปรับให้ยังอ่านสบายและไม่ล้นบนจอเตี้ย */
+.auth2-brand-title { text-wrap: balance; }
+@media (max-height: 860px) {
+  .auth2-brand { gap: var(--space-6); }
+  .auth2-points { margin-top: var(--space-4); gap: 10px; }
+  .auth2-brand-tail { gap: var(--space-3); }
+}
+
+/* ---------- จอเตี้ย (เช่น 1366x768) ----------
+   เนื้อหาแผงแบรนด์ที่เพิ่มเข้ามาสูงราว 1016px ทำให้หน้าเลื่อนแนวตั้ง 93px
+   ที่ความสูง 768 จึงบีบระยะและลดของเสริม (ป้ายโมดูล + ประโยคปิด) ลง
+   โดยยังเก็บพาดหัว คำอธิบาย และห้าข้อสรุปไว้ครบ เพราะเป็นสาระหลัก */
+@media (max-height: 820px) {
+  .auth2-brand { padding: 28px clamp(28px, 3vw, 40px); gap: var(--space-4); }
+  .auth2-brand-title { font-size: clamp(22px, 2vw, 28px); line-height: 1.3; }
+  .auth2-brand-lead { margin-top: var(--space-3); font-size: 14px; line-height: 1.6; }
+  .auth2-points { margin-top: var(--space-4); gap: 9px; }
+  .auth2-points li { font-size: 13.5px; }
+  .auth2-mark { width: 44px; height: 44px; }
+  .auth2-mark img { width: 28px; height: 28px; }
+  .auth2-brand-tail { gap: var(--space-3); }
+  /* ป้ายโมดูลกับประโยคปิดเป็นส่วนเสริม ตัดออกได้เมื่อพื้นที่แนวตั้งจำกัด */
+  .auth2-tags,
+  .auth2-caption { display: none; }
+  .auth2-panel { padding-block: 28px; }
+}
+
+/* ระดับกลาง (เช่น 1440x900): เนื้อหาเกินจอ 40px
+   บีบระยะเล็กน้อยพอให้พอดี โดยยังเก็บป้ายโมดูลและประโยคปิดไว้ครบ */
+@media (min-height: 821px) and (max-height: 960px) {
+  .auth2-brand { padding-block: 36px; gap: var(--space-5); }
+  .auth2-brand-title { font-size: clamp(24px, 2.1vw, 32px); }
+  .auth2-brand-lead { margin-top: var(--space-3); line-height: 1.65; }
+  .auth2-points { margin-top: var(--space-5); gap: 10px; }
+  .auth2-brand-tail { gap: var(--space-3); }
+  .auth2-panel { padding-block: 36px; }
+}
+
+/* ============================================================
+   PHASE 44 — แผงซ้ายหน้าเข้าสู่ระบบ: การ์ดความสามารถ 2x2 + ความลึกทางสายตา
+   เดิมเป็นรายการหัวข้อย่อยเรียงลงมาบนพื้นเนวี่เรียบ ๆ ดูเป็นข้อความซ้อนกัน
+   ============================================================ */
+
+/* ลายเส้นตารางจาง ๆ ให้พื้นเนวี่มีพื้นผิว ไม่ใช่สีทึบแบน */
+.auth2-brand::before {
+  background:
+    radial-gradient(circle, rgba(22, 119, 200, .38), transparent 68%);
+}
+.auth2-brand {
+  background-color: var(--navy);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .028) 1px, transparent 1px);
+  background-size: 46px 46px, 46px 46px;
+}
+
+/* เส้นทองบางแนวตั้งคั่นสองฝั่ง ทำให้การแบ่งครึ่งดูตั้งใจ ไม่ใช่แค่สีต่างกัน */
+.auth2-brand::after {
+  background: radial-gradient(circle, rgba(198, 161, 91, .20), transparent 70%);
+}
+.auth2 { position: relative; }
+.auth2::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(50% - 1px);
+  width: 2px;
+  background: linear-gradient(180deg, transparent, rgba(198, 161, 91, .45), transparent);
+  pointer-events: none;
+}
+
+/* การ์ด 2x2 */
+.auth2-tiles {
+  list-style: none;
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.auth2-tiles li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 15px;
+  border: 1px solid rgba(255, 255, 255, .10);
+  border-radius: var(--radius-field);
+  background: rgba(255, 255, 255, .05);
+}
+.auth2-tile-ic {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: rgba(198, 161, 91, .16);
+  color: var(--gold-soft);
+}
+.auth2-tile-ic svg { width: 17px; height: 17px; }
+.auth2-tiles strong { font-size: 14px; font-weight: 700; color: #f2f6fb; }
+.auth2-tile-desc { font-size: 12.5px; line-height: 1.55; color: rgba(238, 244, 251, .66); }
+
+/* ป้ายโมดูลกลายเป็นบรรทัดรองบรรทัดเดียว ไม่ลอยอยู่ก้นแผง */
+.auth2-tags { gap: 6px; }
+.auth2-tags li { padding: 4px 10px; font-size: 11.5px; }
+
+@media (max-width: 1180px) {
+  .auth2-tiles { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-height: 820px) {
+  .auth2-tiles { margin-top: var(--space-4); gap: 9px; }
+  .auth2-tiles li { padding: 11px 12px; gap: 4px; }
+  .auth2-tile-ic { width: 28px; height: 28px; }
+  .auth2-tile-desc { display: none; }
+}
+@media (max-width: 960px) { .auth2::after { display: none; } }
+
+/* ============================================================
+   PHASE 44 — ฝั่งฟอร์ม: จัดกลุ่มเป็นแผงจริง + แก้บล็อกสีฟ้าในช่องรหัสผ่าน
+   ============================================================ */
+
+/* ฟอร์มถูกจัดกลุ่มด้วยกรอบบางและเงานุ่ม ไม่ใช่ลอยอยู่บนพื้นขาวโล่ง
+   แต่ไม่ทำเป็นการ์ดลอยขนาดใหญ่ตามที่กำหนด */
+.auth2-panel-inner { max-width: 480px; }
+
+.auth2-form {
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-flat);
+}
+
+/* บล็อกสีฟ้าที่เห็นข้างในช่องรหัสผ่าน คือพื้นหลัง autofill ของเบราว์เซอร์
+   ซึ่งถูกวาดบน <input> ที่อยู่ข้างในกรอบของเราอีกที เลยดูเป็นกล่องซ้อนกล่อง
+   ทับด้วย inset shadow เพื่อให้กลืนเป็นคอนโทรลเดียวตามดีไซน์ */
+.auth2-control input:-webkit-autofill,
+.auth2-control input:-webkit-autofill:hover,
+.auth2-control input:-webkit-autofill:focus,
+.auth2-control input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset;
+  box-shadow: 0 0 0 1000px var(--input-bg) inset;
+  caret-color: var(--text);
+  /* กันไม่ให้เบราว์เซอร์ค่อย ๆ เฟดสีพื้นกลับมา */
+  transition: background-color 100000s ease-in-out 0s;
+}
+
+/* input ข้างในต้องไม่มีเส้นขอบ/พื้นของตัวเองเลย เพื่อให้เห็นเป็นคอนโทรลเดียว */
+.auth2-control input {
+  height: 100%;
+  border-radius: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* แถวจำชื่อผู้ใช้ / ลืมรหัสผ่าน อยู่บนเส้นฐานเดียวกัน */
+.auth2-options { align-items: center; min-height: 24px; }
+.auth2-options label { gap: 9px; line-height: 1; }
+.auth2-options input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
+
+/* เส้นคั่นก่อนบรรทัดสมัครสมาชิก */
+.auth2-card-foot { margin-top: 2px; }
+
+/* แผงฟอร์มที่เพิ่มกรอบ/ระยะขอบเข้ามา ทำให้สูงเกินจอ 15px ที่ 1440x900
+   บีบระยะภายในแผงลงในช่วงความสูงกลาง */
+@media (min-height: 821px) and (max-height: 960px) {
+  .auth2-form { padding: 18px; gap: var(--space-3); }
+  .auth2-card { gap: var(--space-4); }
+}
+@media (max-height: 820px) {
+  .auth2-form { padding: 16px; gap: var(--space-3); }
+}
+
+/* 1440x900 ยังเกิน 11px — บีบการ์ดในช่วงความสูงกลางอีกเล็กน้อย */
+@media (min-height: 821px) and (max-height: 960px) {
+  .auth2-tiles { margin-top: var(--space-4); gap: 10px; }
+  .auth2-tiles li { padding: 12px 13px; }
+  .auth2-brand-tail { gap: 10px; }
+}
+
+/* ============================================================
+   PHASE 45 — ตราสัญลักษณ์ที่หนักแน่นขึ้น + รอยต่อแบบเฉียง
+   เดิมโลโก้เล็กและลอยอยู่มุมบนซ้ายของแผงใหญ่ ๆ
+   และเส้นแบ่งครึ่งตรงเป๊ะทำให้หน้าดูแข็งเหมือนกล่องสองใบต่อกัน
+   ============================================================ */
+
+/* ---------- ตราสัญลักษณ์ ---------- */
+.auth2-brand-top {
+  gap: 14px;
+  padding-bottom: 18px;
+  position: relative;
+}
+/* เส้นทองสั้น ๆ ใต้ตรา ทำให้เป็นกลุ่มเดียวกันแทนที่จะเป็นไอคอนกับข้อความลอย ๆ */
+.auth2-brand-top::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  bottom: 0;
+  width: 64px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--gold), transparent);
+}
+
+.auth2-mark {
+  width: 54px;
+  height: 54px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, .12);
+  border-color: rgba(255, 255, 255, .20);
+}
+.auth2-mark img { width: 38px; height: 38px; }
+
+.auth2-wordmark strong { font-size: 15.5px; letter-spacing: .07em; line-height: 1.35; }
+.auth2-wordmark span { font-size: 10.5px; letter-spacing: .22em; color: rgba(238, 244, 251, .55); }
+
+/* ---------- รอยต่อเฉียง ----------
+   แทนเส้นตรงกลางเดิม ใช้ลิ่มสีเนวี่เฉียงล้ำเข้าไปในฝั่งขาวเล็กน้อย
+   กว้างแค่ 44px จึงดูนุ่มนวล ไม่ดราม่า และไม่ทำให้เนื้อหาถูกบัง */
+.auth2 { grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr); overflow-x: hidden; }
+
+.auth2::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 52%;
+  width: 44px;
+  margin-inline-start: -1px;
+  background: var(--navy);
+  /* สามเหลี่ยม: กว้างเต็มด้านบน เรียวลงจนเป็นศูนย์ที่ด้านล่าง */
+  clip-path: polygon(0 0, 100% 0, 0 100%, 0 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+/* เส้นทองบางวิ่งตามแนวเฉียง */
+.auth2::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 52%;
+  width: 46px;
+  margin-inline-start: -1px;
+  background: linear-gradient(to bottom right, transparent 49.4%, rgba(198, 161, 91, .55) 49.4%, rgba(198, 161, 91, .55) 50.6%, transparent 50.6%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* เนื้อหาต้องอยู่เหนือลิ่ม */
+.auth2-brand, .auth2-panel { position: relative; z-index: 2; }
+
+/* ---------- จังหวะแนวตั้งของแผงซ้าย ---------- */
+.auth2-brand { justify-content: center; gap: var(--space-6); }
+.auth2-brand-body { max-width: 34ch; }
+
+@media (max-width: 960px) {
+  /* จอแคบซ่อนแผงแบรนด์อยู่แล้ว จึงต้องปิดลิ่มเฉียงด้วย */
+  .auth2::after, .auth2::before { display: none; }
+}
+
+/* ตราสัญลักษณ์ที่ใหญ่ขึ้นทำให้ 1440x900 เกินจอ 21px — บีบเฉพาะช่วงความสูงกลาง */
+@media (min-height: 821px) and (max-height: 960px) {
+  .auth2-brand { gap: var(--space-4); }
+  .auth2-brand-top { padding-bottom: 14px; }
+  .auth2-mark { width: 48px; height: 48px; }
+  .auth2-mark img { width: 33px; height: 33px; }
+}
+@media (max-height: 820px) {
+  .auth2-brand-top { padding-bottom: 12px; }
+  .auth2-mark { width: 44px; height: 44px; }
+  .auth2-mark img { width: 30px; height: 30px; }
+}

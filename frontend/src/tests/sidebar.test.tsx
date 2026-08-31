@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import type { AuthUser } from '@/auth/AuthContext';
 import { makeUser, renderWithProviders } from './test-utils';
 
@@ -7,6 +7,7 @@ const store = vi.hoisted(() => ({ user: null as AuthUser | null }));
 vi.mock('@/auth/AuthContext', () => ({ useAuth: () => ({ user: store.user }) }));
 
 import Sidebar from '@/components/layout/Sidebar';
+import { NAV_GROUPS } from '@/components/layout/nav-config';
 
 describe('Sidebar', () => {
   it('แสดงโลโก้จริงและชื่อระบบ', () => {
@@ -46,6 +47,48 @@ describe('Sidebar', () => {
     expect(screen.getByText('คำขอสมัครใช้งาน')).toBeInTheDocument();
     // /activity ยังเป็น SUPER_ADMIN เท่านั้นตาม activity.route.ts
     expect(screen.queryByText('ประวัติการใช้งาน')).not.toBeInTheDocument();
+  });
+
+  it('PHASE 34 — จัดกลุ่มเมนูใหม่ ไม่มีกลุ่มไหนยาวเกิน 8 รายการ', () => {
+    // เดิมกลุ่ม "คลังสินค้าและปฏิบัติการ" มี 15 เมนูในกลุ่มเดียว หาเมนูไม่เจอ
+    for (const group of NAV_GROUPS) {
+      expect(group.items.length, group.label).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it('PHASE 34 — ทุกกลุ่มมีหัวข้อที่กดพับได้ และพับแล้วเมนูข้างในหายไป', () => {
+    store.user = makeUser({ roles: ['SUPER_ADMIN'] });
+    renderWithProviders(<Sidebar collapsed={false} onNavigate={() => {}} onLogout={() => {}} />);
+
+    const toggle = screen.getByRole('button', { name: /จัดซื้อ/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('ใบสั่งซื้อ')).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('ใบสั่งซื้อ')).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(screen.getByText('ใบสั่งซื้อ')).toBeInTheDocument();
+  });
+
+  it('PHASE 34 — สถานะพับถูกจำไว้ใน localStorage', () => {
+    store.user = makeUser({ roles: ['SUPER_ADMIN'] });
+    const { unmount } = renderWithProviders(<Sidebar collapsed={false} onNavigate={() => {}} onLogout={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /จัดซื้อ/ }));
+    expect(localStorage.getItem('s2a_sidebar_groups_collapsed')).toContain('จัดซื้อ');
+    unmount();
+
+    renderWithProviders(<Sidebar collapsed={false} onNavigate={() => {}} onLogout={() => {}} />);
+    expect(screen.queryByText('ใบสั่งซื้อ')).not.toBeInTheDocument();
+    localStorage.removeItem('s2a_sidebar_groups_collapsed');
+  });
+
+  it('PHASE 34 — ทุก path ในเมนูยังมี route จริงใน App', () => {
+    // กันการจัดกลุ่มใหม่ทำเมนูหลุดหายหรือชี้ไปหน้าที่ไม่มีอยู่
+    const paths = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.path));
+    expect(new Set(paths).size).toBe(paths.length);
+    expect(paths).toHaveLength(34);
   });
 
   it('มีปุ่มออกจากระบบและเรียก callback เมื่อคลิก', () => {

@@ -19,7 +19,7 @@ import { PrismaClient } from '@prisma/client';
 dotenv.config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
 
 /** ฐานข้อมูลเดียวที่สคริปต์นี้ยอมทำงานด้วย — ตั้งใจให้เป็นฐานผลิตอย่างชัดเจน */
-const EXPECTED_DATABASE = 's2a_erp';
+const EXPECTED_DATABASE = 's2a_erp_main';
 
 const PERMISSIONS = [
   { code: 'STOCK_TRANSFER_VIEW', description: 'STOCK_TRANSFER_VIEW' },

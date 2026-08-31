@@ -70,6 +70,7 @@ export default function PartnerMastersPage({ section }: { section: Section }) {
 
   // สิทธิ์แก้ไขผูกกับ RECEIVING_CREATE เท่ากับที่ backend บังคับใน PATCH
   const canEdit = Boolean(user?.roles.includes('SUPER_ADMIN') || user?.permissions.includes('RECEIVING_CREATE'));
+  const canViewSupplierAnalytics = Boolean(user?.roles.includes('SUPER_ADMIN') || user?.permissions.some((code) => code === 'RECEIVING_VIEW' || code === 'PURCHASE_ORDER_VIEW'));
 
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<PartnerStatus>('active');
@@ -177,9 +178,10 @@ export default function PartnerMastersPage({ section }: { section: Section }) {
         description={isSupplier
           ? 'ผู้ขายที่ใช้อ้างอิงในใบรับของ — เพิ่มไว้ล่วงหน้าเพื่อไม่ต้องพิมพ์ชื่อซ้ำทุกครั้ง'
           : 'คลังที่ใช้เก็บของจริง — จำนวนสต็อกแก้ที่นี่ไม่ได้ ต้องทำผ่านเอกสารรับ/เบิก/ปรับปรุง'}
-        actions={canEdit
-          ? <button type="button" className="btn primary" onClick={openCreate}><Plus aria-hidden width={16} />เพิ่ม{noun}</button>
-          : undefined}
+        actions={<>
+          {isSupplier && canViewSupplierAnalytics && <Link className="btn" to="/supplier-analytics"><PackageSearch aria-hidden width={16} />วิเคราะห์การซื้อ</Link>}
+          {canEdit && <button type="button" className="btn primary" onClick={openCreate}><Plus aria-hidden width={16} />เพิ่ม{noun}</button>}
+        </>}
       />
 
       {list.isError && <div className="rb-callout warn" role="alert">

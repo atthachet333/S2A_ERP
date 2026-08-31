@@ -10,6 +10,25 @@ export type HomeContent = {
   kpiHead: Heading; kpiLabels: Pair[]; kpiBar: Pair; rankings: Pair; disclaimer: string;
   profitHead: Heading; waterfall: Pair[]; legend: string[];
   cta: [string, string, string, string]; footer: string[];
+  /** PHASE 43 — แถบคุณค่าแบบกระชับใต้ hero */
+  valueStrip: [title: string, description: string][];
+  /* PHASE 41 — ข้อมูลติดต่อจริงของบริษัท
+     ตัวเลข/ที่อยู่/LINE เป็นข้อเท็จจริง จึงเหมือนกันทุกภาษา แปลเฉพาะหัวข้อ */
+  contact: {
+    heading: string; officeHeading: string; phoneHeading: string;
+    websiteLabel: string; lineLabel: string; addressLabel: string;
+    people: [label: string, phone: string][];
+    lineModal: { title: string; subtitle: string; subtitleShort: string; idHint: string; addFriend: string; close: string; qrPending: string; mobileNote: string };
+    address: string[]; line: string; website: string;
+  };
+};
+
+/** ข้อมูลติดต่อที่ไม่แปลตามภาษา */
+const CONTACT_FACTS = {
+  people: [['ออฟฟิศ', '064-924-5544'], ['คุณผึ้ง', '090-662-5464'], ['คุณวิน', '063-869-3614']] as [string, string][],
+  address: ['14/14 ตรอกวัดเชิงหวาย', 'ซอยกรุงเทพ-นนท์บางซื่อ 21', 'เขตบางซื่อ แขวงบางซื่อ', 'กรุงเทพมหานคร 10800'],
+  line: '@s2a.customer',
+  website: 'www.s2aconsultant.com',
 };
 
 const th: HomeContent = {
@@ -24,6 +43,8 @@ const th: HomeContent = {
   kpiHead:['ภาพรวม KPI','แดชบอร์ดที่บอกทุกอย่างในหน้าเดียว','เห็นจำนวนเมนู วัตถุดิบ ต้นทุนเฉลี่ย เมนูขายดี และเมนูกำไรสูงสุดได้ทันที'], kpiLabels:[['วัตถุดิบทั้งหมด','รายการ'],['บรรจุภัณฑ์','รายการ'],['เมนูอาหาร','เมนู'],['กำไรเฉลี่ย/เมนู','Margin']], kpiBar:['ภาพรวมระบบ — S2A','ตัวอย่างหน้าจอ'], rankings:['เมนูขายดี 5 อันดับ','เมนู Margin สูงสุด'], disclaimer:'* ตัวเลขด้านบนเป็นตัวอย่างเพื่อสื่อการทำงาน เมื่อเข้าสู่ระบบจะแสดงข้อมูลจริงจากร้านของคุณ',
   profitHead:['ต้นทุนสู่กำไร','จากต้นทุนทุกบาท สู่ราคาขายที่ทำกำไร','ระบบรวมต้นทุนวัตถุดิบ บรรจุภัณฑ์ และค่าแรง แล้วคำนวณกำไรจากราคาขายให้เห็นชัด'], waterfall:[['วัตถุดิบ','฿22'],['บรรจุภัณฑ์','฿8'],['ค่าแรง / โสหุ้ย','฿5'],['ต้นทุนรวม','฿35'],['ราคาขาย ฿59','กำไร ฿24']], legend:['ต้นทุนวัตถุดิบ','ต้นทุนบรรจุภัณฑ์','ค่าแรง / Overhead','ต้นทุนรวม','ราคาขาย & กำไร'],
   cta:['พร้อมเริ่มใช้งาน','ระบบบริหารต้นทุนและสูตรอาหารที่ช่วยคุณตัดสินใจ','ชัดเจน ใช้งานง่าย และช่วยให้ทุกเมนูทำกำไรได้จริง — เข้าสู่ระบบเพื่อเริ่มจัดการต้นทุน สูตร และวัตถุดิบของคุณ','ดูฟีเจอร์ทั้งหมด'], footer:['ระบบคิดคำนวณต้นทุนและสูตรเมนูอาหาร สำหรับจัดการวัตถุดิบ บรรจุภัณฑ์ ราคาขาย และกำไร','ระบบ','เกี่ยวกับระบบ','ฟีเจอร์','การทำงาน','ภาพรวม KPI','เริ่มต้น','จัดการต้นทุนอาหาร','สร้างสูตรเมนู','วิเคราะห์กำไร','การตั้งค่าคุกกี้','ระบบคิดคำนวณต้นทุนและสูตรเมนูอาหาร'],
+  contact: { lineModal:{ title:'เพิ่มเพื่อนทาง LINE', subtitle:'สแกน QR Code เพื่อเพิ่มเพื่อน LINE Official Account ของ S2 Accounting Consultant', subtitleShort:'สแกน QR เพื่อเพิ่มเพื่อน', mobileNote:'หากเปิดจากโทรศัพท์ สามารถกดปุ่มด้านล่างเพื่อเปิด LINE ได้ทันที', idHint:'หรือค้นหา ID นี้ใน LINE: @s2a.customer', addFriend:'เปิด LINE เพื่อเพิ่มเพื่อน', close:'ปิด', qrPending:'ยังไม่ได้เพิ่มรูป QR — ใช้ปุ่มด้านล่างเพื่อเพิ่มเพื่อนได้ทันที' }, heading:'ติดต่อเรา', officeHeading:'สำนักงาน', phoneHeading:'โทรศัพท์', websiteLabel:'เว็บไซต์', lineLabel:'LINE Official Account', addressLabel:'ที่อยู่', ...CONTACT_FACTS },
+  valueStrip:[['ต้นทุนและสูตร','คำนวณต้นทุนสูตรและต้นทุนต่อหน่วย'],['คลังสินค้า','ติดตามยอดคงเหลือ ล็อต และวันหมดอายุ'],['จัดซื้อและรับเข้า','วางแผน สั่งซื้อ และติดตามการรับสินค้า'],['การผลิตและกำไร','วิเคราะห์ต้นทุนจริง ความสูญเสีย Margin และ Markup']],
 };
 
 const en: HomeContent = {
@@ -36,6 +57,8 @@ const en: HomeContent = {
   kpiHead:['KPI Overview','One dashboard tells the whole story','See menu and ingredient counts, average cost, top sellers, and highest-margin menus.'], kpiLabels:[['Total Ingredients','items'],['Packaging','items'],['Menus','menus'],['Average Profit / Menu','Margin']], kpiBar:['System Overview — S2A','Sample screen'], rankings:['Top 5 Selling Menus','Highest-Margin Menus'], disclaimer:'* Values shown are product examples. Your workspace displays actual business data after sign-in.',
   profitHead:['Cost to Profit','Turn every baht of cost into a profitable selling price','Combine ingredient, packaging, and labor costs, then clearly calculate profit from selling price.'], waterfall:[['Ingredients','THB 22'],['Packaging','THB 8'],['Labor / Overhead','THB 5'],['Total Cost','THB 35'],['Selling Price THB 59','Profit THB 24']], legend:['Ingredient Cost','Packaging Cost','Labor / Overhead','Total Cost','Selling Price & Profit'],
   cta:['Ready to Get Started?','Cost and recipe management that supports better decisions','Clear, practical, and designed to make every menu profitable. Sign in to manage your costs, recipes, and ingredients.','Explore All Features'], footer:['Food costing and recipe management for ingredients, packaging, selling prices, and profit.','System','About','Features','How It Works','KPI Overview','Get Started','Manage Food Cost','Build Menu Recipes','Analyze Profit','Cookie Settings','Food Costing & Recipe Intelligence'],
+  contact: { lineModal:{ title:'Add us on LINE', subtitle:'Scan the QR code to add the LINE Official Account of S2 Accounting Consultant', subtitleShort:'Scan QR to add friend', mobileNote:'On a phone, use the button below to open LINE directly.', idHint:'Or search this ID in LINE: @s2a.customer', addFriend:'Open LINE to add friend', close:'Close', qrPending:'QR image not added yet — use the button below to add instantly' }, heading:'Contact us', officeHeading:'Office', phoneHeading:'Phone', websiteLabel:'Website', lineLabel:'LINE Official Account', addressLabel:'Address', ...CONTACT_FACTS },
+  valueStrip:[['Costing & Recipes','Recipe cost and cost per unit'],['Inventory','Balances, lots and expiry tracking'],['Purchasing & Receiving','Plan, order and track goods received'],['Production & Profit','Actual cost, waste, margin and markup']],
 };
 
 const zh: HomeContent = {
@@ -47,6 +70,8 @@ const zh: HomeContent = {
   kpiHead:['KPI 概览','一个仪表板掌握全部信息','快速查看菜品与原料数量、平均成本、畅销菜品及最高利润率菜品。'], kpiLabels:[['原料总数','项'],['包装','项'],['菜品','道'],['平均每道菜利润','利润率']], kpiBar:['系统概览 — S2A','示例界面'], rankings:['畅销菜品前 5 名','最高利润率菜品'], disclaimer:'* 以上数值仅为产品示例。登录后将显示您企业的实际数据。',
   profitHead:['从成本到利润','让每一泰铢成本转化为可盈利的售价','汇总原料、包装与人工成本，并根据售价清晰计算利润。'], waterfall:[['原料','THB 22'],['包装','THB 8'],['人工 / 间接费用','THB 5'],['总成本','THB 35'],['售价 THB 59','利润 THB 24']], legend:['原料成本','包装成本','人工 / 间接费用','总成本','售价与利润'],
   cta:['准备开始使用？','帮助您决策的成本与配方管理系统','清晰、实用，让每道菜品真正盈利。登录后即可管理成本、配方与原料。','查看全部功能'], footer:['用于管理原料、包装、售价与利润的食品成本及配方系统。','系统','系统介绍','功能','工作流程','KPI 概览','开始使用','管理食品成本','创建菜品配方','分析利润','Cookie 设置','食品成本与配方管理系统'],
+  contact: { lineModal:{ title:'添加 LINE 好友', subtitle:'扫描二维码添加 S2 Accounting Consultant 的 LINE 官方账号', subtitleShort:'扫码添加好友', mobileNote:'如使用手机，可点击下方按钮直接打开 LINE。', idHint:'或在 LINE 中搜索此 ID：@s2a.customer', addFriend:'打开 LINE 添加好友', close:'关闭', qrPending:'尚未添加二维码图片 — 可使用下方按钮直接添加' }, heading:'联系我们', officeHeading:'办公室', phoneHeading:'电话', websiteLabel:'网站', lineLabel:'LINE 官方账号', addressLabel:'地址', ...CONTACT_FACTS },
+  valueStrip:[['成本与配方','计算配方成本与单位成本'],['库存','跟踪结存、批次与效期'],['采购与入库','计划、下单并跟踪收货'],['生产与利润','分析实际成本、损耗、利润率与加价率']],
 };
 
 export const homeContent: Record<Locale, HomeContent> = { th, en, 'zh-CN': zh };

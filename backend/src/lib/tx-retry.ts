@@ -15,7 +15,7 @@ import { Prisma } from '@prisma/client';
 const LOCK_CONFLICT_CODES = ['1213', '1205', '1020'];
 
 /** unique key ที่เกี่ยวกับเลขเอกสารโดยตรง */
-const DOCUMENT_NUMBER_TARGETS = ['document_counters', 'orderNo', 'receiptNo', 'issueNo', 'adjustmentNo'];
+const DOCUMENT_NUMBER_TARGETS = ['document_counters', 'orderNo', 'poNo', 'receiptNo', 'issueNo', 'adjustmentNo'];
 
 const known = (error: unknown): Prisma.PrismaClientKnownRequestError | null =>
   error instanceof Prisma.PrismaClientKnownRequestError ? error : null;
@@ -54,7 +54,12 @@ export function isDocumentNumberRace(error: unknown): boolean {
  * PHASE 17 — การชนกันที่แถวยอดคงเหลือ
  * ครอบเฉพาะการแย่งล็อกเท่านั้น สต็อกไม่พอ (InsufficientStockError) จะไม่ถูกลองใหม่เด็ดขาด
  */
-export const isStockLockConflict = isLockConflict;
+export const isStockLockConflict = (error: unknown): boolean => {
+  if (isLockConflict(error)) return true;
+  const prismaError = known(error);
+  if (prismaError?.code !== 'P2002') return false;
+  return JSON.stringify(prismaError.meta?.target ?? '').includes('stock_balances_logical_key');
+};
 
 async function withRetry<T>(run: () => Promise<T>, retryable: (error: unknown) => boolean, maxAttempts: number): Promise<T> {
   let lastError: unknown;

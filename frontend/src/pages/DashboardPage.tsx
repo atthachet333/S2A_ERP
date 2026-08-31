@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle, ArrowRight, CheckCircle2,
@@ -74,10 +74,27 @@ export default function DashboardPage() {
   const activity = useActivity(1, 6, isAdmin);
   const d = useDashboardData(roles, permissions);
 
+  /* หน้านี้ดึงข้อมูลจากสามแหล่ง: useDashboardData (7 query), useDashboardSummary และ useActivity
+     แต่ refetchAll() ของ useDashboardData วนเฉพาะ query ของตัวเองเท่านั้น
+     ปุ่ม "รีเฟรชข้อมูล" จึงไม่เคยดึง summary/activity ใหม่เลย
+     ซึ่งเป็นแหล่งของการ์ด Cost Insight, มูลค่าสต็อก, การผลิต และงานจัดซื้อ
+     ผลคือกดแล้วตัวเลขส่วนใหญ่บนหน้าไม่ขยับ เหมือนปุ่มไม่ทำงาน */
+  const refreshAll = useCallback(() => {
+    d.refetchAll();
+    void summary.refetch();
+    void activity.refetch();
+  }, [d, summary, activity]);
+  const isRefreshing = d.isFetching || summary.isFetching || activity.isFetching;
+  const lastUpdatedAt = Math.max(d.lastUpdatedAt, summary.dataUpdatedAt ?? 0, activity.dataUpdatedAt ?? 0);
+
   const invKpi = d.inventory.data?.kpi;
   const invRows = d.inventory.data?.rows;
   const menus = d.menus.data;
   const s = summary.data;
+  const productionHealth = s?.production ?? { runs: 0, averageYieldPercent: null, costVariance: 0, recordedWaste: [], lowSample: false };
+  const purchasePlanning = s?.purchasePlanning ?? { plans: 0, draftPlans: 0, shortageItems: 0, estimatedCost: 0 };
+  const purchaseOrders = s?.purchaseOrders ?? { draft: 0, awaitingDelivery: 0, partial: 0, overdue: 0 };
+  const inventoryValuation = s?.inventoryValuation ?? { knownValue: invKpi?.totalValue ?? 0, unknownCostStockCount: 0, history: [] };
 
   const receivingToday = countToday(d.receiving.data, 'receiptDate');
   const issueToday = countToday(d.issues.data, 'issueDate');
@@ -156,13 +173,13 @@ export default function DashboardPage() {
           {user?.fullName && <span>{greeting()}, <b>{user.fullName}</b></span>}
           <span>{formatThaiDate(new Date())}</span>
           {/* เวลาอัปเดตมาจาก react-query ที่ดึงสำเร็จจริง ไม่ใช่เวลาที่ render */}
-          {d.lastUpdatedAt > 0 && (
-            <span>อัปเดตล่าสุด {new Date(d.lastUpdatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+          {lastUpdatedAt > 0 && (
+            <span>อัปเดตล่าสุด {new Date(lastUpdatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
           )}
-          {d.isFetching && <span>กำลังอัปเดต…</span>}
+          {isRefreshing && <span>กำลังอัปเดต…</span>}
         </>}
         actions={
-          <button type="button" className="btn" onClick={() => d.refetchAll()} disabled={d.isFetching}>
+          <button type="button" className="btn" onClick={refreshAll} disabled={isRefreshing}>
             <RefreshCw aria-hidden width={16} />รีเฟรชข้อมูล
           </button>
         }
@@ -191,11 +208,15 @@ export default function DashboardPage() {
       )}
 
       <div className="dash-grid">
+        <ContentCard className="dash-span-12" title="ต้นทุนเชิงลึก / Cost Insight" description="ข้อเท็จจริงจากต้นทุนที่บันทึกจริง ไม่ใช่การคาดการณ์" actions={<Link to="/analytics/cost-variance" className="btn">ดูรายละเอียด<ArrowRight aria-hidden width={15}/></Link>}>
+          {s?.costInsights?.movers.length ? <div className="dash-statrow">{s.costInsights.movers.map((m)=><div key={m.itemId}><span>{m.itemName}</span><b className="num">{m.change>=0?'+':''}{formatMoney(m.change,2)}</b></div>)}</div> : <p className="dash-note">ข้อมูลต้นทุนย้อนหลังยังไม่เพียงพอ</p>}
+          {s?.costInsights&&<p className="dash-note">ผลต่างต้นทุนการผลิตที่เสร็จแล้ว {formatMoney(s.costInsights.productionVariance,2)} จาก {s.costInsights.productionRunCount} งาน</p>}
+        </ContentCard>
         {/* ---------- ต้องจัดการตอนนี้ ---------- */}
         <ContentCard className="dash-span-8" title="ต้องจัดการตอนนี้"
           description={alerts.length ? `${alerts.length} เรื่องที่ควรดำเนินการ` : 'ไม่มีเรื่องค้างในตอนนี้'}>
           {d.inventory.isError && d.menus.isError
-            ? <CardError onRetry={() => d.refetchAll()} />
+            ? <CardError onRetry={refreshAll} />
             : alerts.length === 0
               ? <EmptyState icon={CheckCircle2} title="ไม่มีเรื่องต้องจัดการ" description="สต็อก ราคา และเอกสารอยู่ในสถานะปกติทั้งหมด" />
               : (
@@ -244,7 +265,7 @@ export default function DashboardPage() {
               : invKpi && (
                 <>
                   <div className="dash-statrow">
-                    <div><span>มูลค่ารวม</span><b className="num">{formatMoney(invKpi.totalValue, 0)}</b></div>
+                    <div><span>มูลค่าที่ทราบ</span><b className="num">{formatMoney(inventoryValuation.knownValue, 0)}</b></div>
                     <div><span>มีของ</span><b className="num">{invKpi.itemCount - invKpi.outCount - invKpi.negativeCount}</b></div>
                     <div className={invKpi.lowCount ? 'is-warn' : ''}><span>ใกล้หมด</span><b className="num">{invKpi.lowCount}</b></div>
                     <div className={invKpi.outCount ? 'is-bad' : ''}><span>หมด</span><b className="num">{invKpi.outCount}</b></div>
@@ -253,6 +274,11 @@ export default function DashboardPage() {
                   {invKpi.thresholdMissing && (
                     <p className="dash-note"><Info aria-hidden width={14} />บางรายการยังไม่ได้ตั้งจุดสั่งซื้อ ระบบจึงไม่เตือนว่าใกล้หมด</p>
                   )}
+                  {inventoryValuation.unknownCostStockCount > 0 && <p className="dash-note"><AlertTriangle aria-hidden width={14} />มีสต็อก {inventoryValuation.unknownCostStockCount} balance ที่ยังประเมินมูลค่าไม่ได้</p>}
+                  <h3 className="dash-sub">มูลค่าสินค้าคงคลังย้อนหลัง</h3>
+                  {(inventoryValuation.history?.length ?? 0) < 2
+                    ? <p className="dash-note">ข้อมูลย้อนหลังยังไม่เพียงพอ</p>
+                    : <div className="analytics-bars">{inventoryValuation.history.map((point) => <Link className="breakdown-row" key={point.snapshotId} to={`/inventory/valuation/history/${point.snapshotId}`}><b>{new Date(point.businessDate).toLocaleDateString('th-TH')}</b><span>{formatMoney(point.knownValue, 0)}</span><small>ครบถ้วน {point.completeness.toFixed(2)}%</small></Link>)}</div>}
                   {invSlices.length > 0 && (
                     <DonutChart slices={invSlices}
                       centerValue={String(invKpi.itemCount)} centerLabel="รายการ" />
@@ -285,7 +311,7 @@ export default function DashboardPage() {
         <ContentCard className="dash-span-5" title="เอกสารปฏิบัติการวันนี้"
           description="นับจำนวนเอกสาร ไม่ใช่จำนวนรายการเดินสต็อก จึงไม่เท่ากับ KPI ด้านบน">
           {d.receiving.isError && d.issues.isError && d.adjustments.isError
-            ? <CardError onRetry={() => d.refetchAll()} />
+            ? <CardError onRetry={refreshAll} />
             : (
               <div className="dash-ops">
                 {[
@@ -338,6 +364,17 @@ export default function DashboardPage() {
               )}
           </div>
         </ContentCard>
+
+        <ContentCard className="dash-span-6" title="สุขภาพการผลิต" description="Yield ของเสีย และผลต่างต้นทุนจากใบผลิตที่ยืนยันแล้ว" actions={<Link to="/production" className="btn">ดูการผลิต</Link>}>
+          {summary.isError ? <CardError onRetry={() => void summary.refetch()} /> : summary.isLoading ? <CardSkeleton lines={3} /> : s && (productionHealth.runs === 0 ? <p className="dash-ok"><Info aria-hidden width={15}/>ยังไม่มีข้อมูลการผลิตจริง</p> : <><div className="dash-statrow"><div><span>ใบผลิต</span><b className="num">{productionHealth.runs}</b></div><div><span>Yield เฉลี่ย</span><b className="num">{productionHealth.averageYieldPercent == null ? '—' : `${productionHealth.averageYieldPercent.toFixed(1)}%`}</b></div><div><span>ผลต่างต้นทุน</span><b className="num">฿{productionHealth.costVariance.toLocaleString('th-TH', { maximumFractionDigits: 2 })}</b></div><div><span>ของเสียบันทึก</span><b className="num">{productionHealth.recordedWaste.length ? productionHealth.recordedWaste.map((row) => `${row.quantity.toLocaleString('th-TH')} ${row.unitCode}`).join(' · ') : '0'}</b></div></div>{productionHealth.lowSample && <p className="dash-note"><Info aria-hidden width={14}/>ข้อมูลยังมีจำนวนน้อย จึงแสดงผลจริงโดยไม่เรียกว่าแนวโน้ม</p>}</>)}
+        </ContentCard>
+
+        <ContentCard className="dash-span-6" title="วางแผนจัดซื้อ" description="สัญญาณจากแผนจริง โดยไม่มีการจองหรือสั่งซื้ออัตโนมัติ" actions={<Link to="/purchase-planning" className="btn">ดูแผน</Link>}>
+          {purchasePlanning.plans === 0 ? <p className="dash-ok"><Info aria-hidden width={15}/>ยังไม่มีแผนจัดซื้อ</p> : <div className="dash-statrow"><div><span>แผนใช้งาน</span><b className="num">{purchasePlanning.plans}</b></div><div><span>แผนร่าง</span><b className="num">{purchasePlanning.draftPlans}</b></div><div><span>รายการขาด</span><b className="num">{purchasePlanning.shortageItems}</b></div><div><span>ประมาณการ</span><b className="num">฿{purchasePlanning.estimatedCost.toLocaleString('th-TH',{maximumFractionDigits:2})}</b></div></div>}
+        </ContentCard>
+        {canAny(roles,permissions,'PURCHASE_ORDER_VIEW','PURCHASE_ORDER_CREATE','PURCHASE_ORDER_EDIT')&&<ContentCard className="dash-span-6" title="ใบสั่งซื้อ" description="สถานะข้อผูกพันและการส่งมอบจากข้อมูลจริง" actions={<Link to="/purchase-orders" className="btn">ดูใบสั่งซื้อ</Link>}>
+          <div className="dash-statrow"><div><span>ร่าง</span><b className="num">{purchaseOrders.draft}</b></div><div><span>รอส่ง</span><b className="num">{purchaseOrders.awaitingDelivery}</b></div><div><span>รับบางส่วน</span><b className="num">{purchaseOrders.partial}</b></div><div className={purchaseOrders.overdue?'is-bad':''}><span>เกินกำหนด</span><b className="num">{purchaseOrders.overdue}</b></div></div>
+        </ContentCard>}
 
         {/* ---------- ต้นทุนและสูตร ---------- */}
         <ContentCard className="dash-span-6" title="ต้นทุนและสูตรอาหาร"

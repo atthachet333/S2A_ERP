@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, within } from '@testing-library/react';
+import { Link } from 'react-router-dom';
 import { renderWithProviders } from './test-utils';
 import { I18nProvider } from '@/i18n/i18n';
 
@@ -80,7 +81,12 @@ describe('public mobile navigation', () => {
   it('8 เมนูบนเดสก์ท็อปเดิมยังอยู่ครบ ไม่ถูกแทนที่', () => {
     renderHome();
     const desktopNav = document.querySelector('.hp-nav')!;
-    expect(desktopNav.querySelectorAll('a')).toHaveLength(4);
+    const hrefs = [...desktopNav.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    // PHASE 41 — เพิ่มเมนู "ติดต่อเรา" เข้ามา เจตนาเดิมของเทสต์คือเมนูเก่าต้องไม่หายไป
+    for (const original of ['#about', '#features', '#process', '#kpi']) {
+      expect(hrefs, original).toContain(original);
+    }
+    expect(hrefs).toContain('#contact');
   });
 });
 
@@ -98,15 +104,47 @@ describe('global page pattern', () => {
     expect(document.querySelector('.s2-page--default')).toBeTruthy();
   });
 
-  it('11 PageHeader แสดง title/description/breadcrumb/actions ครบ', () => {
+  it('11 PageHeader แสดง title/description/actions และตัด breadcrumb ที่เป็นป้ายโมดูลซ้ำ', () => {
+    /* PHASE 34 — หัวเว็บเป็นเจ้าของ breadcrumb/โมดูลแล้ว
+       breadcrumb ที่เป็นข้อความล้วนคือป้ายโมดูล จึงไม่ต้องแสดงซ้ำที่หัวหน้า */
     renderWithProviders(
       <PageHeader title="วัตถุดิบ" description="รายการทั้งหมด" breadcrumb="คลังข้อมูล"
         actions={<button>เพิ่ม</button>} />,
     );
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('วัตถุดิบ');
     expect(screen.getByText('รายการทั้งหมด')).toBeInTheDocument();
-    expect(screen.getByText('คลังข้อมูล')).toBeInTheDocument();
+    expect(screen.queryByText('คลังข้อมูล')).not.toBeInTheDocument();
     expect(within(document.querySelector('.s2-page-actions')!).getByRole('button')).toBeInTheDocument();
+  });
+
+  it('11ก breadcrumb ที่เป็นลิงก์ย้อนกลับต้องไม่ถูกตัด (ไม่ใช่การซ้ำ แต่เป็นการนำทาง)', () => {
+    renderWithProviders(
+      <PageHeader title="รายละเอียดผู้จำหน่าย" breadcrumb={<Link to="/supplier-analytics">วิเคราะห์ผู้จำหน่าย</Link>} />,
+    );
+    expect(screen.getByRole('link', { name: 'วิเคราะห์ผู้จำหน่าย' })).toBeInTheDocument();
+  });
+
+  it('11ข ซ่อนชื่อหน้าที่ซ้ำกับชื่อบนหัวเว็บ ไม่ให้มี h1 สองอัน', () => {
+    // route ปริยายของ helper คือ /dashboard ซึ่งหัวเว็บแสดงชื่อว่า "ภาพรวม"
+    renderWithProviders(<PageHeader title="ภาพรวม" description="คำอธิบายยังอยู่" />);
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(screen.getByText('คำอธิบายยังอยู่')).toBeInTheDocument();
+  });
+
+  it('11ค ชื่อหน้าที่สื่อความหมายต่างจากหัวเว็บ ต้องคงไว้', () => {
+    // หัวเว็บของ /dashboard คือ "ภาพรวม" ส่วนหน้านี้ตั้งชื่อเจาะจงกว่าว่า "ภาพรวมระบบ"
+    renderWithProviders(<PageHeader title="ภาพรวมระบบ" />);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('ภาพรวมระบบ');
+  });
+
+  it('11ง คำอธิบายและปุ่มของหน้าต้องอยู่ครบ แม้ชื่อหน้าจะถูกซ่อนเพราะซ้ำ', () => {
+    renderWithProviders(
+      <PageHeader title="ภาพรวม" description="สรุปสถานะการดำเนินงาน"
+        actions={<button>รีเฟรชข้อมูล</button>} />,
+    );
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(screen.getByText('สรุปสถานะการดำเนินงาน')).toBeInTheDocument();
+    expect(within(document.querySelector('.s2-page-actions')!).getByRole('button', { name: 'รีเฟรชข้อมูล' })).toBeInTheDocument();
   });
 
   it('12 PageHeader ไม่บังคับให้มี description/actions', () => {

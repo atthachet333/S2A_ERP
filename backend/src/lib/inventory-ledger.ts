@@ -14,10 +14,10 @@ export type Tx = Prisma.TransactionClient;
 
 const D = (v: Prisma.Decimal | number | string) => new Prisma.Decimal(v);
 
-export type DocType = 'STOCK_ISSUE' | 'GOODS_RECEIPT' | 'STOCK_ADJUSTMENT' | 'STOCK_TRANSFER';
+export type DocType = 'STOCK_ISSUE' | 'GOODS_RECEIPT' | 'STOCK_ADJUSTMENT' | 'STOCK_TRANSFER' | 'PRODUCTION_RUN' | 'PURCHASE_PLAN' | 'PURCHASE_ORDER';
 
 /** prefix เลขเอกสาร — ใบเบิกครัวกลางใช้ RI */
-const PREFIX: Record<DocType, string> = { STOCK_ISSUE: 'RI', GOODS_RECEIPT: 'GR', STOCK_ADJUSTMENT: 'AJ', STOCK_TRANSFER: 'TR' };
+const PREFIX: Record<DocType, string> = { STOCK_ISSUE: 'RI', GOODS_RECEIPT: 'GR', STOCK_ADJUSTMENT: 'AJ', STOCK_TRANSFER: 'TR', PRODUCTION_RUN: 'PR', PURCHASE_PLAN: 'PP', PURCHASE_ORDER: 'PO' };
 
 /** YYYYMMDD ตามเวลาไทย */
 export function periodKeyOf(now = new Date()): string {
@@ -138,6 +138,8 @@ export interface MovementInput {
   companyId: string;
   warehouseId: string;
   itemId: string;
+  locationId?: string | null;
+  lotId?: string | null;
   movementType: StockMovementType;
   /** บวก = เข้า, ลบ = ออก (หน่วยฐานของ item) */
   changeQty: number;
@@ -176,11 +178,11 @@ export interface LockedBalance {
  *
  * คืน null เมื่อยังไม่มีแถวยอดคงเหลือของ (สินค้า · คลัง) นี้
  */
-export async function lockBalance(tx: Tx, itemId: string, warehouseId: string): Promise<LockedBalance | null> {
+export async function lockBalance(tx: Tx, itemId: string, warehouseId: string, lotId?: string | null, locationId?: string | null): Promise<LockedBalance | null> {
   const rows = await tx.$queryRaw<{ id: string; onHand: unknown; reserved: unknown }[]>`
     SELECT \`id\`, \`onHand\`, \`reserved\` FROM \`stock_balances\`
      WHERE \`itemId\` = ${itemId} AND \`warehouseId\` = ${warehouseId}
-       AND \`locationId\` IS NULL AND \`lotId\` IS NULL
+       AND \`locationKey\` = ${locationId ?? ''} AND \`lotKey\` = ${lotId ?? ''}
      FOR UPDATE`;
   if (rows.length === 0) return null;
   return { id: rows[0].id, onHand: Number(String(rows[0].onHand)), reserved: Number(String(rows[0].reserved)) };
@@ -203,12 +205,12 @@ export async function lockBalancesInOrder(tx: Tx, warehouseId: string, itemIds: 
  * การโอนย้ายแตะสองคลังในใบเดียว ถ้าใบ A→B ล็อกคลัง A ก่อน แต่ใบ B→A ล็อกคลัง B ก่อน
  * ทั้งสองใบจะรอกันเองจนเกิด deadlock การเรียงด้วยคีย์เดียวกันทุกใบทำให้ใบหลังต่อคิวแทน
  */
-export async function lockBalancePairs(tx: Tx, pairs: readonly { itemId: string; warehouseId: string }[]): Promise<void> {
+export async function lockBalancePairs(tx: Tx, pairs: readonly { itemId: string; warehouseId: string; lotId?: string | null; locationId?: string | null }[]): Promise<void> {
   // id เป็น cuid (ตัวอักษรและตัวเลขล้วน) เครื่องหมาย | จึงใช้เป็นตัวคั่นได้โดยไม่กำกวม
-  const keys = [...new Set(pairs.map((p) => `${p.warehouseId}|${p.itemId}`))].sort();
+  const keys = [...new Set(pairs.map((p) => `${p.warehouseId}|${p.itemId}|${p.locationId ?? ''}|${p.lotId ?? ''}`))].sort();
   for (const key of keys) {
-    const [warehouseId, itemId] = key.split('|');
-    await lockBalance(tx, itemId, warehouseId);
+    const [warehouseId, itemId, locationId, lotId] = key.split('|');
+    await lockBalance(tx, itemId, warehouseId, lotId || null, locationId || null);
   }
 }
 
@@ -219,7 +221,7 @@ export async function lockBalancePairs(tx: Tx, pairs: readonly { itemId: string;
 export async function applyMovement(tx: Tx, input: MovementInput) {
   const { companyId, warehouseId, itemId, changeQty } = input;
 
-  const balance = await lockBalance(tx, itemId, warehouseId);
+  const balance = await lockBalance(tx, itemId, warehouseId, input.lotId, input.locationId);
   const before = balance ? balance.onHand : 0;
   const after = before + changeQty;
 
@@ -230,12 +232,12 @@ export async function applyMovement(tx: Tx, input: MovementInput) {
   }
 
   if (balance) await tx.stockBalance.update({ where: { id: balance.id }, data: { onHand: D(after), version: { increment: 1 } } });
-  else await tx.stockBalance.create({ data: { itemId, warehouseId, onHand: D(after) } });
+  else await tx.stockBalance.create({ data: { itemId, warehouseId, locationId: input.locationId ?? null, lotId: input.lotId ?? null, locationKey: input.locationId ?? '', lotKey: input.lotId ?? '', onHand: D(after) } });
 
   const unitCost = input.unitCost ?? 0;
   return tx.stockLedger.create({
     data: {
-      companyId, warehouseId, itemId,
+      companyId, warehouseId, itemId, locationId: input.locationId ?? null, lotId: input.lotId ?? null,
       movementType: input.movementType,
       refType: input.refType, refId: input.refId, refNo: input.refNo,
       beforeQty: D(before),
@@ -255,6 +257,9 @@ export async function applyMovement(tx: Tx, input: MovementInput) {
 /** movement ที่ระบบสร้างเป็น "ขากลับ" ของแต่ละชนิด */
 const REVERSAL_OF: Partial<Record<StockMovementType, StockMovementType>> = {
   PRODUCTION_ISSUE: StockMovementType.PRODUCTION_RETURN,
+  // การกลับใบผลิตใช้ PRODUCTION_RETURN ทั้งขาคืนวัตถุดิบและขานำผลผลิตออก
+  // โดย qtyIn/qtyOut เป็นตัวบอกทิศทาง จึงไม่ต้องเพิ่ม movement enum ใหม่
+  PRODUCTION_OUTPUT: StockMovementType.PRODUCTION_RETURN,
   PURCHASE_RECEIPT: StockMovementType.ADJUSTMENT_OUT,
   ADJUSTMENT_IN: StockMovementType.ADJUSTMENT_OUT,
   ADJUSTMENT_OUT: StockMovementType.ADJUSTMENT_IN,
@@ -273,7 +278,7 @@ export async function reverseDocument(tx: Tx, refType: string, refId: string, cr
   if (original.length === 0 || rows.some((r) => r.reason === 'REVERSAL')) return 0;
 
   // PHASE 17/18 — ล็อกตามลำดับสากลเดียวกับตอนสร้างเอกสาร ครอบคลุมเอกสารที่แตะหลายคลัง เช่น การโอนย้าย
-  await lockBalancePairs(tx, original.map((m) => ({ itemId: m.itemId, warehouseId: m.warehouseId })));
+  await lockBalancePairs(tx, original.map((m) => ({ itemId: m.itemId, warehouseId: m.warehouseId, lotId: m.lotId, locationId: m.locationId })));
 
   for (const m of original) {
     const change = Number(m.qtyIn) - Number(m.qtyOut); // ทิศทางเดิม
@@ -281,6 +286,8 @@ export async function reverseDocument(tx: Tx, refType: string, refId: string, cr
       companyId: m.companyId ?? '',
       warehouseId: m.warehouseId,
       itemId: m.itemId,
+      lotId: m.lotId,
+      locationId: m.locationId,
       movementType: REVERSAL_OF[m.movementType] ?? StockMovementType.ADJUSTMENT_IN,
       changeQty: -change,
       unit: m.unit,

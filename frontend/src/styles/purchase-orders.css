@@ -1,0 +1,13 @@
+.purchase-order-page{--po-accent:var(--accent,#186a5a)}
+.purchase-order-meta{display:flex;gap:1rem;flex-wrap:wrap;align-items:end}.purchase-order-meta div{min-width:12rem}
+.purchase-order-workspace{grid-template-columns:minmax(0,72fr) minmax(17rem,28fr)}
+.purchase-order-plan-ref{padding:.7rem .85rem;border:1px solid var(--border);border-radius:var(--radius-field);background:var(--surface-2);color:var(--text-muted)}
+.purchase-order-lines{display:grid;gap:.75rem;margin-bottom:1rem}.purchase-order-lines>div{display:grid;grid-template-columns:minmax(13rem,2fr) minmax(8rem,1fr) minmax(10rem,1fr) auto auto;gap:.65rem;align-items:end;padding:.85rem;border:1px solid var(--border);border-radius:var(--radius-card);background:var(--surface)}
+.purchase-order-lines label{display:grid;gap:.3rem}.purchase-order-lines small{color:var(--text-muted)}.purchase-order-lines b{padding-bottom:.7rem;font-variant-numeric:tabular-nums}
+.purchase-order-meta{margin:0}.purchase-order-meta div{display:grid;gap:.25rem}.purchase-order-meta dt{color:var(--text-muted);font-size:.82rem}.purchase-order-meta dd{margin:0;font-weight:650}
+.purchase-order-receipts{list-style:none;padding:0;margin:0;display:grid;gap:.55rem}.purchase-order-receipts li{display:grid;grid-template-columns:1fr auto auto;gap:1rem;align-items:center;padding:.7rem;border-bottom:1px solid var(--border)}
+.variance-up{color:var(--danger-fg);font-weight:700}.variance-down{color:var(--success-fg);font-weight:700}
+.purchase-plan-order-bridge{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:1rem;margin:1rem auto 0;max-width:var(--page-wide,1440px);padding:.85rem 1rem;border:1px solid color-mix(in srgb,var(--po-accent) 35%,var(--border));border-radius:var(--radius-card);background:color-mix(in srgb,var(--surface) 88%,var(--po-accent) 12%)}.purchase-plan-order-bridge div{display:grid;gap:.15rem}.purchase-plan-order-bridge span{color:var(--text-muted);font-size:.86rem}
+@media(max-width:900px){.purchase-order-workspace{grid-template-columns:1fr}.purchase-order-lines>div{grid-template-columns:1fr 1fr}.purchase-order-lines>div>select{grid-column:1/-1}}
+@media(max-width:620px){.purchase-order-lines>div{grid-template-columns:1fr}.purchase-order-lines>div>select{grid-column:auto}.purchase-order-receipts li{grid-template-columns:1fr auto}.purchase-order-receipts li .badge{grid-column:1/-1;width:max-content}.purchase-plan-order-bridge{margin-inline:.75rem;align-items:flex-start;flex-direction:column}}
+@media(prefers-color-scheme:dark){.purchase-order-plan-ref{background:color-mix(in srgb,var(--surface) 82%,var(--po-accent) 18%)}}
