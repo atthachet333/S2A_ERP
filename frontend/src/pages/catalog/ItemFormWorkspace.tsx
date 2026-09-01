@@ -3,9 +3,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, Loader2, Info, Boxes, ShoppingCart, Scale, SlidersHorizontal,
-  Calculator, History, Plus, AlertTriangle, StickyNote, Check,
+  Calculator, History, Plus, AlertTriangle, StickyNote, Check, PackagePlus, CheckCircle2, ArrowRight,
 } from 'lucide-react';
-import { catalogApi, type ItemType } from '@/lib/catalog';
+import { catalogApi, type ItemDetail, type ItemType } from '@/lib/catalog';
+import ItemStockPanel from '@/components/inventory/ItemStockPanel';
+import StockReceivingDialog, { type StockReceivingResult } from '@/components/inventory/StockReceivingDialog';
+import ReceivingSuccessCard from '@/components/inventory/ReceivingSuccessCard';
+import { canReceiveStock, receivingAccess } from '@/lib/stock-receiving';
 import { formatMoney, formatThaiDateTime } from '@/lib/utils';
 import { unitPricePreview } from '@/lib/item-unit-price';
 import { formatFactor, resolveConversion } from '@/lib/standard-conversion';
@@ -72,6 +76,18 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
   const [error, setError] = useState('');
   const [touched, setTouched] = useState(false);
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
+
+  /* PHASE 35 — สร้างวัตถุดิบ → นำเข้าสต็อก เป็นงานเดียวที่ต่อเนื่องกัน
+     หลังสร้างสำเร็จจึงไม่เด้งกลับหน้ารายการทันที แต่ถามต่อว่าจะนำเข้าสต็อกเลยไหม */
+  const [created, setCreated] = useState<ItemDetail | null>(null);
+  const [receivingOpen, setReceivingOpen] = useState(false);
+  const [receivedResult, setReceivedResult] = useState<StockReceivingResult | null>(null);
+  const access = receivingAccess(user?.roles, user?.permissions);
+  const canReceive = canReceiveStock(access);
+  /* วัตถุดิบที่ modal รับของกำลังทำงานด้วย — หน้าแก้ไขใช้ของเดิม หน้าสร้างใช้ตัวที่เพิ่งสร้าง */
+  const receivingItem = isEdit ? detail.data ?? null : created;
+  const openReceiving = () => { setReceivedResult(null); setReceivingOpen(true); };
+  const onReceived = (result: StockReceivingResult) => { setReceivedResult(result); setReceivingOpen(false); };
 
   // เพิ่มหน่วยกำหนดเอง — ใช้ได้ทั้งหน่วยซื้อและหน่วยฐาน
   const [unitTarget, setUnitTarget] = useState<'purchase' | 'recipe' | null>(null);
@@ -190,13 +206,20 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
         isLotTracked: variant.showLotExpiry ? form.isLotTracked : false,
         isExpiryTracked: variant.showLotExpiry ? form.isExpiryTracked : false,
       };
+      let createdItem: ItemDetail | null = null;
       if (isEdit) await catalogApi.updateItem(id as string, payload);
-      else await catalogApi.createItem({ ...payload, ...(price > 0 ? { purchasePrice: price, purchaseQuantity: qty } : {}) });
+      else {
+        const saved = await catalogApi.createItem({ ...payload, ...(price > 0 ? { purchasePrice: price, purchaseQuantity: qty } : {}) });
+        /* อ่านกลับมาเป็น ItemDetail เพื่อให้ modal รับของมีบริบทหน่วย/Lot ครบ
+           อ่านไม่ได้ก็ไม่ล้มทั้งงาน — วัตถุดิบถูกสร้างไปแล้วจริง */
+        createdItem = await catalogApi.item(saved.id).catch(() => null);
+      }
       toast('บันทึกสำเร็จ');
       void qc.invalidateQueries({ queryKey: ['items'] });
       void qc.invalidateQueries({ queryKey: ['item-summary'] });
       void qc.invalidateQueries({ queryKey: ['selectable-items'] });
       if (addAnother && !isEdit) { setForm({ ...EMPTY, baseUnitId: form.baseUnitId }); setTouched(false); }
+      else if (!isEdit && createdItem) setCreated(createdItem);
       else navigate(variant.listPath);
     } catch (err) {
       setError(masterConflictMessage(err, variant.kind === 'packaging' ? 'packaging' : 'ingredient', form.code.trim()));
@@ -211,10 +234,44 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
         breadcrumb={<><Link to={variant.listPath}>{noun}</Link><span> · </span><span>{isEdit ? 'แก้ไข' : 'เพิ่มใหม่'}</span></>}
         title={isEdit ? `แก้ไข${noun}` : `เพิ่ม${noun}`}
         description="กรอกทีละหัวข้อ ระบบจะสรุปต้นทุนต่อหน่วยฐานที่จะบันทึกจริงให้เห็นก่อนกดบันทึก"
-        actions={<Link to={variant.listPath} className="btn"><ArrowLeft aria-hidden width={16} />กลับหน้ารายการ</Link>}
+        actions={<>
+          {isEdit && canReceive && (
+            <button type="button" className="btn primary" onClick={openReceiving}><PackagePlus aria-hidden width={16} />นำเข้าสต็อก</button>
+          )}
+          <Link to={variant.listPath} className="btn"><ArrowLeft aria-hidden width={16} />กลับหน้ารายการ</Link>
+        </>}
       />
 
       {error && <div className="rb-callout warn" role="alert"><AlertTriangle aria-hidden /><div><strong>{error}</strong></div></div>}
+
+      {receivedResult && (
+        <ReceivingSuccessCard
+          result={receivedResult}
+          onReceiveMore={canReceive ? openReceiving : undefined}
+          onViewHistory={isEdit ? () => document.getElementById('item-receipt-history')?.scrollIntoView({ behavior: 'smooth' }) : undefined}
+          onDismiss={() => setReceivedResult(null)}
+        />
+      )}
+
+      {created && !receivedResult && (
+        <section className="rb-callout sr-success" role="status">
+          <CheckCircle2 aria-hidden />
+          <div>
+            <strong>เพิ่ม{noun}สำเร็จ</strong>
+            <p>{created.name} · หน่วยฐาน: {created.baseUnit?.code ?? '—'}</p>
+            <div className="sr-success-actions">
+              {canReceive
+                ? <button type="button" className="btn primary" onClick={openReceiving}><PackagePlus aria-hidden width={16} />นำเข้าสต็อกตอนนี้</button>
+                /* ไม่มีสิทธิ์รับของ = ไม่โชว์ปุ่มที่กดไปก็ไม่ผ่าน แต่บอกเหตุผลไว้ */
+                : <span className="md-hint">ต้องมีสิทธิ์รับของจึงจะนำเข้าสต็อกได้ที่นี่</span>}
+              <Link className="btn" to={`${variant.listPath}/${created.id}`}>
+                ดูรายละเอียด<ArrowRight aria-hidden width={16} />
+              </Link>
+              <Link className="btn" to={variant.listPath}>ไปหน้า{noun}</Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="md-form">
         <div className="md-form-main">
@@ -453,6 +510,25 @@ export default function ItemFormWorkspace({ variant }: { variant: ItemFormVarian
           </p>
         </div>
       </MasterModal>
+
+      {/* PHASE 35 — สต็อกและหลักฐานการรับเข้าของวัตถุดิบรายการนี้ (หน้าแก้ไขเท่านั้น) */}
+      {isEdit && detail.data && (
+        <div className="item-stock-section">
+          <ItemStockPanel
+            item={detail.data}
+            access={access}
+            onReceive={canReceive ? openReceiving : undefined}
+            historyAnchorId="item-receipt-history"
+          />
+        </div>
+      )}
+
+      <StockReceivingDialog
+        open={receivingOpen}
+        item={receivingItem}
+        onClose={() => setReceivingOpen(false)}
+        onReceived={onReceived}
+      />
     </PageContainer>
   );
 }

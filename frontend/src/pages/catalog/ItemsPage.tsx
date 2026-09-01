@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { Plus, Search, Package, CheckCircle2, AlertTriangle, Clock, Pencil, Power, ImageOff, LayoutGrid, List, Boxes, CookingPot, ShoppingBag } from 'lucide-react';
+import { Plus, Search, Package, CheckCircle2, AlertTriangle, Clock, Pencil, Power, ImageOff, LayoutGrid, List, Boxes, CookingPot, ShoppingBag, PackagePlus } from 'lucide-react';
 import { catalogApi, type Item } from '@/lib/catalog';
+import { useAuth } from '@/auth/AuthContext';
+import { canReceiveStock, receivingAccess } from '@/lib/stock-receiving';
+import StockReceivingDialog, { type StockReceivingResult } from '@/components/inventory/StockReceivingDialog';
+import ReceivingSuccessCard from '@/components/inventory/ReceivingSuccessCard';
 import { formatMoney, formatThaiDate } from '@/lib/utils';
 import Badge from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
@@ -24,6 +28,12 @@ export default function ItemsPage() {
   const [hasImage, setHasImage] = useState('');
   const [page, setPage] = useState(1);
   const [view, setView] = useState<'table' | 'cards'>('table');
+  /* PHASE 35 — ทะเบียนรวมเดิมก็ต้องเริ่มงานรับเข้าสต็อกได้เหมือนหน้าวัตถุดิบใหม่ */
+  const { user } = useAuth();
+  const canReceive = canReceiveStock(receivingAccess(user?.roles, user?.permissions));
+  const [receivingItem, setReceivingItem] = useState<Item | null>(null);
+  const [receivingPicker, setReceivingPicker] = useState(false);
+  const [receivedResult, setReceivedResult] = useState<StockReceivingResult | null>(null);
 
   const summary = useQuery({ queryKey: ['item-summary'], queryFn: () => catalogApi.itemSummary() });
   const list = useQuery({
@@ -80,8 +90,17 @@ export default function ItemsPage() {
         <span className="count-pill">{list.data?.total ?? 0} รายการ</span>
         <div className="spacer" />
         <div className="view-toggle" aria-label="รูปแบบการแสดงผล"><button className={view==='table'?'active':''} onClick={()=>setView('table')} aria-label="มุมมองตาราง"><List /></button><button className={view==='cards'?'active':''} onClick={()=>setView('cards')} aria-label="มุมมองการ์ด"><LayoutGrid /></button></div>
+        {canReceive && (
+          <button type="button" className="btn" onClick={() => { setReceivedResult(null); setReceivingPicker(true); }}>
+            <PackagePlus aria-hidden />นำเข้าสต็อก
+          </button>
+        )}
         <Link to="/items/new" className="btn primary"><Plus aria-hidden />เพิ่มวัตถุดิบ</Link>
       </div>
+
+      {receivedResult && (
+        <ReceivingSuccessCard result={receivedResult} onDismiss={() => setReceivedResult(null)} />
+      )}
 
       <div className="item-type-chips" aria-label="กรองตามประเภทรายการ">
         {[
@@ -123,6 +142,10 @@ export default function ItemsPage() {
                     <td>
                       <div className="row-actions">
                         <Link className="icon-btn" to={`/items/${item.id}`} title="แก้ไข / อัปเดตราคา"><Pencil aria-hidden width={16} /></Link>
+                        {canReceive && (
+                          <button className="icon-btn" title="นำเข้าสต็อก" aria-label={`นำเข้าสต็อก ${item.name}`}
+                            onClick={() => { setReceivedResult(null); setReceivingItem(item); }}><PackagePlus aria-hidden width={16} /></button>
+                        )}
                         <button className="icon-btn" title={item.isActive ? 'ปิดใช้งาน' : 'เปิดใช้งาน'} onClick={() => toggle.mutate(item)} disabled={toggle.isPending}><Power aria-hidden width={16} /></button>
                       </div>
                     </td>
@@ -151,6 +174,14 @@ export default function ItemsPage() {
           </div>
         )}
       </section>
+
+      <StockReceivingDialog
+        open={receivingItem !== null || receivingPicker}
+        item={receivingItem}
+        allowPick
+        onClose={() => { setReceivingItem(null); setReceivingPicker(false); }}
+        onReceived={(result) => { setReceivedResult(result); setReceivingItem(null); setReceivingPicker(false); }}
+      />
     </>
   );
 }

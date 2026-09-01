@@ -7,10 +7,29 @@ import { requireCompany, requirePermission } from '../auth/auth.guard.js';
 import { writeAudit, num } from '../../lib/http.js';
 import { checkStandardFactor, factorConflictMessage, type FactorConflict } from '../../lib/item-conversion.js';
 import { costStatusOf, EXPLICIT_ZERO_SOURCE } from '../../lib/cost-status.js';
+import {
+  monthKeyOf, monthRange, RECEIVE_REASON_TH, RECEIVE_REASONS, receiptLineMath,
+  receiveReasonOf, receivingSummary, weightedCostOf,
+} from '../../lib/item-receiving.js';
 
 // สิทธิ์แบบ permission-code (source of truth ที่ backend) — ครอบคลุมทั้งวัตถุดิบและบรรจุภัณฑ์
 const CREATE = requirePermission('INGREDIENT_CREATE', 'PACKAGING_CREATE');
 const EDIT = requirePermission('INGREDIENT_EDIT', 'PACKAGING_EDIT');
+/* PHASE 35 — สิทธิ์อ่านสต็อก/ประวัติรับเข้า แยกจากสิทธิ์แก้ทะเบียนวัตถุดิบโดยเจตนา
+   ใช้ชุดเดียวกับ GET /business/inventory และ GET /business/receiving ที่มีอยู่แล้ว
+   ไม่ได้เพิ่ม permission code ใหม่ และไม่ได้ผ่อนสิทธิ์ของเส้นทางใด */
+const STOCK_READ = requirePermission('INVENTORY_VIEW', 'STOCK_VIEW');
+const RECEIVING_READ = requirePermission('RECEIVING_VIEW', 'RECEIVING_CREATE');
+
+const receiptHistoryQuery = z.object({
+  /** เดือนตามเวลาไทย รูปแบบ YYYY-MM */
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+  supplierId: z.string().optional(),
+  reason: z.enum(RECEIVE_REASONS).optional(),
+  lotNo: z.string().trim().min(1).optional(),
+  status: z.enum(['DRAFT', 'CONFIRMED', 'REVERSED', 'CANCELLED']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+});
 
 const itemInclude = {
   baseUnit: { select: { id: true, code: true, name: true } },
@@ -468,6 +487,204 @@ export default async function itemRoutes(app: FastifyInstance) {
     ]);
     await writeAudit(req, { action: 'PRICE_UPDATE', entity: 'Item', entityId: id, after: { baseUnitCost: cost, purchasePrice: body.purchasePrice } });
     return reply.status(201).send(ok({ baseUnitCost: cost }, 'บันทึกราคาซื้อสำเร็จ'));
+  });
+
+  /* ============================================================
+     PHASE 35 — สต็อกและประวัติรับเข้า "รายวัตถุดิบ"
+     อ่านอย่างเดียวทั้งสองเส้นทาง: ไม่มีการเขียน StockBalance / ledger / ต้นทุน ที่นี่
+     สิทธิ์แยกจากสิทธิ์แก้ข้อมูลวัตถุดิบโดยเจตนา — คนที่สร้างวัตถุดิบได้ไม่ได้แปลว่าต้องเห็นสต็อก
+     ============================================================ */
+
+  /**
+   * สรุปสต็อกคงเหลือของวัตถุดิบหนึ่งรายการ
+   *
+   * มูลค่าสต็อกใช้นโยบายเดียวกับทั้งระบบ (onHand x lastCost — ดู inventory-snapshot.service
+   * และ GET /business/inventory) จะได้ไม่มีตัวเลข "มูลค่าสต็อก" สองชุดที่ไม่ตรงกัน
+   *
+   * ต้นทุนเฉลี่ยถ่วงน้ำหนักส่งไปด้วยเป็นตัวเลขอนุพันธ์แยกช่อง (weightedAverage*)
+   * คำนวณสด ๆ จากใบรับของที่ยืนยันแล้ว ไม่เขียนกลับ Item.avgCost และไม่ใช้แทนมูลค่าตามนโยบาย
+   */
+  app.get('/:id/stock', { preHandler: STOCK_READ }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const companyId = req.user.companyId!;
+    const item = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId }, include: itemInclude });
+    if (!item) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
+
+    const [balances, priceCount, confirmedLines, lastReceipt] = await Promise.all([
+      prisma.stockBalance.findMany({
+        where: { itemId: id, warehouse: { companyId } },
+        select: { onHand: true, reserved: true, warehouseId: true, warehouse: { select: { code: true, name: true } }, lot: { select: { id: true, lotNo: true, expiryDate: true } } },
+      }),
+      prisma.itemPriceHistory.count({ where: { itemId: id, companyId } }),
+      prisma.goodsReceiptItem.findMany({
+        where: { itemId: id, goodsReceipt: { companyId, status: 'CONFIRMED' } },
+        select: { quantity: true, unitPrice: true, purchaseToBaseFactor: true },
+      }),
+      prisma.goodsReceipt.findFirst({
+        where: { companyId, status: 'CONFIRMED', items: { some: { itemId: id } } },
+        orderBy: [{ receiptDate: 'desc' }, { createdAt: 'desc' }],
+        select: { id: true, receiptNo: true, receiptDate: true },
+      }),
+    ]);
+
+    const onHand = balances.reduce((sum, b) => sum.plus(b.onHand), new Prisma.Decimal(0));
+    const reserved = balances.reduce((sum, b) => sum.plus(b.reserved), new Prisma.Decimal(0));
+    const weighted = weightedCostOf(confirmedLines.map((line) => receiptLineMath(line, item)));
+
+    /* MISSING = ยังไม่เคยมีใครใส่ราคา จึงไม่ประเมินมูลค่าและไม่เดาเป็นศูนย์
+       เป็นกติกาเดียวกับ snapshot มูลค่าสต็อกที่ใช้อยู่แล้ว */
+    const status = costStatusOf({ lastCost: num(item.lastCost), priceRecordCount: priceCount });
+    const stockValue = status === 'MISSING' ? null : onHand.mul(item.lastCost);
+
+    return ok({
+      itemId: item.id,
+      baseUnitCode: item.baseUnit?.code ?? null,
+      /* ไม่มีแถวยอดคงเหลือเลย = ยังไม่เคยมีสต็อกจริง ต่างจาก "มีแถวแต่เป็นศูนย์"
+         หน้าจอใช้ค่านี้ตัดสินใจว่าจะแสดง "ยังไม่มีสต็อก" หรือแสดงเลข 0 */
+      hasStockHistory: balances.length > 0,
+      onHand: num(onHand),
+      reserved: num(reserved),
+      available: num(onHand.minus(reserved)),
+      byWarehouse: balances.map((b) => ({
+        warehouseId: b.warehouseId,
+        warehouseCode: b.warehouse.code,
+        warehouseName: b.warehouse.name,
+        lotId: b.lot?.id ?? null,
+        lotNo: b.lot?.lotNo ?? null,
+        expiryDate: b.lot?.expiryDate?.toISOString() ?? null,
+        onHand: num(b.onHand),
+        reserved: num(b.reserved),
+      })),
+      lastCost: num(item.lastCost),
+      costStatus: status,
+      // มูลค่าตามนโยบายของระบบ — null เมื่อยังไม่รู้ต้นทุน (แสดงสถานะ "ยังประเมินไม่ได้" แทนการเดา)
+      stockValue: stockValue === null ? null : num(stockValue),
+      stockValueBasis: 'LAST_COST',
+      // ตัวเลขอนุพันธ์จากหลักฐานการรับเข้า (ไม่ใช่นโยบายมูลค่าสต็อกของระบบ)
+      weightedAverageCost: weighted.weightedAverageCost === null ? null : num(weighted.weightedAverageCost),
+      weightedAverageValue: weighted.weightedAverageCost === null ? null : num(onHand.mul(weighted.weightedAverageCost)),
+      receivedBaseQty: num(weighted.receivedBaseQty),
+      receivedValue: num(weighted.receivedValue),
+      lastReceivedAt: lastReceipt?.receiptDate.toISOString() ?? null,
+      lastReceiptNo: lastReceipt?.receiptNo ?? null,
+    });
+  });
+
+  /**
+   * ประวัติรับเข้าสต็อกของวัตถุดิบหนึ่งรายการ — ใหม่สุดขึ้นก่อน
+   *
+   * แต่ละแถวคือหลักฐานของ "การรับเข้าครั้งนั้น" ที่ไม่ถูกเขียนทับ
+   * ใบที่ถูกกลับรายการยังอยู่ในรายการ (status = REVERSED) ไม่ถูกลบทิ้ง
+   */
+  app.get('/:id/receipts', { preHandler: RECEIVING_READ }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const companyId = req.user.companyId!;
+    const q = receiptHistoryQuery.parse(req.query ?? {});
+    const item = await prisma.item.findFirst({ where: { id, deletedAt: null, companyId }, include: itemInclude });
+    if (!item) return reply.status(404).send(fail('NOT_FOUND', 'ไม่พบวัตถุดิบ'));
+
+    const range = q.month ? monthRange(q.month) : null;
+    const rows = await prisma.goodsReceiptItem.findMany({
+      where: {
+        itemId: id,
+        ...(q.lotNo ? { lotNo: q.lotNo } : {}),
+        goodsReceipt: {
+          companyId,
+          ...(q.status ? { status: q.status } : {}),
+          ...(q.supplierId ? { supplierId: q.supplierId } : {}),
+          ...(q.reason ? (q.reason === 'PURCHASE'
+            // ใบเก่าก่อนมีฟิลด์นี้เป็น NULL และถูกตีความเป็นการซื้อ จึงต้องรวมมาด้วยเมื่อกรอง PURCHASE
+            ? { OR: [{ receiveReason: 'PURCHASE' }, { receiveReason: null }] }
+            : { receiveReason: q.reason }) : {}),
+          ...(range ? { receiptDate: { gte: range.gte, lt: range.lt } } : {}),
+        },
+      },
+      include: {
+        goodsReceipt: { include: { supplier: { select: { id: true, name: true } }, warehouse: { select: { id: true, code: true, name: true } } } },
+        inventoryLot: { select: { id: true, lotNo: true, expiryDate: true } },
+      },
+      orderBy: [{ goodsReceipt: { receiptDate: 'desc' } }, { id: 'desc' }],
+      take: q.limit,
+    });
+
+    /* ผู้บันทึกเก็บเป็น createdById ดิบ (ไม่มี relation ใน schema) จึงอ่านชื่อรอบเดียวแล้ว map
+       ไม่ยิงต่อรายการเพื่อกัน N+1 */
+    const userIds = [...new Set(rows.map((r) => r.goodsReceipt.createdById).filter((v): v is string => Boolean(v)))];
+    const users = userIds.length ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, fullName: true } }) : [];
+    const nameOf = new Map(users.map((u) => [u.id, u.fullName]));
+
+    const receipts = rows.map((line) => {
+      const doc = line.goodsReceipt;
+      const math = receiptLineMath(line, item);
+      const reason = receiveReasonOf(doc.receiveReason);
+      const purchaseUnitCode = line.purchaseUnitCode ?? item.purchaseUnit?.code ?? item.baseUnit?.code ?? '';
+      const remark = line.note ?? doc.note ?? null;
+      const lotNo = line.inventoryLot?.lotNo ?? line.lotNo;
+      return {
+        receiptItemId: line.id,
+        receiptId: doc.id,
+        receiptNo: doc.receiptNo,
+        status: doc.status,
+        receivedAt: doc.receiptDate.toISOString(),
+        confirmedAt: doc.confirmedAt?.toISOString() ?? null,
+        reversedAt: doc.reversedAt?.toISOString() ?? null,
+        supplierId: doc.supplier?.id ?? null,
+        supplierName: doc.supplier?.name ?? null,
+        supplierDocNo: doc.supplierDocNo,
+        warehouseId: doc.warehouse.id,
+        warehouseName: doc.warehouse.name,
+        reason,
+        reasonLabel: RECEIVE_REASON_TH[reason],
+        // จำนวนตามหน่วยซื้อ (ตามที่ผู้ใช้คีย์) และตามหน่วยฐาน (ตามที่เข้าสต็อกจริง) เก็บคู่กันเสมอ
+        quantity: num(line.quantity),
+        purchaseUnitCode,
+        baseQty: num(math.baseQty),
+        baseUnitCode: item.baseUnit?.code ?? null,
+        purchaseToBaseFactor: num(math.factor),
+        unitPrice: num(line.unitPrice),
+        baseUnitCost: num(math.baseUnitCost),
+        totalValue: num(math.lineValue),
+        lotNo,
+        lotId: line.inventoryLot?.id ?? null,
+        manufactureDate: line.manufactureDate?.toISOString() ?? null,
+        expiryDate: (line.inventoryLot?.expiryDate ?? line.expiryDate)?.toISOString() ?? null,
+        remark,
+        createdById: doc.createdById,
+        createdByName: doc.createdById ? nameOf.get(doc.createdById) ?? null : null,
+        // ข้อความสรุปสำหรับแสดงผล/ตรวจสอบเท่านั้น — ตัวเลขจริงคือ field ด้านบน
+        summary: receivingSummary({
+          receivedAt: doc.receiptDate, itemName: item.name,
+          quantity: line.quantity, unitCode: purchaseUnitCode,
+          unitPrice: line.unitPrice, totalValue: math.lineValue,
+          supplierName: doc.supplier?.name ?? null, reason, lotNo, remark,
+        }),
+      };
+    });
+
+    /* แนวโน้มราคา — ส่งจำนวนตัวอย่างมาด้วยเสมอ ให้หน้าจอตัดสินใจได้ว่าจะเรียกว่า "แนวโน้ม" ได้ไหม
+       สองจุดคือการเปลี่ยนแปลง ยังไม่ใช่แนวโน้ม */
+    const confirmed = receipts.filter((r) => r.status === 'CONFIRMED');
+    const oldest = confirmed[confirmed.length - 1];
+    const newest = confirmed[0];
+    const trend = confirmed.length >= 2 && oldest.baseUnitCost > 0
+      ? {
+        sampleCount: confirmed.length,
+        firstCost: oldest.baseUnitCost, firstAt: oldest.receivedAt,
+        lastCost: newest.baseUnitCost, lastAt: newest.receivedAt,
+        changeAmount: num(new Prisma.Decimal(newest.baseUnitCost).minus(oldest.baseUnitCost)),
+        changePercent: num(new Prisma.Decimal(newest.baseUnitCost).minus(oldest.baseUnitCost).div(oldest.baseUnitCost).mul(100)),
+      }
+      : null;
+
+    return ok({
+      itemId: item.id, itemName: item.name,
+      baseUnitCode: item.baseUnit?.code ?? null,
+      receipts,
+      /* เดือนที่มีข้อมูลจริง — สร้างจากผลลัพธ์ที่ดึงมา ไม่ต้องยิงคิวรีเพิ่ม
+         และไม่สร้างตัวกรองที่กดแล้วว่างเปล่า */
+      months: [...new Set(receipts.map((r) => monthKeyOf(new Date(r.receivedAt))))].sort().reverse(),
+      trend,
+    });
   });
 }
 

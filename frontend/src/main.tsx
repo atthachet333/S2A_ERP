@@ -34,6 +34,7 @@ import './styles/phase32-5.css';
 import './styles/adjustment.css';
 import './styles/inventory-inspector.css';
 import './styles/master-data.css';
+import './styles/stock-receiving.css';
 import './styles/orders.css';
 import './styles/admin.css';
 import './styles/consistency.css';

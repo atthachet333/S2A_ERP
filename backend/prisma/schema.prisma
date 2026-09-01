@@ -1016,6 +1016,10 @@ model GoodsReceipt {
   note        String?
   // additive/nullable — เอกสารฝั่งผู้ขายและเวลาเปลี่ยนสถานะ
   supplierDocNo String?
+  /// PHASE 35 — เหตุผลการรับเข้า: PURCHASE | OPENING | ADJUST | OTHER
+  /// เก็บเป็น String? แบบเดียวกับ StockAdjustment.reason เพื่อไม่ต้องแก้ enum ของ movement
+  /// ว่างไว้ = ใบรับของเดิมก่อนมีฟิลด์นี้ (ตีความเป็น PURCHASE ตอนแสดงผล ไม่เขียนทับข้อมูลเดิม)
+  receiveReason String?
   purchaseOrderId String?
   purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
   confirmedAt   DateTime?
@@ -1148,6 +1152,9 @@ model GoodsReceiptItem {
   taxAmount       Decimal      @default(0) @db.Decimal(18, 4)
   extraCost       Decimal      @default(0) @db.Decimal(18, 4)
   totalCost       Decimal      @default(0) @db.Decimal(18, 4)
+  /// PHASE 35 — หมายเหตุระดับบรรทัด (Remark ของผู้ใช้) เช่น "หมูจากตลาดเช้า ราคาขึ้น"
+  /// เป็นหลักฐานประกอบของบรรทัดนั้น ไม่ใช่แหล่งความจริงของจำนวน/ราคา
+  note            String?      @db.Text
 
   @@index([goodsReceiptId])
   @@index([purchaseOrderItemId])

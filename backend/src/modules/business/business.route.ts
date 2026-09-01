@@ -15,6 +15,7 @@ import { renderBusinessPdf, type BusinessDocument, type DocumentType } from './d
 import { toDocumentCompany } from './company-identity.js';
 import { recomputePurchaseOrderStatus, validateReceiptOverage } from '../purchase-orders/purchase-order.service.js';
 import { assertLotPolicy, ensureInventoryLot, LotPolicyError, validateLotAllocations } from '../../lib/inventory-lot.js';
+import { receiptLineMath, reconcileItemsLastCost, RECEIVE_REASONS, receiveReasonOf } from '../../lib/item-receiving.js';
 
 /** ระดับราคาที่ยอมรับ — ชุดเดียวกับที่ costing.route.ts ใช้กับ SellingPrice.priceType
     ไม่มี enum ใน schema จึงบังคับที่ชั้น route แบบเดียวกับของเดิม */
@@ -189,35 +190,27 @@ function receivingWhere(companyId: string, q: ReceivingFilter): Prisma.GoodsRece
 }
 
 /**
- * ต้นทุนต่อหน่วยฐานจากราคาซื้อ — กติกาเดียวกับ item.route.ts (baseUnitCost)
- * เช่น ซื้อ 47 บาท/L และ 1 L = 1000 ML → 0.047 บาท/ML
- * ห้ามเขียน unitPrice ลง lastCost ตรง ๆ เพราะจะได้ 47 บาท/ML (ผิด)
- */
-function receiptBaseUnitCost(unitPrice: number, purchaseToBaseFactor: number) {
-  const factor = purchaseToBaseFactor > 0 ? purchaseToBaseFactor : 1;
-  return unitPrice / factor;
-}
-
-/**
  * ยืนยันใบรับของภายใน transaction — เพิ่มสต็อกผ่าน ledger service เดียวของระบบ
  * และอัปเดตต้นทุน "เฉพาะตอนยืนยัน" เท่านั้น
  */
 async function confirmReceiptWithin(tx: Prisma.TransactionClient, receiptId: string, companyId: string, userId: string) {
   const doc = await tx.goodsReceipt.findFirstOrThrow({
     where: { id: receiptId },
-    include: { items: { include: { item: { include: { baseUnit: true } } } } },
+    include: { supplier: { select: { name: true } }, items: { include: { item: { include: { baseUnit: true } } } } },
   });
+  const reason = receiveReasonOf(doc.receiveReason);
 
   // PHASE 17 — ล็อกแถวยอดคงเหลือทั้งใบตามลำดับ itemId ก่อน เพื่อไม่ให้สองใบจับล็อกสวนทางกัน
   await lockBalancesInOrder(tx, doc.warehouseId, doc.items.map((line) => line.itemId));
 
   for (const line of doc.items) {
-    // PO-linked receipts keep the confirmed purchase-unit factor snapshot; legacy receipts fall back to the item master.
-    const factor = line.purchaseToBaseFactor == null ? num(line.item.purchaseToBaseFactor) : num(line.purchaseToBaseFactor);
-    const unitPrice = num(line.unitPrice);
-    // ปริมาณที่รับระบุเป็นหน่วยซื้อ → แปลงเป็นหน่วยฐานก่อนเข้าสต็อก
-    const baseQty = num(line.quantity) * (factor > 0 ? factor : 1);
-    const baseCost = receiptBaseUnitCost(unitPrice, factor);
+    /* PHASE 35 — จำนวน/ต้นทุน/มูลค่า คิดด้วย Decimal ทั้งหมด
+       ค่าที่ "เก็บลงฐาน" (lastCost · avgCost · ItemPriceHistory.price) จึงไม่เคยผ่าน float
+       จุดเดียวที่ยังส่งเป็น number คือ interface ของ applyMovement ที่มีอยู่เดิมทั้งระบบ
+       ซึ่งรับค่าไปเก็บลงคอลัมน์ Decimal ต่อทันที (ไม่ได้เอาไปคำนวณสะสมต่อ) */
+    const math = receiptLineMath(line, line.item);
+    const baseQty = math.baseQty;
+    const baseCost = math.baseUnitCost;
     if (!line.item.isLotTracked && (line.lotNo || line.manufactureDate || line.expiryDate)) throw new LotPolicyError('LOT_TRACKING_NOT_ENABLED', 'ต้องเปิดการติดตาม Lot ที่ข้อมูลสินค้าก่อนระบุ Lot ในใบรับของ');
     const lotNo = assertLotPolicy(line.item, line.lotNo, line.manufactureDate, line.expiryDate);
     const lot = lotNo ? await ensureInventoryLot(tx, {
@@ -230,22 +223,32 @@ async function confirmReceiptWithin(tx: Prisma.TransactionClient, receiptId: str
     await applyMovement(tx, {
       companyId, warehouseId: doc.warehouseId, itemId: line.itemId,
       lotId: lot?.id,
-      movementType: 'PURCHASE_RECEIPT', changeQty: baseQty,
+      movementType: 'PURCHASE_RECEIPT', changeQty: baseQty.toNumber(),
       // PHASE 13B — เดิมเขียน baseUnitId (cuid) ลงคอลัมน์ unit ของบัญชีเดินสต็อก
       unit: line.item.baseUnit?.code ?? null,
       refType: 'GOODS_RECEIPT', refId: doc.id, refNo: doc.receiptNo,
-      unitCost: baseCost, createdById: userId,
+      unitCost: baseCost.toNumber(), createdById: userId,
+      // PHASE 35 — แยกที่มาของการเคลื่อนไหวให้ตรวจย้อนหลังได้ว่าเป็นการซื้อ ยอดตั้งต้น หรือปรับยอด
+      reason,
+      note: line.note ?? doc.note ?? null,
     });
 
     // ประวัติราคา + lastCost เก็บเป็น "ต้นทุนต่อหน่วยฐาน" ให้ตรงกับที่ระบบใช้คิดสูตร
     await tx.itemPriceHistory.create({
       data: {
-        companyId, itemId: line.itemId, price: new Prisma.Decimal(baseCost), source: 'PURCHASE',
-        note: JSON.stringify({ purchasePrice: unitPrice, purchaseQuantity: 1, pricePerPurchaseUnit: unitPrice, receiptNo: doc.receiptNo }),
+        companyId, itemId: line.itemId, price: baseCost, source: 'PURCHASE',
+        /* ItemPriceHistory.note เป็น VARCHAR(191) — เก็บได้เฉพาะ metadata ความยาวคงที่
+           ห้ามใส่ข้อความอิสระของผู้ใช้ (remark) ลงมา เพราะจะล้นคอลัมน์แล้วทั้งใบ rollback
+           Remark ตัวจริงอยู่ที่ GoodsReceiptItem.note ซึ่งเป็น TEXT และเป็นแหล่งความจริงอยู่แล้ว */
+        note: JSON.stringify({
+          purchasePrice: num(line.unitPrice), purchaseQuantity: 1, pricePerPurchaseUnit: num(line.unitPrice),
+          receiptNo: doc.receiptNo, receiveReason: reason,
+          ...(doc.supplierId ? { supplierId: doc.supplierId } : {}),
+        }),
         createdById: userId,
       },
     });
-    await tx.item.update({ where: { id: line.itemId }, data: { lastCost: new Prisma.Decimal(baseCost), avgCost: new Prisma.Decimal(baseCost), updatedById: userId } });
+    await tx.item.update({ where: { id: line.itemId }, data: { lastCost: baseCost, avgCost: baseCost, updatedById: userId } });
   }
 }
 
@@ -1016,6 +1019,8 @@ export default async function businessRoutes(app: FastifyInstance) {
       supplierDocNo: z.string().max(60).optional(),
       receiptDate: z.coerce.date().default(() => new Date()),
       note: z.string().max(500).optional(),
+      // PHASE 35 — ประเภท/เหตุผลการรับเข้า (ค่าเริ่มต้นคือการซื้อ ให้ตรงกับใบที่มีอยู่เดิม)
+      receiveReason: z.enum(RECEIVE_REASONS).default('PURCHASE'),
       confirm: z.boolean().default(false),
       overReceiveAcknowledged: z.boolean().default(false),
       items: z.array(z.object({
@@ -1026,6 +1031,7 @@ export default async function businessRoutes(app: FastifyInstance) {
         lotNo: z.string().optional(),
         manufactureDate: z.coerce.date().optional(),
         expiryDate: z.coerce.date().optional(),
+        note: z.string().max(500).optional(),
       })).min(1),
     }).parse(req.body);
     const companyId = req.user.companyId!;
@@ -1056,6 +1062,7 @@ export default async function businessRoutes(app: FastifyInstance) {
             companyId, receiptNo, warehouseId: body.warehouseId, supplierId: body.supplierId,
             purchaseOrderId: body.purchaseOrderId ?? null,
             supplierDocNo: body.supplierDocNo, receiptDate: body.receiptDate, note: body.note,
+            receiveReason: body.receiveReason,
             status: body.confirm ? 'CONFIRMED' : 'DRAFT',
             confirmedAt: body.confirm ? new Date() : null,
             createdById: req.user.sub,
@@ -1088,6 +1095,7 @@ export default async function businessRoutes(app: FastifyInstance) {
       supplierDocNo: z.string().max(60).optional().nullable(),
       receiptDate: z.coerce.date().optional(),
       note: z.string().max(500).optional().nullable(),
+      receiveReason: z.enum(RECEIVE_REASONS).optional(),
       items: z.array(z.object({
         itemId: z.string().min(1),
         purchaseOrderItemId: z.string().optional().nullable(),
@@ -1096,6 +1104,7 @@ export default async function businessRoutes(app: FastifyInstance) {
         lotNo: z.string().optional(),
         manufactureDate: z.coerce.date().optional(),
         expiryDate: z.coerce.date().optional(),
+        note: z.string().max(500).optional(),
       })).min(1),
     }).parse(req.body);
     const companyId = req.user.companyId!;
@@ -1129,6 +1138,7 @@ export default async function businessRoutes(app: FastifyInstance) {
             supplierDocNo: body.supplierDocNo ?? null,
             ...(body.receiptDate ? { receiptDate: body.receiptDate } : {}),
             note: body.note ?? null,
+            ...(body.receiveReason ? { receiveReason: body.receiveReason } : {}),
             items: { create: savedLines },
           },
           include: { items: true },
@@ -1218,14 +1228,24 @@ export default async function businessRoutes(app: FastifyInstance) {
     }
   });
 
-  /** กลับรายการใบรับของ ลดสต็อกคืนด้วย movement ตรงข้าม (ไม่ลบ ledger เดิม เลข GR เดิมคงอยู่) */
+  /**
+   * กลับรายการใบรับของ ลดสต็อกคืนด้วย movement ตรงข้าม (ไม่ลบ ledger เดิม เลข GR เดิมคงอยู่)
+   *
+   * PHASE 36 — คืนต้นทุนล่าสุดด้วย
+   * เดิมกลับรายการแล้ว Item.lastCost ยังค้างอยู่ที่ราคาของใบที่เพิ่งถูกยกเลิก
+   * ทำให้ทุกสูตรที่ใช้วัตถุดิบนั้นคิดต้นทุนจากเอกสารที่ไม่มีผลแล้ว
+   *
+   * ทั้งสามอย่างอยู่ใน transaction เดียวกัน จึงสำเร็จหรือล้มพร้อมกันเสมอ
+   *   1) กลับ ledger   2) เปลี่ยนสถานะเอกสารเป็น REVERSED   3) คำนวณ lastCost ใหม่
+   * ลำดับสำคัญ: ต้องเปลี่ยนสถานะก่อนคำนวณ ไม่งั้นใบที่เพิ่งกลับรายการจะถูกนับเป็นหลักฐานของตัวเอง
+   */
   app.post('/receiving/:id/reverse', { preHandler: requirePermission('RECEIVING_CONFIRM') }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const companyId = req.user.companyId!;
     const body = z.object({ reason: z.string().max(300).optional() }).parse(req.body ?? {});
     try {
       const receipt = await stockTransaction(async (tx) => {
-        const doc = await tx.goodsReceipt.findFirst({ where: { id, companyId } });
+        const doc = await tx.goodsReceipt.findFirst({ where: { id, companyId }, include: { items: { select: { itemId: true } } } });
         if (!doc) throw new Error('RECEIPT_NOT_FOUND');
         if (doc.status === 'DRAFT') throw new Error('NOT_CONFIRMED');
         if (doc.status === 'REVERSED' || doc.status === 'CANCELLED') throw new Error(`ALREADY_${doc.status}`);
@@ -1233,8 +1253,12 @@ export default async function businessRoutes(app: FastifyInstance) {
         const restored = await reverseDocument(tx, 'GOODS_RECEIPT', doc.id, req.user.sub);
         if (restored === 0) throw new Error('ALREADY_REVERSED');
         const updated = await tx.goodsReceipt.update({ where: { id: doc.id }, data: { status: 'REVERSED', reversedAt: new Date() } });
+        /* reverseDocument จับล็อกแถวยอดคงเหลือของทุก (สินค้า · คลัง) ในใบนี้ไปแล้ว
+           การกลับรายการสองใบที่แตะสินค้าเดียวกันพร้อมกันจึงต่อคิวกันตั้งแต่ตรงนั้น
+           ไม่เกิดกรณีที่ทั้งสองใบอ่าน "ใบล่าสุดที่เหลือ" เป็นค่าเดียวกันแล้วเขียนทับกันเอง */
+        const costs = await reconcileItemsLastCost(tx, companyId, doc.items.map((line) => line.itemId), req.user.sub);
         if (doc.purchaseOrderId) await recomputePurchaseOrderStatus(tx, doc.purchaseOrderId);
-        await tx.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'GOODS_RECEIPT_REVERSED', entity: 'GoodsReceipt', entityId: doc.id, after: { receiptNo: doc.receiptNo, restoredLines: restored, reason: body.reason ?? null } } });
+        await tx.auditLog.create({ data: { userId: req.user.sub, companyId, action: 'GOODS_RECEIPT_REVERSED', entity: 'GoodsReceipt', entityId: doc.id, after: { receiptNo: doc.receiptNo, restoredLines: restored, reason: body.reason ?? null, lastCostReconciliation: costs as unknown as Prisma.InputJsonValue } } });
         return updated;
       });
       return ok(receipt, `กลับรายการใบรับของ ${receipt.receiptNo} และลดสต็อกคืนแล้ว`);

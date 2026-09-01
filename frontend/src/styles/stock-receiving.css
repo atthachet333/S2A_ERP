@@ -1,0 +1,154 @@
+/* ============================================================
+   PHASE 35 — นำเข้าสต็อกจากหน้าวัตถุดิบ
+   ใช้ token กลางทั้งหมด (ไม่มีสีดิบ) เพื่อให้ธีมสว่าง/มืดทำงานเหมือนหน้าอื่น
+   ============================================================ */
+
+/* ---------- ฟอร์มในกล่องนำเข้าสต็อก ---------- */
+.sr-form textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+
+.sr-mode {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-field);
+  background: var(--surface-2);
+}
+.sr-mode > button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.sr-mode > button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* สรุปตัวเลขที่จะบันทึกจริง — ผู้ใช้ต้องเห็นก่อนกดยืนยัน */
+.sr-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3);
+  border: 1px dashed var(--divider);
+  border-radius: var(--radius-field);
+  background: var(--surface-2);
+}
+.sr-preview > div { display: flex; flex-direction: column; gap: 2px; }
+.sr-preview > div > span { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.sr-preview > div > strong {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+.sr-preview > div.lead > strong { font-size: 20px; }
+.sr-preview > .md-hint { grid-column: 1 / -1; margin: 0; }
+
+/* ประเภทการรับเข้า — เลือกผิดประเภทแปลว่าบัญชีเดินสต็อกผิดที่มา จึงอธิบายแต่ละตัวเลือกไว้ */
+.sr-reasons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--space-2);
+}
+.sr-reasons > button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+  cursor: pointer;
+}
+.sr-reasons > button > b { font-size: 13.5px; color: var(--text); }
+.sr-reasons > button > small { font-size: 11.5px; color: var(--text-subtle); }
+.sr-reasons > button.active {
+  border-color: var(--blue);
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+
+/* ---------- สรุปหลังรับเข้าสำเร็จ ---------- */
+.rb-callout.sr-success { align-items: flex-start; }
+.sr-success-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 0;
+}
+.sr-success-grid > div { display: flex; flex-direction: column; gap: 2px; }
+.sr-success-grid dt { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.sr-success-grid dd { margin: 0; font-size: 15px; font-weight: 800; color: var(--text); }
+.sr-success-remark { margin: var(--space-2) 0 0; font-size: 13px; color: var(--text-muted); }
+.sr-success-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  align-items: center;
+}
+
+/* ---------- สรุปสต็อกในหน้ารายละเอียดวัตถุดิบ ---------- */
+.item-stock-section {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+.sr-stock-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--space-3) var(--space-4);
+  margin: 0 0 var(--space-3);
+}
+.sr-stock-grid > div { display: flex; flex-direction: column; gap: 2px; }
+.sr-stock-grid dt { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.sr-stock-grid dd {
+  margin: 0;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+.sr-stock-grid dd.lead { font-size: 24px; line-height: 1.15; }
+
+/* ---------- ประวัติรับเข้า ---------- */
+.sr-trend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--divider);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.sr-trend > b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 800; }
+.sr-trend > b.up { color: var(--danger-fg); }
+.sr-trend > b.down { color: var(--success-fg); }
+.sr-trend > small { flex-basis: 100%; font-size: 11.5px; color: var(--text-subtle); }
+
+.sr-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--divider);
+}
+
+/* ใบที่ถูกกลับรายการยังอยู่ในประวัติเสมอ แค่ทำให้เห็นชัดว่าไม่ได้นับเป็นสต็อกแล้ว */
+.sr-history tbody tr.is-reversed { opacity: 0.62; }
+.sr-history tbody tr.is-reversed td:not([data-label='หมายเหตุ']) { text-decoration: line-through; }
+.sr-history td small { display: block; font-size: 11.5px; color: var(--text-subtle); text-decoration: none; }

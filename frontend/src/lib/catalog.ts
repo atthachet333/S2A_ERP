@@ -31,6 +31,78 @@ export interface ItemDetail extends Item {
   priceHistory: PriceRow[];
   priceStats: { last: number | null; min: number | null; max: number | null; count: number };
 }
+
+/* ============================================================
+   PHASE 35 — สต็อกและประวัติรับเข้ารายวัตถุดิบ
+   ตรงกับ GET /items/:id/stock และ GET /items/:id/receipts
+   ============================================================ */
+
+export type ReceiveReasonCode = 'PURCHASE' | 'OPENING' | 'ADJUST' | 'OTHER';
+export type ReceiptDocStatus = 'DRAFT' | 'CONFIRMED' | 'REVERSED' | 'CANCELLED';
+
+export interface ItemStockWarehouseRow {
+  warehouseId: string; warehouseCode: string; warehouseName: string;
+  lotId: string | null; lotNo: string | null; expiryDate: string | null;
+  onHand: number; reserved: number;
+}
+
+export interface ItemStockSummary {
+  itemId: string;
+  baseUnitCode: string | null;
+  /** false = ยังไม่เคยมีสต็อกจริง (ต่างจากมีแถวแล้วเหลือศูนย์) */
+  hasStockHistory: boolean;
+  onHand: number; reserved: number; available: number;
+  byWarehouse: ItemStockWarehouseRow[];
+  lastCost: number;
+  costStatus: CostStatus;
+  /** มูลค่าตามนโยบายของระบบ (onHand x lastCost) — null เมื่อยังไม่รู้ต้นทุน */
+  stockValue: number | null;
+  stockValueBasis: 'LAST_COST';
+  /** ตัวเลขอนุพันธ์จากใบรับของที่ยืนยันแล้ว ไม่ใช่นโยบายมูลค่าสต็อก */
+  weightedAverageCost: number | null;
+  weightedAverageValue: number | null;
+  receivedBaseQty: number; receivedValue: number;
+  lastReceivedAt: string | null;
+  lastReceiptNo: string | null;
+}
+
+export interface ItemReceiptRow {
+  receiptItemId: string; receiptId: string; receiptNo: string;
+  status: ReceiptDocStatus;
+  receivedAt: string; confirmedAt: string | null; reversedAt: string | null;
+  supplierId: string | null; supplierName: string | null; supplierDocNo: string | null;
+  warehouseId: string; warehouseName: string;
+  reason: ReceiveReasonCode; reasonLabel: string;
+  quantity: number; purchaseUnitCode: string;
+  baseQty: number; baseUnitCode: string | null; purchaseToBaseFactor: number;
+  unitPrice: number; baseUnitCost: number; totalValue: number;
+  lotNo: string | null; lotId: string | null;
+  manufactureDate: string | null; expiryDate: string | null;
+  remark: string | null;
+  createdById: string | null; createdByName: string | null;
+  /** ข้อความสรุปสำหรับอ่าน/ตรวจสอบ — ตัวเลขจริงคือ field ด้านบน */
+  summary: string;
+}
+
+export interface ItemReceiptTrend {
+  sampleCount: number;
+  firstCost: number; firstAt: string;
+  lastCost: number; lastAt: string;
+  changeAmount: number; changePercent: number;
+}
+
+export interface ItemReceiptHistory {
+  itemId: string; itemName: string; baseUnitCode: string | null;
+  receipts: ItemReceiptRow[];
+  /** เดือน (YYYY-MM) ที่มีข้อมูลจริง ใหม่สุดก่อน */
+  months: string[];
+  trend: ItemReceiptTrend | null;
+}
+
+export interface ItemReceiptFilter {
+  month?: string; supplierId?: string; reason?: ReceiveReasonCode; lotNo?: string; status?: ReceiptDocStatus;
+}
+
 export interface Paginated<T> { items: T[]; page: number; pageSize: number; total: number; totalPages: number }
 export interface ItemSummary { total: number; active: number; noPrice: number; latestPriceUpdate: string | null }
 
@@ -103,6 +175,19 @@ export const catalogApi = {
   activateItem: (id: string) => apiClient.post<Item>(`/items/${id}/activate`),
   addPrice: (id: string, body: unknown) => apiClient.post<{ baseUnitCost: number }>(`/items/${id}/prices`, body),
 
+  /* PHASE 35 — อ่านสต็อก/ประวัติรับเข้าของวัตถุดิบรายการเดียว
+     ทั้งสองเส้นทางมีสิทธิ์ของตัวเองที่ backend ผู้ใช้ที่ไม่มีสิทธิ์จะได้ 403 */
+  itemStock: (id: string) => apiClient.get<ItemStockSummary>(`/items/${id}/stock`),
+  itemReceipts: (id: string, filter: ItemReceiptFilter = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(filter)) if (v) q.set(k, v);
+    const query = q.toString();
+    return apiClient.get<ItemReceiptHistory>(`/items/${id}/receipts${query ? `?${query}` : ''}`);
+  },
+  /** นำเข้าสต็อก — ใช้ API ใบรับของเดิมของระบบ ไม่มีเส้นทางลัดที่บวกสต็อกตรง ๆ */
+  receiveStock: (body: unknown) => apiClient.post<{ id: string; receiptNo: string; status: ReceiptDocStatus }>('/business/receiving', body),
+  receivingLookups: () => apiClient.get<ReceivingLookups>('/business/operations/lookups'),
+
   menus: () => apiClient.get<MenuRow[]>('/menus'),
   menu: (id: string) => apiClient.get<MenuDetail>(`/menus/${id}`),
   createMenu: (body: unknown) => apiClient.post<{ id: string; code: string; name: string }>('/menus', body),
@@ -124,6 +209,12 @@ export const catalogApi = {
   sellingPrices: (itemId: string) => apiClient.get<SellingPriceRow[]>(`/costing/prices/${itemId}`),
   savePrice: (body: unknown) => apiClient.post<{ id: string; price: number }>('/costing/price', body),
 };
+
+export interface ReceivingLookupOption { id: string; code: string; name: string }
+export interface ReceivingLookups {
+  warehouses: ReceivingLookupOption[];
+  suppliers: ReceivingLookupOption[];
+}
 
 export interface RecipeIngredientView {
   id: string; componentType:RecipeComponentType; itemId:string|null; childRecipeId:string|null; quantity:number; unitId:string|null; wastePercent:number; note:string|null;

@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Save, TrendingUp, History, Loader2, Check } from 'lucide-react';
+import { ArrowLeft, Save, TrendingUp, History, Loader2, Check, PackagePlus } from 'lucide-react';
 import { catalogApi, type ItemType } from '@/lib/catalog';
+import { useAuth } from '@/auth/AuthContext';
+import { canReceiveStock, receivingAccess } from '@/lib/stock-receiving';
+import ItemStockPanel from '@/components/inventory/ItemStockPanel';
+import StockReceivingDialog, { type StockReceivingResult } from '@/components/inventory/StockReceivingDialog';
+import ReceivingSuccessCard from '@/components/inventory/ReceivingSuccessCard';
 import { formatFactor, resolveConversion } from '@/lib/standard-conversion';
 import { formatMoney, formatThaiDateTime } from '@/lib/utils';
 import ImageUpload from '@/components/ui/ImageUpload';
@@ -49,6 +54,14 @@ export default function ItemFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
+
+  /* PHASE 35 — รับเข้าสต็อกจากหน้ารายละเอียดโดยตรง (เฉพาะรายการที่บันทึกแล้ว) */
+  const { user } = useAuth();
+  const access = receivingAccess(user?.roles, user?.permissions);
+  const canReceive = canReceiveStock(access);
+  const [receivingOpen, setReceivingOpen] = useState(false);
+  const [receivedResult, setReceivedResult] = useState<StockReceivingResult | null>(null);
+  const openReceiving = () => { setReceivedResult(null); setReceivingOpen(true); };
 
   useEffect(() => {
     if (detail.data) {
@@ -136,6 +149,20 @@ export default function ItemFormPage() {
       </div>
 
       {error && <div className="alert" style={{ marginTop: 14 }}>{error}</div>}
+
+      {isEdit && canReceive && (
+        <div style={{ marginTop: 14 }}>
+          <button type="button" className="btn primary" onClick={openReceiving}><PackagePlus aria-hidden width={16} />นำเข้าสต็อก</button>
+        </div>
+      )}
+      {receivedResult && (
+        <ReceivingSuccessCard
+          result={receivedResult}
+          onReceiveMore={canReceive ? openReceiving : undefined}
+          onViewHistory={() => document.getElementById('item-receipt-history')?.scrollIntoView({ behavior: 'smooth' })}
+          onDismiss={() => setReceivedResult(null)}
+        />
+      )}
 
       <div className="form-2col" style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -251,6 +278,24 @@ export default function ItemFormPage() {
           </div>
         </div>
       </div>
+
+      {isEdit && detail.data && (
+        <div className="item-stock-section">
+          <ItemStockPanel
+            item={detail.data}
+            access={access}
+            onReceive={canReceive ? openReceiving : undefined}
+            historyAnchorId="item-receipt-history"
+          />
+        </div>
+      )}
+
+      <StockReceivingDialog
+        open={receivingOpen}
+        item={detail.data ?? null}
+        onClose={() => setReceivingOpen(false)}
+        onReceived={(result) => { setReceivedResult(result); setReceivingOpen(false); }}
+      />
     </>
   );
 }

@@ -3,9 +3,13 @@ import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Plus, CheckCircle2, AlertTriangle, Pencil, Power, ImageOff, Ruler,
-  LayoutGrid, List, CircleDollarSign, type LucideIcon,
+  LayoutGrid, List, CircleDollarSign, PackagePlus, type LucideIcon,
 } from 'lucide-react';
 import { catalogApi, type Item, type ItemType } from '@/lib/catalog';
+import { useAuth } from '@/auth/AuthContext';
+import { canReceiveStock, receivingAccess } from '@/lib/stock-receiving';
+import StockReceivingDialog, { type StockReceivingResult } from '@/components/inventory/StockReceivingDialog';
+import ReceivingSuccessCard from '@/components/inventory/ReceivingSuccessCard';
 import { formatThaiDate } from '@/lib/utils';
 import { itemPriceDisplay, needsConversion } from '@/lib/item-unit-price';
 import Badge from '@/components/ui/Badge';
@@ -45,6 +49,17 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
   const [page, setPage] = useState(1);
   const [view, setView] = useState<'table' | 'cards'>('table');
   const [toggling, setToggling] = useState<Item | null>(null);
+  /* PHASE 35 — นำเข้าสต็อกจากหน้ารายการโดยตรง
+     เปิดจากแถวไหน วัตถุดิบนั้นถูกเลือกไว้ให้แล้ว ไม่ต้องค้นซ้ำ */
+  const { user } = useAuth();
+  const access = receivingAccess(user?.roles, user?.permissions);
+  const canReceive = canReceiveStock(access);
+  const [receivingItem, setReceivingItem] = useState<Item | null>(null);
+  /* เปิดจากปุ่มบนหัวหน้าจอ = ยังไม่ระบุวัตถุดิบ ให้เลือกใน modal */
+  const [receivingPicker, setReceivingPicker] = useState(false);
+  const [receivedResult, setReceivedResult] = useState<StockReceivingResult | null>(null);
+  const openRowReceiving = (row: Item) => { setReceivedResult(null); setReceivingItem(row); };
+  const closeReceiving = () => { setReceivingItem(null); setReceivingPicker(false); };
   const Icon = variant.icon;
   const noun = variant.kind === 'packaging' ? 'บรรจุภัณฑ์' : 'วัตถุดิบ';
 
@@ -103,9 +118,18 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
             <Link to="/ingredients/cost-completion" className="btn"><CircleDollarSign aria-hidden width={16} />เติมข้อมูลต้นทุน ({kpi.noPrice})</Link>
           )}
           <Link to="/units/conversions" className="btn"><Ruler aria-hidden width={16} />สูตรแปลงหน่วย</Link>
+          {canReceive && (
+            <button type="button" className="btn" onClick={() => { setReceivedResult(null); setReceivingPicker(true); }}>
+              <PackagePlus aria-hidden width={16} />นำเข้าสต็อก
+            </button>
+          )}
           <Link to={variant.newPath} className="btn primary"><Plus aria-hidden width={16} />{variant.addLabel}</Link>
         </>}
       />
+
+      {receivedResult && (
+        <ReceivingSuccessCard result={receivedResult} onDismiss={() => setReceivedResult(null)} />
+      )}
 
       <KPIGrid columns={4}>
         <KPICard label={variant.totalLabel} value={total} icon={<Icon />} hint={hasFilter ? 'ตามตัวกรองปัจจุบัน' : 'ทุกสถานะ'} />
@@ -219,6 +243,10 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
                         <td data-label="จัดการ">
                           <div className="md-row-actions">
                             <Link className="icon-btn" to={variant.itemPath(item.id)} aria-label={`แก้ไข ${item.name}`} title="แก้ไข / อัปเดตราคา"><Pencil aria-hidden width={16} /></Link>
+                            {canReceive && (
+                              <button type="button" className="icon-btn" onClick={() => openRowReceiving(item)}
+                                aria-label={`นำเข้าสต็อก ${item.name}`} title="นำเข้าสต็อก"><PackagePlus aria-hidden width={16} /></button>
+                            )}
                             <button type="button" className="icon-btn" onClick={() => setToggling(item)} disabled={toggle.isPending}
                               aria-label={`${item.isActive ? 'ปิดใช้งาน' : 'เปิดใช้งาน'} ${item.name}`}
                               title={item.isActive ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}><Power aria-hidden width={16} /></button>
@@ -272,6 +300,15 @@ export default function ItemListWorkspace({ variant }: { variant: ItemListVarian
               : 'เมื่อเปิดใช้งาน รายการนี้จะกลับมาเลือกได้ในสูตรและเอกสารใหม่'}
           </p>
         </div> : ''}
+      />
+
+      <StockReceivingDialog
+        open={receivingItem !== null || receivingPicker}
+        item={receivingItem}
+        pickerType={variant.type}
+        allowPick
+        onClose={closeReceiving}
+        onReceived={(result) => { setReceivedResult(result); closeReceiving(); }}
       />
     </PageContainer>
   );
